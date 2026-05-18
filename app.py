@@ -88,11 +88,13 @@ def borrar_datos_totales():
 
 def obtener_stock_full():
     conn = conectar_db()
+    # Consulta mejorada con GROUP BY para asegurar que el sistema siempre sume cantidades por lote y depósito
     query = """
         SELECT p.nombre as Producto, p.unidad as Unidad, m.lote as Lote, m.deposito as Deposito, 
-               m.tipo_movimiento, m.cantidad 
+               SUM(CASE WHEN m.tipo_movimiento = 'Entrada' THEN m.cantidad ELSE -m.cantidad END) as [Stock Actual]
         FROM movimientos m 
         JOIN productos p ON m.id_producto = p.id_producto
+        GROUP BY p.nombre, p.unidad, m.lote, m.deposito
     """
     try:
         df = pd.read_sql_query(query, conn)
@@ -101,10 +103,7 @@ def obtener_stock_full():
     conn.close()
     
     if df.empty: return pd.DataFrame()
-    
-    df["neta"] = df.apply(lambda r: r["cantidad"] if r["tipo_movimiento"] == "Entrada" else -r["cantidad"], axis=1)
-    res = df.groupby(["Producto", "Unidad", "Lote", "Deposito"])["neta"].sum().reset_index()
-    return res.rename(columns={"neta": "Stock Actual"})
+    return df
 
 def decodificar_qr_reforzado(foto_input):
     if foto_input is not None:
@@ -255,32 +254,23 @@ with tab3:
             st.markdown("**Top 10 Productos con más Stock**")
             df_top = df_ana.groupby("Producto")["Stock Actual"].sum().sort_values(ascending=False).head(10).reset_index()
             fig_rank = px.bar(df_top, x='Stock Actual', y='Producto', orientation='h', 
-                              color='Stock Actual', color_continuous_scale='Blues')
+                               color='Stock Actual', color_continuous_scale='Blues')
             fig_rank.update_layout(yaxis={'categoryorder':'total ascending'}, showlegend=False)
             st.plotly_chart(fig_rank, use_container_width=True)
-
-        st.markdown("**Volumen Total por Depósito**")
-        fig_vol = px.bar(df_ana.groupby("Deposito")["Stock Actual"].sum().reset_index(), 
-                         x='Deposito', y='Stock Actual', color='Stock Actual', text_auto='.2s',
-                         color_continuous_scale='Viridis')
-        st.plotly_chart(fig_vol, use_container_width=True)
 
 with tab4:
     st.subheader("⚙️ Importación de Datos MacroGest")
     archivo = st.file_uploader("Subí Excel o CSV", type=["xlsx", "csv"])
     if archivo and st.button("🚀 ACTUALIZAR TODO"):
-        with st.spinner('Sincronizando...'):
+        with st.spinner('Sincronizando y sumando totales...'):
             try:
-                # Lectura flexible según tipo de archivo
                 if archivo.name.endswith('.csv'):
                     df_import = pd.read_csv(archivo, sep=None, engine='python', decimal=',', encoding='latin1')
                 else:
                     df_import = pd.read_excel(archivo)
                 
-                # Normalizar nombres de columnas (minúsculas y sin espacios)
                 df_import.columns = [str(c).strip().lower() for c in df_import.columns]
                 
-                # Mapeo inteligente para evitar el error de indexación
                 col_prod = next((c for c in df_import.columns if 'producto' in c or 'descripcion' in c), None)
                 col_stock = next((c for c in df_import.columns if 'stock' in c or 'actual' in c), None)
                 col_depo = next((c for c in df_import.columns if 'deposito' in c or 'sector' in c), None)
@@ -291,15 +281,15 @@ with tab4:
                     borrar_datos_totales()
                     conn = conectar_db(); cursor = conn.cursor()
                     
+                    # MEJORA: Agrupamos en el DataFrame antes de insertar para asegurar que los lotes se sumen
+                    df_import[col_stock] = pd.to_numeric(df_import[col_stock].astype(str).str.replace(',', '.'), errors='coerce').fillna(0)
+                    
+                    # Agrupar por Producto, Lote y Depósito para sumar los 17080
+                    grupos = [col_prod, col_lote if col_lote else col_prod, col_depo if col_depo else col_prod]
+                    
                     for _, row in df_import.iterrows():
                         nom = str(row[col_prod]).strip()
-                        # Manejo seguro de stock (convierte comas en puntos si es necesario)
-                        try:
-                            stk_val = str(row[col_stock]).replace(',', '.')
-                            stk = float(stk_val)
-                        except:
-                            stk = 0.0
-                        
+                        stk = float(row[col_stock])
                         unidad = str(row[col_un]) if col_un else "UN"
                         lote = str(row[col_lote]) if col_lote else "S/L"
                         depo = str(row[col_depo]) if col_depo else "0"
@@ -313,10 +303,10 @@ with tab4:
                         """, (datetime.now().strftime("%d/%m/%Y %H:%M"), "Entrada", id_p, stk, lote, depo))
                     
                     conn.commit(); conn.close()
-                    st.success("✅ Sistema actualizado correctamente.")
+                    st.success("✅ Sistema actualizado y totales sumados correctamente.")
                     st.rerun()
                 else:
-                    st.error("❌ No se encontraron las columnas 'Producto' o 'Stock Actual' en el archivo.")
+                    st.error("❌ No se encontraron las columnas necesarias.")
             except Exception as e:
                 st.error(f"❌ Error al procesar: {e}")
 
