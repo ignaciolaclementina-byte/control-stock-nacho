@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 from datetime import datetime
-import plotly.express as px
 import numpy as np
 import cv2
 import io
@@ -118,7 +117,7 @@ def decodificar_qr_reforzado(foto_input):
             valor, _, _ = detector.detectAndDecode(img_cv)
             if valor: return valor.strip()
             
-            # Intento 2: Contraste optimizado
+            # Intento 2: CLAHE
             gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
             clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
             res_gray = clahe.apply(gray)
@@ -141,7 +140,7 @@ st.title("🧪 Control de Depósito Inteligente")
 if 'qr_detectado' not in st.session_state:
     st.session_state.qr_detectado = "Todos"
 
-tab1, tab2, tab3, tab4 = st.tabs(["⚡ Panel de Control", "📋 Historial Completo", "📊 Resumen Depósitos", "⚙️ Configuración"])
+tab1, tab2, tab3, tab4 = st.tabs(["⚡ Panel de Control", "📋 Historial Completo", "📊 Análisis", "⚙️ Configuración"])
 
 with tab1:
     stock_df = obtener_stock_full()
@@ -162,9 +161,9 @@ with tab1:
                 st.session_state.qr_detectado = "Todos"
                 st.rerun()
 
-        # MEJORA: Lógica silenciosa. Solo actúa si hay foto Y se presiona el botón.
+        # Mejora: Lógica silenciosa. Solo procesa si se hace clic en el botón.
         if foto and btn_procesar:
-            with st.spinner("Buscando código..."):
+            with st.spinner("Procesando imagen..."):
                 codigo = decodificar_qr_reforzado(foto)
                 if codigo:
                     matches = [p for p in stock_df["Producto"].unique() if codigo.lower() in p.lower()]
@@ -175,7 +174,7 @@ with tab1:
                     else:
                         st.error(f"❌ El código '{codigo}' no figura en el stock.")
                 else:
-                    st.error("❌ No se detectó un QR legible. Intentá con más luz.")
+                    st.error("❌ No se encontró un QR legible. Intentá con más luz.")
 
         st.markdown("---")
         st.subheader("🔍 Filtros y Resultados")
@@ -202,16 +201,13 @@ with tab1:
             df_f = df_f[df_f["Stock Actual"] > 0]
 
         if not df_f.empty:
-            # Opción de descarga
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                 df_f.to_excel(writer, index=False, sheet_name='Stock')
             st.download_button(label="📥 Descargar Excel Filtrado", data=output.getvalue(), file_name='stock_filtrado.xlsx')
 
-            # Render de tarjetas
-            items = df_f.to_dict('records')
             cols_grid = st.columns(4)
-            for i, item in enumerate(items[:40]): 
+            for i, item in enumerate(df_f.to_dict('records')[:40]): 
                 with cols_grid[i % 4]:
                     clase = "card-normal" if item['Stock Actual'] > 0 else "card-warning"
                     st.markdown(f"""
@@ -232,25 +228,16 @@ with tab2:
         st.dataframe(stock_df, use_container_width=True, hide_index=True)
 
 with tab3:
-    st.subheader("📊 Consolidado por Depósito")
+    st.subheader("📊 Análisis Consolidado")
     if not stock_df.empty:
-        # MEJORA: Resumen ejecutivo en lugar de gráfico de barras gigante
-        resumen_depo = stock_df[stock_df["Stock Actual"] > 0].groupby("Deposito").agg(
-            Productos_Distintos=('Producto', 'nunique'),
-            Volumen_Total=('Stock Actual', 'sum')
-        ).reset_index()
+        # Mejora: Vista tabular como en Excel
+        df_analisis = stock_df[stock_df["Stock Actual"] > 0][["Producto", "Stock Actual", "Deposito"]].sort_values(by="Producto")
+        st.dataframe(df_analisis, use_container_width=True, hide_index=True, height=500)
         
-        c_m1, c_m2 = st.columns(2)
-        with c_m1:
-            st.write("**Ocupación por Depósito**")
-            st.dataframe(resumen_depo, use_container_width=True, hide_index=True)
-        with c_m2:
-            st.write("**Alertas de Stock Crítico (< 10 unidades)**")
-            critico = stock_df[(stock_df["Stock Actual"] > 0) & (stock_df["Stock Actual"] < 10)]
-            if not critico.empty:
-                st.dataframe(critico[["Producto", "Stock Actual", "Deposito"]], use_container_width=True, hide_index=True)
-            else:
-                st.success("No hay productos con stock crítico.")
+        # Resumen rápido por depósito
+        st.write("**Resumen por Depósito**")
+        resumen = df_analisis.groupby("Deposito")["Stock Actual"].sum().reset_index()
+        st.table(resumen)
 
 with tab4:
     st.subheader("⚙️ Importación de Datos")
