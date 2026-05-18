@@ -141,7 +141,7 @@ st.title("🧪 Control de Depósito Inteligente")
 if 'qr_detectado' not in st.session_state:
     st.session_state.qr_detectado = "Todos"
 
-tab1, tab2, tab3, tab4 = st.tabs(["⚡ Panel de Control", "📋 Historial Completo", "📊 Análisis", "⚙️ Configuración"])
+tab1, tab2, tab3, tab4 = st.tabs(["⚡ Panel de Control", "📋 Historial Completo", "📊 Resumen Depósitos", "⚙️ Configuración"])
 
 with tab1:
     stock_df = obtener_stock_full()
@@ -162,7 +162,7 @@ with tab1:
                 st.session_state.qr_detectado = "Todos"
                 st.rerun()
 
-        # LÓGICA DE PROCESAMIENTO: Solo se activa si el usuario lo pide explícitamente
+        # MEJORA: Lógica silenciosa. Solo actúa si hay foto Y se presiona el botón.
         if foto and btn_procesar:
             with st.spinner("Buscando código..."):
                 codigo = decodificar_qr_reforzado(foto)
@@ -173,7 +173,7 @@ with tab1:
                         st.success(f"✅ Identificado: {matches[0]}")
                         st.rerun()
                     else:
-                        st.error(f"❌ El código '{codigo}' no coincide con el stock.")
+                        st.error(f"❌ El código '{codigo}' no figura en el stock.")
                 else:
                     st.error("❌ No se detectó un QR legible. Intentá con más luz.")
 
@@ -202,6 +202,13 @@ with tab1:
             df_f = df_f[df_f["Stock Actual"] > 0]
 
         if not df_f.empty:
+            # Opción de descarga
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                df_f.to_excel(writer, index=False, sheet_name='Stock')
+            st.download_button(label="📥 Descargar Excel Filtrado", data=output.getvalue(), file_name='stock_filtrado.xlsx')
+
+            # Render de tarjetas
             items = df_f.to_dict('records')
             cols_grid = st.columns(4)
             for i, item in enumerate(items[:40]): 
@@ -218,23 +225,38 @@ with tab1:
                         </div>
                     """, unsafe_allow_html=True)
         else:
-            st.info("No se encontraron resultados.")
+            st.info("No hay resultados para los filtros seleccionados.")
 
 with tab2:
     if not stock_df.empty:
         st.dataframe(stock_df, use_container_width=True, hide_index=True)
 
 with tab3:
+    st.subheader("📊 Consolidado por Depósito")
     if not stock_df.empty:
-        fig = px.bar(stock_df[stock_df["Stock Actual"] > 0].groupby("Deposito")["Stock Actual"].sum().reset_index(), 
-                     x='Deposito', y='Stock Actual', color='Deposito', text_auto='.2s')
-        st.plotly_chart(fig, use_container_width=True)
+        # MEJORA: Resumen ejecutivo en lugar de gráfico de barras gigante
+        resumen_depo = stock_df[stock_df["Stock Actual"] > 0].groupby("Deposito").agg(
+            Productos_Distintos=('Producto', 'nunique'),
+            Volumen_Total=('Stock Actual', 'sum')
+        ).reset_index()
+        
+        c_m1, c_m2 = st.columns(2)
+        with c_m1:
+            st.write("**Ocupación por Depósito**")
+            st.dataframe(resumen_depo, use_container_width=True, hide_index=True)
+        with c_m2:
+            st.write("**Alertas de Stock Crítico (< 10 unidades)**")
+            critico = stock_df[(stock_df["Stock Actual"] > 0) & (stock_df["Stock Actual"] < 10)]
+            if not critico.empty:
+                st.dataframe(critico[["Producto", "Stock Actual", "Deposito"]], use_container_width=True, hide_index=True)
+            else:
+                st.success("No hay productos con stock crítico.")
 
 with tab4:
     st.subheader("⚙️ Importación de Datos")
-    archivo = st.file_uploader("Subí el Export de MacroGest", type=["xlsx", "csv"])
+    archivo = st.file_uploader("Subí el Export de MacroGest (Excel o CSV)", type=["xlsx", "csv"])
     if archivo and st.button("🚀 ACTUALIZAR SISTEMA"):
-        with st.spinner('Sincronizando...'):
+        with st.spinner('Sincronizando base de datos...'):
             borrar_datos_totales()
             conn = conectar_db(); cursor = conn.cursor()
             df_import = pd.read_csv(archivo) if archivo.name.endswith('.csv') else pd.read_excel(archivo)
@@ -249,7 +271,7 @@ with tab4:
                 cursor.execute("INSERT INTO movimientos (fecha_hora, tipo_movimiento, id_producto, cantidad, lote, deposito) VALUES (?,?,?,?,?,?)",
                                (datetime.now().strftime("%d/%m/%Y %H:%M"), "Entrada", id_p, stk, str(row.get('lote', 'S/L')), str(row.get('deposito', '0'))))
             conn.commit(); conn.close()
-            st.success("✅ Base de datos actualizada.")
+            st.success("✅ Base de datos actualizada con éxito.")
             st.rerun()
 
 st.markdown("---")
