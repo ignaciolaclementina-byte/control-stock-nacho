@@ -104,30 +104,38 @@ def obtener_stock_full():
     res = df.groupby(["Producto", "Unidad", "Lote", "Deposito"])["neta"].sum().reset_index()
     return res.rename(columns={"neta": "Stock Actual"})
 
-def decodificar_qr_mejorado(foto_input):
+def decodificar_qr_reforzado(foto_input):
     if foto_input is not None:
         try:
-            # RESETEO CRÍTICO: Asegura que el archivo se lea desde el principio
+            # RESETEO DE PUNTERO
             foto_input.seek(0)
             
-            # Usar PIL para garantizar que el formato de imagen sea compatible
+            # Conversión de imagen
             img_pil = Image.open(foto_input)
             img_np = np.array(img_pil.convert('RGB'))
             img_cv = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
             
-            # Pre-procesamiento para mejorar lectura
-            gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
-            adjusted = cv2.convertScaleAbs(gray, alpha=1.5, beta=0)
-            
             detector = cv2.QRCodeDetector()
-            # Intentar primero con la ajustada, luego con la original
-            valor, pts, qr_rect = detector.detectAndDecode(adjusted)
-            if not valor:
-                valor, pts, qr_rect = detector.detectAndDecode(img_cv)
-                
-            return valor.strip() if valor else None
+            
+            # INTENTO 1: Imagen Original
+            valor, _, _ = detector.detectAndDecode(img_cv)
+            if valor: return valor.strip()
+            
+            # INTENTO 2: Escala de Grises + Contraste (CLAHE)
+            gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+            res_gray = clahe.apply(gray)
+            valor, _, _ = detector.detectAndDecode(res_gray)
+            if valor: return valor.strip()
+            
+            # INTENTO 3: Binarización (Blanco y Negro puro)
+            _, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)
+            valor, _, _ = detector.detectAndDecode(thresh)
+            if valor: return valor.strip()
+            
+            return None
         except Exception as e:
-            st.error(f"Error técnico al procesar: {e}")
+            st.error(f"Error técnico: {e}")
             return None
     return None
 
@@ -147,33 +155,34 @@ with tab1:
     if stock_df.empty:
         st.warning("⚠️ No hay datos cargados. Por favor, subí el archivo en la pestaña 'Configuración'.")
     else:
-        # SECCIÓN DE ESCANEO BLINDADA
         st.markdown("### 📷 Identificar Producto")
         c_cam1, c_cam2 = st.columns([3, 1])
         
         with c_cam1:
-            foto = st.file_uploader("Subí o sacá foto al QR", type=["jpg", "png", "jpeg"], key="uploader_qr")
+            foto = st.file_uploader("Sacá foto al QR", type=["jpg", "png", "jpeg"], key="uploader_qr")
         
         with c_cam2:
-            st.write("") # Espaciador
-            btn_procesar = st.button("🔍 PROCESAR QR")
+            st.write("") 
+            btn_procesar = st.button("🔍 ESCANEAR QR")
             if st.button("🔄 Limpiar"):
                 st.session_state.qr_detectado = "Todos"
                 st.rerun()
 
-        # Procesar si hay foto y el usuario toca el botón o si acaba de subirla
-        if foto and (btn_procesar or st.session_state.qr_detectado == "Todos"):
-            with st.status("Escaneando imagen...") as status:
-                codigo = decodificar_qr_mejorado(foto)
+        if foto:
+            # Procesamos automáticamente al subir o al apretar el botón
+            with st.spinner("Procesando imagen..."):
+                codigo = decodificar_qr_reforzado(foto)
                 if codigo:
                     matches = [p for p in stock_df["Producto"].unique() if codigo.lower() in p.lower()]
                     if matches:
-                        st.session_state.qr_detectado = matches[0]
-                        status.update(label=f"✅ Detectado: {matches[0]}", state="complete")
+                        if st.session_state.qr_detectado != matches[0]:
+                            st.session_state.qr_detectado = matches[0]
+                            st.success(f"✅ Producto: {matches[0]}")
+                            st.rerun()
                     else:
-                        status.update(label=f"❓ El código '{codigo}' no coincide con el stock.", state="error")
-                else:
-                    status.update(label="❌ No se encontró un QR legible. Intentá con más luz.", state="error")
+                        st.error(f"❌ El código '{codigo}' no figura en el stock.")
+                elif btn_procesar:
+                    st.warning("⚠️ No se encontró QR. Intentá con más luz o centrando el código.")
 
         st.markdown("---")
         st.subheader("🔍 Filtros y Resultados")
@@ -200,10 +209,11 @@ with tab1:
             df_f = df_f[df_f["Stock Actual"] > 0]
 
         if not df_f.empty:
+            # Opción de descarga
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                 df_f.to_excel(writer, index=False, sheet_name='Stock')
-            st.download_button(label="📥 Descargar Excel", data=output.getvalue(), file_name='stock_agro.xlsx')
+            st.download_button(label="📥 Descargar Excel Filtrado", data=output.getvalue(), file_name='stock_filtrado.xlsx')
 
             # Render de tarjetas
             items = df_f.to_dict('records')
@@ -222,9 +232,8 @@ with tab1:
                         </div>
                     """, unsafe_allow_html=True)
         else:
-            st.info("No se encontraron resultados.")
+            st.info("No hay resultados para los filtros seleccionados.")
 
-# Los Tabs 2, 3 y 4 se mantienen con la lógica funcional solicitada
 with tab2:
     if not stock_df.empty:
         st.dataframe(stock_df, use_container_width=True, hide_index=True)
@@ -236,10 +245,10 @@ with tab3:
         st.plotly_chart(fig, use_container_width=True)
 
 with tab4:
-    st.subheader("⚙️ Configuración de Datos")
-    archivo = st.file_uploader("Subí el Export de MacroGest", type=["xlsx", "csv"])
-    if archivo and st.button("🚀 IMPORTAR AHORA"):
-        with st.spinner('Sincronizando...'):
+    st.subheader("⚙️ Importación de Datos")
+    archivo = st.file_uploader("Subí el Export de MacroGest (Excel o CSV)", type=["xlsx", "csv"])
+    if archivo and st.button("🚀 ACTUALIZAR SISTEMA"):
+        with st.spinner('Sincronizando base de datos...'):
             borrar_datos_totales()
             conn = conectar_db(); cursor = conn.cursor()
             df_import = pd.read_csv(archivo) if archivo.name.endswith('.csv') else pd.read_excel(archivo)
@@ -254,7 +263,7 @@ with tab4:
                 cursor.execute("INSERT INTO movimientos (fecha_hora, tipo_movimiento, id_producto, cantidad, lote, deposito) VALUES (?,?,?,?,?,?)",
                                (datetime.now().strftime("%d/%m/%Y %H:%M"), "Entrada", id_p, stk, str(row.get('lote', 'S/L')), str(row.get('deposito', '0'))))
             conn.commit(); conn.close()
-            st.success("✅ Datos actualizados.")
+            st.success("✅ Base de datos actualizada con éxito.")
             st.rerun()
 
 st.markdown("---")
