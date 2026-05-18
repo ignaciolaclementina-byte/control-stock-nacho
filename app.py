@@ -113,18 +113,15 @@ def decodificar_qr_reforzado(foto_input):
             img_cv = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
             detector = cv2.QRCodeDetector()
             
-            # INTENTO 1: Original
             valor, _, _ = detector.detectAndDecode(img_cv)
             if valor: return valor.strip()
             
-            # INTENTO 2: CLAHE
             gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
             clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
             res_gray = clahe.apply(gray)
             valor, _, _ = detector.detectAndDecode(res_gray)
             if valor: return valor.strip()
             
-            # INTENTO 3: Binarización
             _, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)
             valor, _, _ = detector.detectAndDecode(thresh)
             return valor.strip() if valor else None
@@ -132,10 +129,8 @@ def decodificar_qr_reforzado(foto_input):
             return None
     return None
 
-# --- MEJORA DEFINITIVA PARA EXPORTACIÓN BINARIA ---
 def descargar_excel_limpio(df):
     output = io.BytesIO()
-    # Forzamos openpyxl para crear un archivo .xlsx real (no CSV con extensión cambiada)
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False, sheet_name='Stock_Actual')
     return output.getvalue()
@@ -209,7 +204,6 @@ with tab1:
             df_f = df_f[df_f["Stock Actual"] > 0]
 
         if not df_f.empty:
-            # BOTÓN DE DESCARGA BLINDADO
             excel_bin = descargar_excel_limpio(df_f)
             st.download_button(
                 label="📥 Descargar Excel (Columnas Separadas)", 
@@ -218,7 +212,6 @@ with tab1:
                 mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
             )
 
-            # Render de tarjetas
             items = df_f.to_dict('records')
             cols_grid = st.columns(4)
             for i, item in enumerate(items[:40]): 
@@ -239,12 +232,53 @@ with tab2:
     if not stock_df.empty:
         st.dataframe(stock_df, use_container_width=True, hide_index=True)
 
+# --- PESTAÑA ANÁLISIS MEJORADA (DASHBOARD EXPLICATIVO) ---
 with tab3:
     if not stock_df.empty:
-        st.subheader("📊 Análisis por Depósito")
-        fig = px.bar(stock_df[stock_df["Stock Actual"] > 0].groupby("Deposito")["Stock Actual"].sum().reset_index(), 
-                     x='Deposito', y='Stock Actual', color='Deposito', text_auto='.2s', template="plotly_dark")
-        st.plotly_chart(fig, use_container_width=True)
+        st.subheader("📊 Dashboard de Inventario Explicativo")
+        
+        # Filtramos para el análisis (solo stock positivo)
+        df_ana = stock_df[stock_df["Stock Actual"] > 0].copy()
+        
+        # 1. KPIs Principales (Métricas rápidas)
+        kpi1, kpi2, kpi3 = st.columns(3)
+        with kpi1:
+            st.metric("📦 Stock Total Acumulado", f"{df_ana['Stock Actual'].sum():,.1f}")
+        with kpi2:
+            st.metric("🏷️ Variedad de Productos", len(df_ana['Producto'].unique()))
+        with kpi3:
+            st.metric("📍 Depósitos con Carga", len(df_ana['Deposito'].unique()))
+        
+        st.markdown("---")
+        
+        # 2. Distribución y Rankings
+        col_pie, col_rank = st.columns(2)
+        
+        with col_pie:
+            st.markdown("**Distribución de Stock por Depósito (%)**")
+            df_pie = df_ana.groupby("Deposito")["Stock Actual"].sum().reset_index()
+            fig_pie = px.pie(df_pie, values='Stock Actual', names='Deposito', 
+                             hole=0.4, color_discrete_sequence=px.colors.qualitative.Safe)
+            fig_pie.update_traces(textposition='inside', textinfo='percent+label')
+            st.plotly_chart(fig_pie, use_container_width=True)
+            
+        with col_rank:
+            st.markdown("**Top 10 Productos con Mayor Existencia**")
+            df_top = df_ana.groupby("Producto")["Stock Actual"].sum().sort_values(ascending=False).head(10).reset_index()
+            fig_top = px.bar(df_top, x='Stock Actual', y='Producto', orientation='h',
+                             color='Stock Actual', color_continuous_scale='Blues')
+            fig_top.update_layout(yaxis={'categoryorder':'total ascending'}, showlegend=False)
+            st.plotly_chart(fig_top, use_container_width=True)
+
+        st.markdown("---")
+        
+        # 3. Gráfico de Barras Principal (Ocupación de Depósitos)
+        st.markdown("**Volumen de Stock por N° de Depósito**")
+        df_bar = df_ana.groupby("Deposito")["Stock Actual"].sum().reset_index()
+        fig_bar = px.bar(df_bar, x='Deposito', y='Stock Actual', 
+                         color='Stock Actual', text_auto='.2s',
+                         color_continuous_scale='Viridis', labels={'Stock Actual': 'Cantidad Total'})
+        st.plotly_chart(fig_bar, use_container_width=True)
 
 with tab4:
     st.subheader("⚙️ Importación de Datos")
