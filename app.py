@@ -86,7 +86,6 @@ def borrar_datos_totales():
 
 def obtener_stock_full():
     conn = conectar_db()
-    # Mantenemos tu query original pero sumando el campo codigo
     query = """
         SELECT p.nombre as Producto, p.codigo as Código, p.unidad as Unidad, m.lote as Lote, m.deposito as Deposito, 
                m.tipo_movimiento, m.cantidad 
@@ -102,7 +101,6 @@ def obtener_stock_full():
     if df.empty: return pd.DataFrame()
     
     df["neta"] = df.apply(lambda r: r["cantidad"] if r["tipo_movimiento"] == "Entrada" else -r["cantidad"], axis=1)
-    # Agrupamos respetando tu lógica original + el Código
     res = df.groupby(["Producto", "Código", "Unidad", "Lote", "Deposito"])["neta"].sum().reset_index()
     return res.rename(columns={"neta": "Stock Actual"})
 
@@ -115,8 +113,7 @@ def decodificar_qr_reforzado(foto_input):
             img_cv = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
             detector = cv2.QRCodeDetector()
             valor, _, _ = detector.detectAndDecode(img_cv)
-            if valor: return valor.strip()
-            return None
+            return valor.strip() if valor else None
         except: return None
     return None
 
@@ -144,55 +141,44 @@ with tab1:
     else:
         st.markdown("### 📷 Identificar Producto")
         c_cam1, c_cam2 = st.columns([3, 1])
-        
         with c_cam1:
             foto = st.file_uploader("Sacá foto al QR", type=["jpg", "png", "jpeg"], key="uploader_qr")
-        
         with c_cam2:
             st.write("") 
-            btn_procesar = st.button("🔍 ESCANEAR QR")
             if st.button("🔄 Limpiar"):
                 st.session_state.qr_detectado = "Todos"
                 st.rerun()
 
         if foto:
-            with st.spinner("Procesando imagen..."):
-                codigo_leido = decodificar_qr_reforzado(foto)
-                if codigo_leido:
-                    # Buscamos match por código exacto o nombre
-                    match = stock_df[(stock_df["Código"].astype(str) == str(codigo_leido)) | (stock_df["Producto"].str.contains(codigo_leido, case=False))]
-                    if not match.empty:
-                        res_prod = match["Producto"].iloc[0]
-                        if st.session_state.qr_detectado != res_prod:
-                            st.session_state.qr_detectado = res_prod
-                            st.success(f"✅ Identificado: {res_prod}")
-                            st.rerun()
-                elif btn_procesar:
-                    st.warning("⚠️ No se pudo leer el QR.")
+            leido = decodificar_qr_reforzado(foto)
+            if leido:
+                match = stock_df[(stock_df["Código"].astype(str) == str(leido)) | (stock_df["Producto"].str.contains(leido, case=False))]
+                if not match.empty:
+                    st.session_state.qr_detectado = match["Producto"].iloc[0]
+                    st.success(f"✅ Detectado: {st.session_state.qr_detectado}")
+                    st.rerun()
 
         st.markdown("---")
         st.subheader("🔍 Filtros y Resultados")
         c1, c2, c3, c4 = st.columns(4)
-        
         with c1:
-            lista_productos = ["Todos"] + sorted(stock_df["Producto"].unique().tolist())
-            idx_inicio = lista_productos.index(st.session_state.qr_detectado) if st.session_state.qr_detectado in lista_productos else 0
-            f_prod = st.selectbox("Producto", lista_productos, index=idx_inicio, key="prod_select")
+            lista_p = ["Todos"] + sorted(stock_df["Producto"].unique().tolist())
+            idx = lista_p.index(st.session_state.qr_detectado) if st.session_state.qr_detectado in lista_p else 0
+            f_prod = st.selectbox("Producto", lista_p, index=idx)
             st.session_state.qr_detectado = f_prod
-        
         with c2: f_lote = st.text_input("Lote", placeholder="Ej: AF05...")
         with c3: f_depo = st.text_input("Depósito", placeholder="Ej: 0")
-        with c4: hide_neg = st.toggle("Solo con stock", value=True)
+        with c4: f_cod_panel = st.text_input("Buscar por Código", placeholder="Ej: 10594")
 
         df_f = stock_df.copy()
         if st.session_state.qr_detectado != "Todos":
             df_f = df_f[df_f["Producto"] == st.session_state.qr_detectado]
-        if f_lote: 
+        if f_lote:
             df_f = df_f[df_f["Lote"].astype(str).str.contains(f_lote, case=False)]
-        if f_depo: 
+        if f_depo:
             df_f = df_f[df_f["Deposito"].astype(str) == str(f_depo)]
-        if hide_neg: 
-            df_f = df_f[df_f["Stock Actual"] > 0]
+        if f_cod_panel:
+            df_f = df_f[df_f["Código"].astype(str).str.contains(f_cod_panel, case=False)]
 
         if not df_f.empty:
             excel_bin = descargar_excel_limpio(df_f)
@@ -204,7 +190,6 @@ with tab1:
                 with cols_grid[i % 4]:
                     stk_val = item['Stock Actual']
                     clase = "card-warning" if stk_val <= 0 else "card-low" if stk_val < 20 else "card-normal"
-
                     st.markdown(f"""
                         <div class="stock-card {clase}">
                             <div class="stock-title">{item['Producto']}</div>
@@ -224,33 +209,29 @@ with tab2:
 with tab3:
     if not stock_df.empty:
         st.subheader("📊 Análisis Consolidado (Totales)")
+        df_consolidado = stock_df.groupby(["Producto", "Código", "Deposito", "Unidad"])["Stock Actual"].sum().reset_index()
         
-        # Mantenemos tu lógica de suma agrupada para el análisis
-        df_consolidado = stock_df.groupby(["Producto", "Deposito", "Unidad"])["Stock Actual"].sum().reset_index()
-        df_consolidado = df_consolidado[df_consolidado["Stock Actual"] > 0] 
-        
-        c_filtro1, c_filtro2 = st.columns(2)
-        with c_filtro1:
-            sel_p = st.selectbox("Ver suma total de:", sorted(df_consolidado["Producto"].unique()))
-        with c_filtro2:
-            sel_d = st.selectbox("En el depósito:", ["Todos"] + sorted(df_consolidado["Deposito"].unique().tolist()))
-        
-        df_target = df_consolidado[df_consolidado["Producto"] == sel_p]
-        if sel_d != "Todos":
-            df_target = df_target[df_target["Deposito"] == sel_d]
-        
-        suma_final = df_target["Stock Actual"].sum()
-        st.metric(f"Total de {sel_p} (Dep: {sel_d})", f"{suma_final:,.1f} {df_target['Unidad'].iloc[0] if not df_target.empty else ''}")
+        c_an1, c_an2, c_an3 = st.columns([2, 1, 1])
+        with c_an1:
+            sel_p = st.selectbox("Producto:", ["Todos"] + sorted(df_consolidado["Producto"].unique().tolist()))
+        with c_an2:
+            sel_d = st.selectbox("Depósito:", ["Todos"] + sorted(df_consolidado["Deposito"].unique().tolist()))
+        with c_an3:
+            sel_c_analisis = st.text_input("O buscar por Código:", placeholder="Ej: 10594")
 
-        st.markdown("---")
-        st.write("**Detalle de Totales por Depósito (Suma de todos los lotes):**")
-        st.dataframe(df_consolidado.sort_values(by="Stock Actual", ascending=False), use_container_width=True, hide_index=True)
-
-        st.markdown("**Volumen Total Consolidado por Depósito**")
-        fig_vol = px.bar(df_consolidado.groupby("Deposito")["Stock Actual"].sum().reset_index(), 
-                         x='Deposito', y='Stock Actual', color='Stock Actual', text_auto='.2s',
-                         color_continuous_scale='Viridis', title="Suma total de litros por sector")
-        st.plotly_chart(fig_vol, use_container_width=True)
+        df_target = df_consolidado.copy()
+        if sel_p != "Todos": df_target = df_target[df_target["Producto"] == sel_p]
+        if sel_d != "Todos": df_target = df_target[df_target["Deposito"] == sel_d]
+        if sel_c_analisis: df_target = df_target[df_target["Código"].astype(str).str.contains(sel_c_analisis, case=False)]
+        
+        if not df_target.empty:
+            st.metric("Suma Total en Selección", f"{df_target['Stock Actual'].sum():,.1f}")
+            st.dataframe(df_target.sort_values(by="Stock Actual", ascending=False), use_container_width=True, hide_index=True)
+            
+            fig_vol = px.bar(df_target.groupby("Deposito")["Stock Actual"].sum().reset_index(), 
+                             x='Deposito', y='Stock Actual', color='Stock Actual', text_auto='.2s',
+                             color_continuous_scale='Viridis', title="Suma total de litros por sector")
+            st.plotly_chart(fig_vol, use_container_width=True)
 
 with tab4:
     st.subheader("⚙️ Importación de Datos MacroGest")
@@ -261,7 +242,6 @@ with tab4:
                 df_import = pd.read_csv(archivo, sep=None, engine='python', decimal=',', encoding='latin1') if archivo.name.endswith('.csv') else pd.read_excel(archivo)
                 df_import.columns = [str(c).strip().lower() for c in df_import.columns]
                 
-                # Mapeo de columnas incluyendo código
                 col_cod = next((c for c in df_import.columns if 'codigo' in c or 'código' in c), None)
                 col_prod = next((c for c in df_import.columns if 'producto' in c or 'descripcion' in c), None)
                 col_stock = next((c for c in df_import.columns if 'stock' in c or 'actual' in c), None)
@@ -272,7 +252,6 @@ with tab4:
                 if col_prod and col_stock:
                     borrar_datos_totales()
                     conn = conectar_db(); cursor = conn.cursor()
-                    
                     for _, row in df_import.iterrows():
                         nom = str(row[col_prod]).strip()
                         cod = str(row[col_cod]).strip() if col_cod else "S/C"
@@ -291,7 +270,6 @@ with tab4:
                         id_p = cursor.fetchone()[0]
                         cursor.execute("INSERT INTO movimientos (fecha_hora, tipo_movimiento, id_producto, cantidad, lote, deposito) VALUES (?,?,?,?,?,?)",
                                        (datetime.now().strftime("%d/%m/%Y %H:%M"), "Entrada", id_p, stk, lt, dp))
-                    
                     conn.commit(); conn.close()
                     st.success("✅ Sistema actualizado correctamente.")
                     st.rerun()
