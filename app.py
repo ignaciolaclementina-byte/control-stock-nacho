@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 from datetime import datetime
+import plotly.express as px
 import numpy as np
 import cv2
 import io
@@ -110,27 +111,32 @@ def decodificar_qr_reforzado(foto_input):
             img_pil = Image.open(foto_input)
             img_np = np.array(img_pil.convert('RGB'))
             img_cv = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
-            
             detector = cv2.QRCodeDetector()
             
-            # Intento 1: Original
             valor, _, _ = detector.detectAndDecode(img_cv)
             if valor: return valor.strip()
             
-            # Intento 2: CLAHE
+            # Refuerzo con CLAHE
             gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
             clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
             res_gray = clahe.apply(gray)
             valor, _, _ = detector.detectAndDecode(res_gray)
-            if valor: return valor.strip()
-            
-            # Intento 3: Binarización
-            _, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)
-            valor, _, _ = detector.detectAndDecode(thresh)
             return valor.strip() if valor else None
         except:
             return None
     return None
+
+# Función optimizada para exportar Excel real (XLSX)
+def generar_excel_real(df):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name='Stock')
+        # Ajuste automático de ancho de columnas
+        worksheet = writer.sheets['Stock']
+        for i, col in enumerate(df.columns):
+            column_len = max(df[col].astype(str).str.len().max(), len(col)) + 2
+            worksheet.set_column(i, i, column_len)
+    return output.getvalue()
 
 inicializar_db()
 
@@ -161,7 +167,6 @@ with tab1:
                 st.session_state.qr_detectado = "Todos"
                 st.rerun()
 
-        # Mejora: Lógica silenciosa. Solo procesa si se hace clic en el botón.
         if foto and btn_procesar:
             with st.spinner("Procesando imagen..."):
                 codigo = decodificar_qr_reforzado(foto)
@@ -169,12 +174,12 @@ with tab1:
                     matches = [p for p in stock_df["Producto"].unique() if codigo.lower() in p.lower()]
                     if matches:
                         st.session_state.qr_detectado = matches[0]
-                        st.success(f"✅ Identificado: {matches[0]}")
+                        st.success(f"✅ Producto: {matches[0]}")
                         st.rerun()
                     else:
                         st.error(f"❌ El código '{codigo}' no figura en el stock.")
                 else:
-                    st.error("❌ No se encontró un QR legible. Intentá con más luz.")
+                    st.warning("⚠️ QR no legible. Intentá con más luz.")
 
         st.markdown("---")
         st.subheader("🔍 Filtros y Resultados")
@@ -201,13 +206,17 @@ with tab1:
             df_f = df_f[df_f["Stock Actual"] > 0]
 
         if not df_f.empty:
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                df_f.to_excel(writer, index=False, sheet_name='Stock')
-            st.download_button(label="📥 Descargar Excel Filtrado", data=output.getvalue(), file_name='stock_filtrado.xlsx')
+            excel_data = generar_excel_real(df_f)
+            st.download_button(
+                label="📥 Descargar Excel Filtrado", 
+                data=excel_data, 
+                file_name='stock_filtrado.xlsx',
+                mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            )
 
+            items = df_f.to_dict('records')
             cols_grid = st.columns(4)
-            for i, item in enumerate(df_f.to_dict('records')[:40]): 
+            for i, item in enumerate(items[:40]): 
                 with cols_grid[i % 4]:
                     clase = "card-normal" if item['Stock Actual'] > 0 else "card-warning"
                     st.markdown(f"""
@@ -220,35 +229,32 @@ with tab1:
                             </div>
                         </div>
                     """, unsafe_allow_html=True)
-        else:
-            st.info("No hay resultados para los filtros seleccionados.")
 
 with tab2:
     if not stock_df.empty:
         st.dataframe(stock_df, use_container_width=True, hide_index=True)
 
 with tab3:
-    st.subheader("📊 Análisis Consolidado")
+    st.subheader("📊 Análisis de Stock")
     if not stock_df.empty:
-        # Mejora: Vista tabular como en Excel
-        df_analisis = stock_df[stock_df["Stock Actual"] > 0][["Producto", "Stock Actual", "Deposito"]].sort_values(by="Producto")
-        st.dataframe(df_analisis, use_container_width=True, hide_index=True, height=500)
+        # Mejora: Tabla consolidada como en Excel
+        df_resumen = stock_df[stock_df["Stock Actual"] > 0][["Producto", "Stock Actual", "Deposito"]].sort_values(by="Producto")
+        st.dataframe(df_resumen, use_container_width=True, hide_index=True)
         
-        # Resumen rápido por depósito
-        st.write("**Resumen por Depósito**")
-        resumen = df_analisis.groupby("Deposito")["Stock Actual"].sum().reset_index()
-        st.table(resumen)
+        # Gráfico por depósito
+        fig = px.bar(stock_df[stock_df["Stock Actual"] > 0].groupby("Deposito")["Stock Actual"].sum().reset_index(), 
+                     x='Deposito', y='Stock Actual', color='Deposito', text_auto='.2s')
+        st.plotly_chart(fig, use_container_width=True)
 
 with tab4:
     st.subheader("⚙️ Importación de Datos")
-    archivo = st.file_uploader("Subí el Export de MacroGest (Excel o CSV)", type=["xlsx", "csv"])
+    archivo = st.file_uploader("Subí el Export de MacroGest", type=["xlsx", "csv"])
     if archivo and st.button("🚀 ACTUALIZAR SISTEMA"):
-        with st.spinner('Sincronizando base de datos...'):
+        with st.spinner('Sincronizando...'):
             borrar_datos_totales()
             conn = conectar_db(); cursor = conn.cursor()
             df_import = pd.read_csv(archivo) if archivo.name.endswith('.csv') else pd.read_excel(archivo)
             df_import.columns = df_import.columns.str.strip().str.lower()
-            
             for _, row in df_import.iterrows():
                 nom = str(row.get('descripcion_1', row.iloc[:,1])).strip()
                 stk = float(row.get('stock_actual', 0))
@@ -258,7 +264,7 @@ with tab4:
                 cursor.execute("INSERT INTO movimientos (fecha_hora, tipo_movimiento, id_producto, cantidad, lote, deposito) VALUES (?,?,?,?,?,?)",
                                (datetime.now().strftime("%d/%m/%Y %H:%M"), "Entrada", id_p, stk, str(row.get('lote', 'S/L')), str(row.get('deposito', '0'))))
             conn.commit(); conn.close()
-            st.success("✅ Base de datos actualizada con éxito.")
+            st.success("✅ Actualizado")
             st.rerun()
 
 st.markdown("---")
