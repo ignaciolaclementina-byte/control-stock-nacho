@@ -106,6 +106,7 @@ def obtener_stock_full():
 def decodificar_qr(foto_input):
     if foto_input is not None:
         try:
+            # Leer los bytes del archivo cargado
             file_bytes = np.asarray(bytearray(foto_input.read()), dtype=np.uint8)
             opencv_image = cv2.imdecode(file_bytes, 1)
             detector = cv2.QRCodeDetector()
@@ -120,6 +121,7 @@ inicializar_db()
 # --- 3. INTERFAZ ---
 st.title("🧪 Control de Depósito Inteligente")
 
+# Inicializar estados si no existen
 if 'qr_detectado' not in st.session_state:
     st.session_state.qr_detectado = "Todos"
 
@@ -131,28 +133,41 @@ with tab1:
     if stock_df.empty:
         st.warning("⚠️ No hay datos cargados. Por favor, subí el archivo en la pestaña 'Configuración'.")
     else:
-        # MEJORA: Cambio de camera_input por file_uploader para mayor compatibilidad con botones OK/Aceptar
-        with st.expander("📷 Escanear QR (Cámara o Galería)"):
-            foto = st.file_uploader("Subí una foto del QR para filtrar", type=["jpg", "png", "jpeg"])
-            if foto:
+        # SECCIÓN DE ESCANEO MEJORADA
+        st.markdown("### 📷 Identificar Producto")
+        foto = st.file_uploader("Sacá una foto al QR o subila", type=["jpg", "png", "jpeg"], key="uploader_qr")
+        
+        if foto:
+            with st.spinner("Decodificando código..."):
                 codigo = decodificar_qr(foto)
                 if codigo:
+                    # Buscamos coincidencias en la lista de productos
                     matches = [p for p in stock_df["Producto"].unique() if codigo.lower() in p.lower()]
                     if matches:
-                        st.session_state.qr_detectado = matches[0]
-                        st.success(f"✅ Producto identificado: {matches[0]}")
+                        if st.session_state.qr_detectado != matches[0]:
+                            st.session_state.qr_detectado = matches[0]
+                            st.success(f"✅ Detectado: {matches[0]}")
+                            st.rerun() # Forzamos recarga para que el filtro se aplique
                     else:
-                        st.error(f"❌ Código detectado: '{codigo}'. No coincide con ningún producto.")
+                        st.error(f"❌ El código '{codigo}' no coincide con productos en stock.")
                 else:
-                    st.warning("⚠️ No se detectó un código QR nítido en la imagen.")
+                    st.warning("⚠️ No se encontró un QR legible en la imagen.")
 
-        st.subheader("🔍 Filtros de Búsqueda")
+        st.markdown("---")
+        st.subheader("🔍 Filtros y Resultados")
         c1, c2, c3, c4 = st.columns(4)
         
         with c1:
             lista_productos = ["Todos"] + sorted(stock_df["Producto"].unique().tolist())
-            idx_inicio = lista_productos.index(st.session_state.qr_detectado) if st.session_state.qr_detectado in lista_productos else 0
-            f_prod = st.selectbox("Seleccionar Producto", lista_productos, index=idx_inicio)
+            # Si el QR cambió el estado, el selectbox se posiciona solo
+            if st.session_state.qr_detectado in lista_productos:
+                idx_inicio = lista_productos.index(st.session_state.qr_detectado)
+            else:
+                idx_inicio = 0
+                
+            f_prod = st.selectbox("Producto Seleccionado", lista_productos, index=idx_inicio, key="prod_select")
+            # Si el usuario cambia el selectbox manualmente, actualizamos el estado
+            st.session_state.qr_detectado = f_prod
         
         with c2: 
             f_lote = st.text_input("Filtrar Lote", placeholder="Ej: AF05...")
@@ -163,47 +178,38 @@ with tab1:
         with c4: 
             hide_neg = st.toggle("Solo disponible", value=True)
 
+        # Aplicación de filtros
         df_f = stock_df.copy()
-        if f_prod != "Todos":
-            df_f = df_f[df_f["Producto"] == f_prod]
+        if st.session_state.qr_detectado != "Todos":
+            df_f = df_f[df_f["Producto"] == st.session_state.qr_detectado]
         if f_lote: 
-            df_f = df_f[df_f["Lote"].str.contains(f_lote, case=False)]
+            df_f = df_f[df_f["Lote"].astype(str).str.contains(f_lote, case=False)]
         if f_depo: 
             df_f = df_f[df_f["Deposito"].astype(str) == str(f_depo)]
         if hide_neg: 
             df_f = df_f[df_f["Stock Actual"] > 0]
 
-        # --- MEJORA: DESCARGA PROFESIONAL EN EXCEL ---
+        # Botón de Descarga Excel Profesional
         if not df_f.empty:
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                 df_f.to_excel(writer, index=False, sheet_name='Stock')
                 workbook  = writer.book
                 worksheet = writer.sheets['Stock']
-                
-                # Formato: Encabezado verde claro con bordes
-                header_format = workbook.add_format({
-                    'bold': True, 
-                    'fg_color': '#D7E4BC', 
-                    'border': 1,
-                    'align': 'center'
-                })
-                
+                header_format = workbook.add_format({'bold': True, 'fg_color': '#D7E4BC', 'border': 1})
                 for col_num, value in enumerate(df_f.columns.values):
                     worksheet.write(0, col_num, value, header_format)
                     worksheet.set_column(col_num, col_num, 20)
-                
                 worksheet.autofilter(0, 0, len(df_f), len(df_f.columns) - 1)
             
             st.download_button(
-                label="📥 Descargar Stock en Excel (.xlsx)",
+                label="📥 Descargar estos resultados (Excel)",
                 data=output.getvalue(),
                 file_name=f'stock_agro_{datetime.now().strftime("%d%m%Y")}.xlsx',
                 mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             )
 
-        st.markdown("---")
-        
+        # Grilla de tarjetas
         if not df_f.empty:
             items = df_f.to_dict('records')
             cols_grid = st.columns(4)
@@ -221,7 +227,7 @@ with tab1:
                         </div>
                     """, unsafe_allow_html=True)
         else:
-            st.info("No se encontraron resultados con los filtros aplicados.")
+            st.info("No hay productos que coincidan con los filtros.")
 
 with tab2:
     if not stock_df.empty:
@@ -230,41 +236,34 @@ with tab2:
 
 with tab3:
     if not stock_df.empty:
-        st.subheader("📊 Análisis de Stock Real")
+        st.subheader("📊 Análisis de Existencias")
         df_grafico = stock_df[stock_df["Stock Actual"] > 0]
         if not df_grafico.empty:
             depo_stats = df_grafico.groupby("Deposito")["Stock Actual"].sum().reset_index()
             fig = px.bar(depo_stats, x='Deposito', y='Stock Actual', 
-                         title="Existencias Totales por Depósito",
-                         labels={'Stock Actual': 'Cantidad', 'Deposito': 'N° Depósito'},
                          color='Deposito', text_auto='.2s')
             fig.update_layout(xaxis_type='category')
             st.plotly_chart(fig, use_container_width=True)
         
         st.markdown("---")
-        st.subheader("📋 Resumen por Unidad y Depósito")
         tabla_resumen = stock_df.pivot_table(index="Deposito", columns="Unidad", values="Stock Actual", aggfunc="sum", fill_value=0)
         st.dataframe(tabla_resumen.style.format("{:.2f}"), use_container_width=True)
 
 with tab4:
-    st.subheader("⚙️ Importar desde MacroGest")
-    archivo = st.file_uploader("Subí el archivo Export (Excel o CSV)", type=["xlsx", "csv"])
+    st.subheader("⚙️ Sincronizar con MacroGest")
+    archivo = st.file_uploader("Subí el archivo Export (Excel o CSV)", type=["xlsx", "csv"], key="uploader_macro")
     
     if archivo:
         try:
             df_import = pd.read_csv(archivo) if archivo.name.endswith('.csv') else pd.read_excel(archivo)
             df_import.columns = df_import.columns.str.strip().str.lower()
             
-            st.write("Vista previa:")
-            st.dataframe(df_import.head(3), use_container_width=True)
-            
-            if st.button("🚀 INICIAR PROCESAMIENTO"):
-                with st.spinner('Sincronizando...'):
+            if st.button("🚀 PROCESAR E IMPORTAR"):
+                with st.spinner('Actualizando base de datos...'):
                     borrar_datos_totales()
                     conn = conectar_db()
                     cursor = conn.cursor()
                     
-                    # Columnas dinámicas
                     col_nom = 'descripcion_1' if 'descripcion_1' in df_import.columns else df_import.columns[1]
                     col_stk = 'stock_actual' if 'stock_actual' in df_import.columns else 'stock actual'
                     col_uni = 'unidad_medida' if 'unidad_medida' in df_import.columns else 'unidad'
@@ -288,10 +287,10 @@ with tab4:
                     
                     conn.commit()
                     conn.close()
-                    st.success("✅ Datos importados correctamente.")
+                    st.success("✅ Importación completada.")
                     st.rerun()
         except Exception as e:
-            st.error(f"Error al procesar el archivo: {e}")
+            st.error(f"Error: {e}")
 
 st.markdown("---")
 st.caption("Desarrollado por Ignacio Diaz")
