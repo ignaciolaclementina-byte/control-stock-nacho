@@ -105,11 +105,14 @@ def obtener_stock_full():
 
 def decodificar_qr(foto_input):
     if foto_input is not None:
-        file_bytes = np.asarray(bytearray(foto_input.read()), dtype=np.uint8)
-        opencv_image = cv2.imdecode(file_bytes, 1)
-        detector = cv2.QRCodeDetector()
-        valor, pts, qr_rect = detector.detectAndDecode(opencv_image)
-        return valor if valor else None
+        try:
+            file_bytes = np.asarray(bytearray(foto_input.read()), dtype=np.uint8)
+            opencv_image = cv2.imdecode(file_bytes, 1)
+            detector = cv2.QRCodeDetector()
+            valor, pts, qr_rect = detector.detectAndDecode(opencv_image)
+            return valor if valor else None
+        except:
+            return None
     return None
 
 inicializar_db()
@@ -128,17 +131,20 @@ with tab1:
     if stock_df.empty:
         st.warning("⚠️ No hay datos cargados. Por favor, subí el archivo en la pestaña 'Configuración'.")
     else:
-        with st.expander("📷 Abrir Escáner de Producto"):
-            foto = st.camera_input("Enfocá el código QR del producto")
+        # MEJORA: Cambio de camera_input por file_uploader para mayor compatibilidad con botones OK/Aceptar
+        with st.expander("📷 Escanear QR (Cámara o Galería)"):
+            foto = st.file_uploader("Subí una foto del QR para filtrar", type=["jpg", "png", "jpeg"])
             if foto:
                 codigo = decodificar_qr(foto)
                 if codigo:
                     matches = [p for p in stock_df["Producto"].unique() if codigo.lower() in p.lower()]
                     if matches:
                         st.session_state.qr_detectado = matches[0]
-                        st.success(f"Producto identificado: {matches[0]}")
+                        st.success(f"✅ Producto identificado: {matches[0]}")
                     else:
-                        st.error(f"Código detectado: '{codigo}'. No se encontró coincidencia en stock.")
+                        st.error(f"❌ Código detectado: '{codigo}'. No coincide con ningún producto.")
+                else:
+                    st.warning("⚠️ No se detectó un código QR nítido en la imagen.")
 
         st.subheader("🔍 Filtros de Búsqueda")
         c1, c2, c3, c4 = st.columns(4)
@@ -167,21 +173,30 @@ with tab1:
         if hide_neg: 
             df_f = df_f[df_f["Stock Actual"] > 0]
 
-        # --- DESCARGA MEJORADA EN EXCEL ---
+        # --- MEJORA: DESCARGA PROFESIONAL EN EXCEL ---
         if not df_f.empty:
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                 df_f.to_excel(writer, index=False, sheet_name='Stock')
                 workbook  = writer.book
                 worksheet = writer.sheets['Stock']
-                header_format = workbook.add_format({'bold': True, 'fg_color': '#D7E4BC', 'border': 1})
+                
+                # Formato: Encabezado verde claro con bordes
+                header_format = workbook.add_format({
+                    'bold': True, 
+                    'fg_color': '#D7E4BC', 
+                    'border': 1,
+                    'align': 'center'
+                })
+                
                 for col_num, value in enumerate(df_f.columns.values):
                     worksheet.write(0, col_num, value, header_format)
                     worksheet.set_column(col_num, col_num, 20)
+                
                 worksheet.autofilter(0, 0, len(df_f), len(df_f.columns) - 1)
             
             st.download_button(
-                label="📥 Descargar Stock en Excel",
+                label="📥 Descargar Stock en Excel (.xlsx)",
                 data=output.getvalue(),
                 file_name=f'stock_agro_{datetime.now().strftime("%d%m%Y")}.xlsx',
                 mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
