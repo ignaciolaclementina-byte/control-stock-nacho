@@ -157,6 +157,7 @@ with tab1:
             with st.spinner("Procesando imagen..."):
                 codigo_leido = decodificar_qr_reforzado(foto)
                 if codigo_leido:
+                    # Búsqueda por código exacto o nombre
                     match = stock_df[(stock_df["Código"].astype(str) == str(codigo_leido)) | (stock_df["Producto"].str.contains(codigo_leido, case=False))]
                     if not match.empty:
                         res_prod = match["Producto"].iloc[0]
@@ -174,7 +175,7 @@ with tab1:
         with c1:
             lista_productos = ["Todos"] + sorted(stock_df["Producto"].unique().tolist())
             idx_inicio = lista_productos.index(st.session_state.qr_detectado) if st.session_state.qr_detectado in lista_productos else 0
-            f_prod = st.selectbox("Producto", lista_productos, index=idx_inicio, key="prod_select")
+            f_prod = st.selectbox("Producto o Código", lista_productos, index=idx_inicio, key="prod_select")
             st.session_state.qr_detectado = f_prod
         
         with c2: f_lote = st.text_input("Lote", placeholder="Ej: AF05...")
@@ -183,7 +184,9 @@ with tab1:
 
         df_f = stock_df.copy()
         if st.session_state.qr_detectado != "Todos":
+            # Filtra por nombre de producto
             df_f = df_f[df_f["Producto"] == st.session_state.qr_detectado]
+            
         if f_lote: 
             df_f = df_f[df_f["Lote"].astype(str).str.contains(f_lote, case=False)]
         if f_depo: 
@@ -270,14 +273,11 @@ with tab4:
                         nom = str(row[col_prod]).strip()
                         cod = str(row[col_cod]).strip() if col_cod else "S/C"
                         
-                        # --- LÓGICA DE LIMPIEZA NUMÉRICA CORREGIDA ---
+                        # --- LÓGICA DE LIMPIEZA NUMÉRICA ---
                         val_raw = str(row[col_stock]).strip()
-                        
-                        # Solo reemplazamos puntos si hay una coma (caso 1.250,50)
                         if "," in val_raw:
                             stk_val = val_raw.replace('.', '').replace(',', '.')
                         else:
-                            # Si no hay coma, el punto que venga ya es decimal (caso 90.0)
                             stk_val = val_raw
                         
                         try: stk = float(stk_val)
