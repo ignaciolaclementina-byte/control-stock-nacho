@@ -50,6 +50,7 @@ def conectar_db():
 def inicializar_db():
     conn = conectar_db()
     cursor = conn.cursor()
+    # Agregamos la columna 'codigo' a la tabla de productos
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS productos (
             id_producto INTEGER PRIMARY KEY AUTOINCREMENT, 
@@ -71,7 +72,7 @@ def inicializar_db():
             FOREIGN KEY (id_producto) REFERENCES productos(id_producto)
         )
     """)
-    # Actualización de esquema por si ya existía la DB
+    # Asegurar que las columnas existan si la DB ya estaba creada
     try: cursor.execute("ALTER TABLE productos ADD COLUMN codigo TEXT")
     except: pass
     try: cursor.execute("ALTER TABLE movimientos ADD COLUMN deposito TEXT DEFAULT '0'")
@@ -104,6 +105,7 @@ def obtener_stock_full():
     if df.empty: return pd.DataFrame()
     
     df["neta"] = df.apply(lambda r: r["cantidad"] if r["tipo_movimiento"] == "Entrada" else -r["cantidad"], axis=1)
+    # Agrupamos incluyendo el Código
     res = df.groupby(["Producto", "Código", "Unidad", "Lote", "Deposito"])["neta"].sum().reset_index()
     return res.rename(columns={"neta": "Stock Actual"})
 
@@ -132,8 +134,9 @@ inicializar_db()
 # --- 3. INTERFAZ ---
 st.title("🧪 Control de Depósito Inteligente")
 
-if 'qr_detectado' not in st.session_state:
-    st.session_state.qr_detectado = ""
+# Estado para el buscador (permite que el QR llene el campo de búsqueda)
+if 'search_query' not in st.session_state:
+    st.session_state.search_query = ""
 
 tab1, tab2, tab3, tab4 = st.tabs(["⚡ Panel de Control", "📋 Historial Completo", "📊 Análisis", "⚙️ Configuración"])
 
@@ -143,46 +146,51 @@ with tab1:
     if stock_df.empty:
         st.warning("⚠️ No hay datos cargados. Por favor, subí el archivo en la pestaña 'Configuración'.")
     else:
-        st.markdown("### 🔍 Buscar Producto")
-        c_search, c_cam = st.columns([3, 1])
+        st.markdown("### 🔍 Identificación de Producto")
+        c_cam1, c_cam2 = st.columns([3, 1])
         
-        with c_search:
-            # Mejora: Buscador unificado por Nombre o Código
-            f_search = st.text_input("Buscar por Nombre o Código", 
-                                     value=st.session_state.qr_detectado, 
-                                     placeholder="Ej: Dicamba o 10007...",
-                                     key="main_search")
-        
-        with c_cam:
+        with c_cam1:
+            # Buscador por nombre o por código
+            f_search = st.text_input("Buscar por Nombre o Código de Producto", 
+                                     value=st.session_state.search_query,
+                                     placeholder="Ej: Dicamba o 10007...")
+            st.session_state.search_query = f_search
+
+        with c_cam2:
             foto = st.file_uploader("📷 Escanear QR", type=["jpg", "png", "jpeg"])
             if foto:
                 codigo_qr = decodificar_qr_reforzado(foto)
                 if codigo_qr:
-                    st.session_state.qr_detectado = codigo_qr
-                    st.success(f"QR detectado: {codigo_qr}")
+                    st.session_state.search_query = codigo_qr
+                    st.success(f"Detectado: {codigo_qr}")
                     st.rerun()
 
         st.markdown("---")
         
-        # Filtros adicionales
+        # Filtros secundarios
         c1, c2, c3 = st.columns(3)
-        with c1: f_lote = st.text_input("Filtrar por Lote", placeholder="Ej: AF05...")
+        with c1: f_lote = st.text_input("Filtrar por Lote", placeholder="Todos")
         with c2: f_depo = st.text_input("Filtrar por Depósito", placeholder="Ej: 55")
         with c3: hide_neg = st.toggle("Solo con stock", value=True)
 
-        # Aplicar filtros
+        # Lógica de filtrado
         df_f = stock_df.copy()
-        if f_search:
+        if st.session_state.search_query:
+            # Filtra si el texto está en el nombre O en el código
             df_f = df_f[
-                (df_f["Producto"].str.contains(f_search, case=False)) | 
-                (df_f["Código"].astype(str).str.contains(f_search, case=False))
+                (df_f["Producto"].str.contains(st.session_state.search_query, case=False)) | 
+                (df_f["Código"].astype(str).str.contains(st.session_state.search_query, case=False))
             ]
-        if f_lote: df_f = df_f[df_f["Lote"].astype(str).str.contains(f_lote, case=False)]
-        if f_depo: df_f = df_f[df_f["Deposito"].astype(str) == str(f_depo)]
-        if hide_neg: df_f = df_f[df_f["Stock Actual"] > 0]
+        if f_lote: 
+            df_f = df_f[df_f["Lote"].astype(str).str.contains(f_lote, case=False)]
+        if f_depo: 
+            df_f = df_f[df_f["Deposito"].astype(str) == str(f_depo)]
+        if hide_neg: 
+            df_f = df_f[df_f["Stock Actual"] > 0]
 
         if not df_f.empty:
-            st.download_button(label="📥 Descargar Resultado Excel", data=descargar_excel_limpio(df_f), file_name='busqueda_stock.xlsx')
+            excel_bin = descargar_excel_limpio(df_f)
+            st.download_button(label="📥 Descargar Resultado Excel", data=excel_bin, file_name='stock_busqueda.xlsx')
 
             items = df_f.to_dict('records')
             cols_grid = st.columns(4)
@@ -203,7 +211,7 @@ with tab1:
                         </div>
                     """, unsafe_allow_html=True)
         else:
-            st.info("No se encontraron productos con esos criterios.")
+            st.info("No se encontraron resultados para la búsqueda.")
 
 with tab2:
     if not stock_df.empty:
@@ -211,29 +219,29 @@ with tab2:
 
 with tab3:
     if not stock_df.empty:
-        st.subheader("📊 Análisis de Totales por Depósito")
+        st.subheader("📊 Análisis Consolidado (Suma por Código)")
+        # Consolidamos ignorando lotes para ver el total del producto en el depósito
         df_consolidado = stock_df.groupby(["Producto", "Código", "Deposito", "Unidad"])["Stock Actual"].sum().reset_index()
         df_consolidado = df_consolidado[df_consolidado["Stock Actual"] > 0]
         
         st.dataframe(df_consolidado.sort_values(by="Stock Actual", ascending=False), use_container_width=True, hide_index=True)
 
 with tab4:
-    st.subheader("⚙️ Sincronización MacroGest")
-    archivo = st.file_uploader("Subí el Excel o CSV de MacroGest", type=["xlsx", "csv"])
-    if archivo and st.button("🚀 ACTUALIZAR SISTEMA"):
-        with st.spinner('Procesando datos...'):
+    st.subheader("⚙️ Sincronización con MacroGest")
+    archivo = st.file_uploader("Subí el archivo Export (Excel/CSV)", type=["xlsx", "csv"])
+    if archivo and st.button("🚀 ACTUALIZAR TODO"):
+        with st.spinner('Procesando...'):
             try:
                 if archivo.name.endswith('.csv'):
                     df_import = pd.read_csv(archivo, sep=None, engine='python', decimal=',', encoding='latin1')
                 else:
                     df_import = pd.read_excel(archivo)
                 
-                # Normalizar nombres de columnas
                 df_import.columns = [str(c).strip().lower() for c in df_import.columns]
                 
-                # Identificar columnas automáticamente
+                # Buscamos columnas clave incluyendo 'codigo'
                 col_cod = next((c for c in df_import.columns if 'codigo' in c or 'código' in c), None)
-                col_prod = next((c for c in df_import.columns if 'producto' in c or 'descripcion' in c or 'descripción' in c), None)
+                col_prod = next((c for c in df_import.columns if 'producto' in c or 'descripcion' in c), None)
                 col_stock = next((c for c in df_import.columns if 'stock' in c or 'actual' in c), None)
                 col_depo = next((c for c in df_import.columns if 'deposito' in c or 'sector' in c), None)
                 col_lote = next((c for c in df_import.columns if 'lote' in c), None)
@@ -245,9 +253,8 @@ with tab4:
                     
                     for _, row in df_import.iterrows():
                         nom = str(row[col_prod]).strip()
-                        cod = str(row[col_cod]).strip() if col_cod else "S/C"
+                        cod_val = str(row[col_cod]).strip() if col_cod else "S/C"
                         
-                        # Limpieza de valores numéricos
                         try:
                             val_raw = str(row[col_stock])
                             if "," in val_raw and "." in val_raw: val_raw = val_raw.replace('.', '').replace(',', '.')
@@ -255,25 +262,26 @@ with tab4:
                             stk = float(val_raw)
                         except: stk = 0.0
                         
-                        unidad = str(row[col_un]) if col_un else "LTS"
-                        lote = str(row[col_lote]) if col_lote else "S/L"
-                        depo = str(row[col_depo]) if col_depo else "0"
+                        un = str(row[col_un]) if col_un else "LTS"
+                        lt = str(row[col_lote]) if col_lote else "S/L"
+                        dp = str(row[col_depo]) if col_depo else "0"
 
-                        cursor.execute("INSERT OR IGNORE INTO productos (nombre, unidad, codigo) VALUES (?,?,?)", (nom, unidad, cod))
+                        # Guardamos nombre y código
+                        cursor.execute("INSERT OR IGNORE INTO productos (nombre, unidad, codigo) VALUES (?,?,?)", (nom, un, cod_val))
                         cursor.execute("SELECT id_producto FROM productos WHERE nombre = ?", (nom,))
                         id_p = cursor.fetchone()[0]
                         cursor.execute("""
                             INSERT INTO movimientos (fecha_hora, tipo_movimiento, id_producto, cantidad, lote, deposito) 
                             VALUES (?,?,?,?,?,?)
-                        """, (datetime.now().strftime("%d/%m/%Y %H:%M"), "Entrada", id_p, stk, lote, depo))
+                        """, (datetime.now().strftime("%d/%m/%Y %H:%M"), "Entrada", id_p, stk, lt, dp))
                     
                     conn.commit(); conn.close()
-                    st.success("✅ Sincronización exitosa.")
+                    st.success("✅ Sistema actualizado con códigos de producto.")
                     st.rerun()
                 else:
-                    st.error("❌ El archivo no tiene las columnas 'Producto' y 'Stock'.")
+                    st.error("No se encontraron las columnas necesarias en el archivo.")
             except Exception as e:
-                st.error(f"❌ Error crítico: {e}")
+                st.error(f"Error al procesar: {e}")
 
 st.markdown("---")
 st.caption("Desarrollado por Ignacio Diaz")
