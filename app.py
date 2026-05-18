@@ -88,13 +88,11 @@ def borrar_datos_totales():
 
 def obtener_stock_full():
     conn = conectar_db()
-    # Consulta mejorada con GROUP BY para asegurar que el sistema siempre sume cantidades por lote y depósito
     query = """
         SELECT p.nombre as Producto, p.unidad as Unidad, m.lote as Lote, m.deposito as Deposito, 
-               SUM(CASE WHEN m.tipo_movimiento = 'Entrada' THEN m.cantidad ELSE -m.cantidad END) as [Stock Actual]
+               m.tipo_movimiento, m.cantidad 
         FROM movimientos m 
         JOIN productos p ON m.id_producto = p.id_producto
-        GROUP BY p.nombre, p.unidad, m.lote, m.deposito
     """
     try:
         df = pd.read_sql_query(query, conn)
@@ -103,7 +101,10 @@ def obtener_stock_full():
     conn.close()
     
     if df.empty: return pd.DataFrame()
-    return df
+    
+    df["neta"] = df.apply(lambda r: r["cantidad"] if r["tipo_movimiento"] == "Entrada" else -r["cantidad"], axis=1)
+    res = df.groupby(["Producto", "Unidad", "Lote", "Deposito"])["neta"].sum().reset_index()
+    return res.rename(columns={"neta": "Stock Actual"})
 
 def decodificar_qr_reforzado(foto_input):
     if foto_input is not None:
@@ -232,37 +233,43 @@ with tab2:
 
 with tab3:
     if not stock_df.empty:
-        st.subheader("📊 Dashboard de Inventario")
-        df_ana = stock_df[stock_df["Stock Actual"] > 0].copy()
+        # MEJORA SOLICITADA: SUMATORIA TOTAL ABAJO EN ANÁLISIS
+        st.subheader("📊 Análisis Consolidado (Totales)")
         
-        k1, k2, k3 = st.columns(3)
-        k1.metric("Stock Total", f"{df_ana['Stock Actual'].sum():,.0f}")
-        k2.metric("Productos Activos", len(df_ana['Producto'].unique()))
-        k3.metric("Depósitos en Uso", len(df_ana['Deposito'].unique()))
+        # Agrupamos por Producto y Deposito para sumar todos los lotes
+        df_consolidado = stock_df.groupby(["Producto", "Deposito", "Unidad"])["Stock Actual"].sum().reset_index()
+        df_consolidado = df_consolidado[df_consolidado["Stock Actual"] > 0] # Solo lo que tiene stock
         
+        # Métrica de suma rápida para el caso que mencionas (ej: Round Up en dep 55)
+        c_filtro1, c_filtro2 = st.columns(2)
+        with c_filtro1:
+            sel_p = st.selectbox("Ver suma total de:", sorted(df_consolidado["Producto"].unique()))
+        with c_filtro2:
+            sel_d = st.selectbox("En el depósito:", ["Todos"] + sorted(df_consolidado["Deposito"].unique().tolist()))
+        
+        df_target = df_consolidado[df_consolidado["Producto"] == sel_p]
+        if sel_d != "Todos":
+            df_target = df_target[df_target["Deposito"] == sel_d]
+        
+        suma_final = df_target["Stock Actual"].sum()
+        st.metric(f"Total de {sel_p} (Dep: {sel_d})", f"{suma_final:,.1f} {df_target['Unidad'].iloc[0] if not df_target.empty else ''}")
+
         st.markdown("---")
-        
-        c_pie, c_bar = st.columns(2)
-        with c_pie:
-            st.markdown("**Distribución por Depósito**")
-            fig_pie = px.pie(df_ana.groupby("Deposito")["Stock Actual"].sum().reset_index(), 
-                             values='Stock Actual', names='Deposito', hole=0.4,
-                             color_discrete_sequence=px.colors.qualitative.Pastel)
-            st.plotly_chart(fig_pie, use_container_width=True)
-            
-        with c_bar:
-            st.markdown("**Top 10 Productos con más Stock**")
-            df_top = df_ana.groupby("Producto")["Stock Actual"].sum().sort_values(ascending=False).head(10).reset_index()
-            fig_rank = px.bar(df_top, x='Stock Actual', y='Producto', orientation='h', 
-                               color='Stock Actual', color_continuous_scale='Blues')
-            fig_rank.update_layout(yaxis={'categoryorder':'total ascending'}, showlegend=False)
-            st.plotly_chart(fig_rank, use_container_width=True)
+        st.write("**Detalle de Totales por Depósito (Suma de todos los lotes):**")
+        st.dataframe(df_consolidado.sort_values(by="Stock Actual", ascending=False), use_container_width=True, hide_index=True)
+
+        # Gráficos actualizados con los totales sumados
+        st.markdown("**Volumen Total Consolidado por Depósito**")
+        fig_vol = px.bar(df_consolidado.groupby("Deposito")["Stock Actual"].sum().reset_index(), 
+                         x='Deposito', y='Stock Actual', color='Stock Actual', text_auto='.2s',
+                         color_continuous_scale='Viridis', title="Suma total de litros por sector")
+        st.plotly_chart(fig_vol, use_container_width=True)
 
 with tab4:
     st.subheader("⚙️ Importación de Datos MacroGest")
     archivo = st.file_uploader("Subí Excel o CSV", type=["xlsx", "csv"])
     if archivo and st.button("🚀 ACTUALIZAR TODO"):
-        with st.spinner('Sincronizando y sumando totales...'):
+        with st.spinner('Sincronizando...'):
             try:
                 if archivo.name.endswith('.csv'):
                     df_import = pd.read_csv(archivo, sep=None, engine='python', decimal=',', encoding='latin1')
@@ -281,16 +288,22 @@ with tab4:
                     borrar_datos_totales()
                     conn = conectar_db(); cursor = conn.cursor()
                     
-                    # MEJORA: Agrupamos en el DataFrame antes de insertar para asegurar que los lotes se sumen
-                    df_import[col_stock] = pd.to_numeric(df_import[col_stock].astype(str).str.replace(',', '.'), errors='coerce').fillna(0)
-                    
-                    # Agrupar por Producto, Lote y Depósito para sumar los 17080
-                    grupos = [col_prod, col_lote if col_lote else col_prod, col_depo if col_depo else col_prod]
-                    
                     for _, row in df_import.iterrows():
                         nom = str(row[col_prod]).strip()
-                        stk = float(row[col_stock])
-                        unidad = str(row[col_un]) if col_un else "UN"
+                        try:
+                            # Limpieza de puntos de miles y comas decimales para asegurar la suma
+                            val_raw = str(row[col_stock])
+                            if "," in val_raw and "." in val_raw: # Caso 1.234,56
+                                stk_val = val_raw.replace('.', '').replace(',', '.')
+                            elif "," in val_raw: # Caso 1234,56
+                                stk_val = val_raw.replace(',', '.')
+                            else:
+                                stk_val = val_raw
+                            stk = float(stk_val)
+                        except:
+                            stk = 0.0
+                        
+                        unidad = str(row[col_un]) if col_un else "LTS"
                         lote = str(row[col_lote]) if col_lote else "S/L"
                         depo = str(row[col_depo]) if col_depo else "0"
 
@@ -303,7 +316,7 @@ with tab4:
                         """, (datetime.now().strftime("%d/%m/%Y %H:%M"), "Entrada", id_p, stk, lote, depo))
                     
                     conn.commit(); conn.close()
-                    st.success("✅ Sistema actualizado y totales sumados correctamente.")
+                    st.success("✅ Sistema actualizado correctamente. Revisá la pestaña Análisis para ver los totales.")
                     st.rerun()
                 else:
                     st.error("❌ No se encontraron las columnas necesarias.")
