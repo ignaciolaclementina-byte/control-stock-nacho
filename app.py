@@ -5,6 +5,7 @@ from datetime import datetime
 import plotly.express as px
 import numpy as np
 import cv2
+import io
 
 # --- 1. CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="Gestión de Agroquímicos", layout="wide")
@@ -166,13 +167,24 @@ with tab1:
         if hide_neg: 
             df_f = df_f[df_f["Stock Actual"] > 0]
 
+        # --- DESCARGA MEJORADA EN EXCEL ---
         if not df_f.empty:
-            csv_data = df_f.to_csv(index=False).encode('utf-8')
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                df_f.to_excel(writer, index=False, sheet_name='Stock')
+                workbook  = writer.book
+                worksheet = writer.sheets['Stock']
+                header_format = workbook.add_format({'bold': True, 'fg_color': '#D7E4BC', 'border': 1})
+                for col_num, value in enumerate(df_f.columns.values):
+                    worksheet.write(0, col_num, value, header_format)
+                    worksheet.set_column(col_num, col_num, 20)
+                worksheet.autofilter(0, 0, len(df_f), len(df_f.columns) - 1)
+            
             st.download_button(
-                label="📥 Descargar listado actual (CSV)",
-                data=csv_data,
-                file_name=f'stock_filtrado_{datetime.now().strftime("%d%m%Y")}.csv',
-                mime='text/csv',
+                label="📥 Descargar Stock en Excel",
+                data=output.getvalue(),
+                file_name=f'stock_agro_{datetime.now().strftime("%d%m%Y")}.xlsx',
+                mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             )
 
         st.markdown("---")
@@ -204,40 +216,20 @@ with tab2:
 with tab3:
     if not stock_df.empty:
         st.subheader("📊 Análisis de Stock Real")
-        
         df_grafico = stock_df[stock_df["Stock Actual"] > 0]
-        
         if not df_grafico.empty:
             depo_stats = df_grafico.groupby("Deposito")["Stock Actual"].sum().reset_index()
-            
             fig = px.bar(depo_stats, x='Deposito', y='Stock Actual', 
-                         title="Existencias Totales por Depósito (Sin Negativos)",
+                         title="Existencias Totales por Depósito",
                          labels={'Stock Actual': 'Cantidad', 'Deposito': 'N° Depósito'},
-                         color='Deposito',
-                         text_auto='.2s', 
-                         color_discrete_sequence=px.colors.qualitative.Prism)
-            
+                         color='Deposito', text_auto='.2s')
             fig.update_layout(xaxis_type='category')
             st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.warning("No hay stock positivo para graficar.")
-
+        
         st.markdown("---")
         st.subheader("📋 Resumen por Unidad y Depósito")
-        
-        tabla_resumen = stock_df.pivot_table(
-            index="Deposito", 
-            columns="Unidad", 
-            values="Stock Actual", 
-            aggfunc="sum", 
-            fill_value=0
-        )
-        
-        tabla_resumen = tabla_resumen.loc[:, (tabla_resumen != 0).any(axis=0)]
+        tabla_resumen = stock_df.pivot_table(index="Deposito", columns="Unidad", values="Stock Actual", aggfunc="sum", fill_value=0)
         st.dataframe(tabla_resumen.style.format("{:.2f}"), use_container_width=True)
-        
-    else:
-        st.info("Carga datos para ver el análisis.")
 
 with tab4:
     st.subheader("⚙️ Importar desde MacroGest")
@@ -246,11 +238,9 @@ with tab4:
     if archivo:
         try:
             df_import = pd.read_csv(archivo) if archivo.name.endswith('.csv') else pd.read_excel(archivo)
-            
-            # NORMALIZACIÓN: Quitamos espacios y pasamos a minúsculas los nombres de las columnas
             df_import.columns = df_import.columns.str.strip().str.lower()
             
-            st.write("Vista previa de datos detectados:")
+            st.write("Vista previa:")
             st.dataframe(df_import.head(3), use_container_width=True)
             
             if st.button("🚀 INICIAR PROCESAMIENTO"):
@@ -259,7 +249,7 @@ with tab4:
                     conn = conectar_db()
                     cursor = conn.cursor()
                     
-                    # Identificar columnas con nombres flexibles
+                    # Columnas dinámicas
                     col_nom = 'descripcion_1' if 'descripcion_1' in df_import.columns else df_import.columns[1]
                     col_stk = 'stock_actual' if 'stock_actual' in df_import.columns else 'stock actual'
                     col_uni = 'unidad_medida' if 'unidad_medida' in df_import.columns else 'unidad'
@@ -269,7 +259,6 @@ with tab4:
                     for _, row in df_import.iterrows():
                         nom = str(row[col_nom]).strip()
                         stk = float(row[col_stk])
-                        # Validaciones de seguridad para campos vacíos
                         uni = str(row[col_uni]).strip() if col_uni in df_import.columns and pd.notna(row[col_uni]) else "UN"
                         lot = str(row[col_lot]).strip() if col_lot in df_import.columns and pd.notna(row[col_lot]) else "S/L"
                         dep = str(row[col_dep]).strip() if col_dep in df_import.columns and pd.notna(row[col_dep]) else "0"
