@@ -6,6 +6,7 @@ import plotly.express as px
 import numpy as np
 import cv2
 import io
+from PIL import Image
 
 # --- 1. CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="Gestión de Agroquímicos", layout="wide")
@@ -103,29 +104,30 @@ def obtener_stock_full():
     res = df.groupby(["Producto", "Unidad", "Lote", "Deposito"])["neta"].sum().reset_index()
     return res.rename(columns={"neta": "Stock Actual"})
 
-def decodificar_qr(foto_input):
+def decodificar_qr_mejorado(foto_input):
     if foto_input is not None:
         try:
-            # Convertir a imagen OpenCV
-            file_bytes = np.asarray(bytearray(foto_input.read()), dtype=np.uint8)
-            img = cv2.imdecode(file_bytes, 1)
+            # RESETEO CRÍTICO: Asegura que el archivo se lea desde el principio
+            foto_input.seek(0)
             
-            # Pre-procesamiento para mejorar lectura en celulares
-            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            # Aumentar contraste
-            alpha = 1.5 # Contraste
-            beta = 0    # Brillo
-            adjusted = cv2.convertScaleAbs(gray, alpha=alpha, beta=beta)
+            # Usar PIL para garantizar que el formato de imagen sea compatible
+            img_pil = Image.open(foto_input)
+            img_np = np.array(img_pil.convert('RGB'))
+            img_cv = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
+            
+            # Pre-procesamiento para mejorar lectura
+            gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
+            adjusted = cv2.convertScaleAbs(gray, alpha=1.5, beta=0)
             
             detector = cv2.QRCodeDetector()
-            # Intentar con imagen original e imagen ajustada
-            valor, pts, qr_rect = detector.detectAndDecode(img)
+            # Intentar primero con la ajustada, luego con la original
+            valor, pts, qr_rect = detector.detectAndDecode(adjusted)
             if not valor:
-                valor, pts, qr_rect = detector.detectAndDecode(adjusted)
+                valor, pts, qr_rect = detector.detectAndDecode(img_cv)
                 
             return valor.strip() if valor else None
         except Exception as e:
-            st.error(f"Error al procesar la imagen: {e}")
+            st.error(f"Error técnico al procesar: {e}")
             return None
     return None
 
@@ -134,7 +136,6 @@ inicializar_db()
 # --- 3. INTERFAZ ---
 st.title("🧪 Control de Depósito Inteligente")
 
-# Sincronización del filtro por QR
 if 'qr_detectado' not in st.session_state:
     st.session_state.qr_detectado = "Todos"
 
@@ -146,31 +147,33 @@ with tab1:
     if stock_df.empty:
         st.warning("⚠️ No hay datos cargados. Por favor, subí el archivo en la pestaña 'Configuración'.")
     else:
-        # SECCIÓN DE ESCANEO REFORZADA
+        # SECCIÓN DE ESCANEO BLINDADA
         st.markdown("### 📷 Identificar Producto")
-        c_cam1, c_cam2 = st.columns([2, 1])
+        c_cam1, c_cam2 = st.columns([3, 1])
         
         with c_cam1:
-            foto = st.file_uploader("Sacá foto al QR", type=["jpg", "png", "jpeg"], key="uploader_qr")
+            foto = st.file_uploader("Subí o sacá foto al QR", type=["jpg", "png", "jpeg"], key="uploader_qr")
         
         with c_cam2:
             st.write("") # Espaciador
-            if st.button("🔄 Limpiar Búsqueda"):
+            btn_procesar = st.button("🔍 PROCESAR QR")
+            if st.button("🔄 Limpiar"):
                 st.session_state.qr_detectado = "Todos"
                 st.rerun()
 
-        if foto:
-            with st.status("Analizando código...") as status:
-                codigo = decodificar_qr(foto)
+        # Procesar si hay foto y el usuario toca el botón o si acaba de subirla
+        if foto and (btn_procesar or st.session_state.qr_detectado == "Todos"):
+            with st.status("Escaneando imagen...") as status:
+                codigo = decodificar_qr_mejorado(foto)
                 if codigo:
                     matches = [p for p in stock_df["Producto"].unique() if codigo.lower() in p.lower()]
                     if matches:
                         st.session_state.qr_detectado = matches[0]
-                        status.update(label=f"✅ ¡{matches[0]} identificado!", state="complete", expanded=False)
+                        status.update(label=f"✅ Detectado: {matches[0]}", state="complete")
                     else:
-                        status.update(label=f"❓ Código '{codigo}' no encontrado en el sistema.", state="error")
+                        status.update(label=f"❓ El código '{codigo}' no coincide con el stock.", state="error")
                 else:
-                    status.update(label="❌ No se pudo leer el QR. Intentá con más luz o más lejos.", state="error")
+                    status.update(label="❌ No se encontró un QR legible. Intentá con más luz.", state="error")
 
         st.markdown("---")
         st.subheader("🔍 Filtros y Resultados")
@@ -179,21 +182,16 @@ with tab1:
         with c1:
             lista_productos = ["Todos"] + sorted(stock_df["Producto"].unique().tolist())
             idx_inicio = lista_productos.index(st.session_state.qr_detectado) if st.session_state.qr_detectado in lista_productos else 0
-            f_prod = st.selectbox("Seleccionar Producto", lista_productos, index=idx_inicio, key="prod_select")
+            f_prod = st.selectbox("Producto Seleccionado", lista_productos, index=idx_inicio, key="prod_select")
             st.session_state.qr_detectado = f_prod
         
-        with c2: 
-            f_lote = st.text_input("Filtrar Lote", placeholder="Ej: AF05...")
-        
-        with c3: 
-            f_depo = st.text_input("Depósito Exacto", placeholder="Ej: 0")
-        
-        with c4: 
-            hide_neg = st.toggle("Solo disponible", value=True)
+        with c2: f_lote = st.text_input("Filtrar Lote", placeholder="Ej: AF05...")
+        with c3: f_depo = st.text_input("Depósito Exacto", placeholder="Ej: 0")
+        with c4: hide_neg = st.toggle("Solo disponible", value=True)
 
         df_f = stock_df.copy()
-        if f_prod != "Todos":
-            df_f = df_f[df_f["Producto"] == f_prod]
+        if st.session_state.qr_detectado != "Todos":
+            df_f = df_f[df_f["Producto"] == st.session_state.qr_detectado]
         if f_lote: 
             df_f = df_f[df_f["Lote"].astype(str).str.contains(f_lote, case=False)]
         if f_depo: 
@@ -201,16 +199,13 @@ with tab1:
         if hide_neg: 
             df_f = df_f[df_f["Stock Actual"] > 0]
 
-        # Descarga Excel
         if not df_f.empty:
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                 df_f.to_excel(writer, index=False, sheet_name='Stock')
-            st.download_button(label="📥 Descargar Excel", data=output.getvalue(), file_name='stock.xlsx')
+            st.download_button(label="📥 Descargar Excel", data=output.getvalue(), file_name='stock_agro.xlsx')
 
-        st.markdown("---")
-        
-        if not df_f.empty:
+            # Render de tarjetas
             items = df_f.to_dict('records')
             cols_grid = st.columns(4)
             for i, item in enumerate(items[:40]): 
@@ -229,7 +224,7 @@ with tab1:
         else:
             st.info("No se encontraron resultados.")
 
-# Los Tabs 2, 3 y 4 se mantienen iguales para no romper la lógica de importación
+# Los Tabs 2, 3 y 4 se mantienen con la lógica funcional solicitada
 with tab2:
     if not stock_df.empty:
         st.dataframe(stock_df, use_container_width=True, hide_index=True)
@@ -241,33 +236,25 @@ with tab3:
         st.plotly_chart(fig, use_container_width=True)
 
 with tab4:
-    st.subheader("⚙️ Importar desde MacroGest")
-    archivo = st.file_uploader("Subí el archivo Export", type=["xlsx", "csv"], key="uploader_macro")
-    if archivo and st.button("🚀 INICIAR PROCESAMIENTO"):
+    st.subheader("⚙️ Configuración de Datos")
+    archivo = st.file_uploader("Subí el Export de MacroGest", type=["xlsx", "csv"])
+    if archivo and st.button("🚀 IMPORTAR AHORA"):
         with st.spinner('Sincronizando...'):
             borrar_datos_totales()
-            conn = conectar_db()
-            cursor = conn.cursor()
+            conn = conectar_db(); cursor = conn.cursor()
             df_import = pd.read_csv(archivo) if archivo.name.endswith('.csv') else pd.read_excel(archivo)
             df_import.columns = df_import.columns.str.strip().str.lower()
             
-            col_nom = 'descripcion_1' if 'descripcion_1' in df_import.columns else df_import.columns[1]
-            col_stk = 'stock_actual' if 'stock_actual' in df_import.columns else 'stock actual'
-            col_uni = 'unidad_medida' if 'unidad_medida' in df_import.columns else 'unidad'
-            col_lot = 'lote' if 'lote' in df_import.columns else 'lotes'
-            col_dep = 'deposito' if 'deposito' in df_import.columns else 'dep'
-            
             for _, row in df_import.iterrows():
-                nom = str(row[col_nom]).strip()
-                stk = float(row[col_stk])
-                cursor.execute("INSERT OR IGNORE INTO productos (nombre, unidad) VALUES (?,?)", (nom, str(row.get(col_uni, "UN"))))
+                nom = str(row.get('descripcion_1', row.iloc[:,1])).strip()
+                stk = float(row.get('stock_actual', 0))
+                cursor.execute("INSERT OR IGNORE INTO productos (nombre, unidad) VALUES (?,?)", (nom, str(row.get('unidad_medida', 'UN'))))
                 cursor.execute("SELECT id_producto FROM productos WHERE nombre = ?", (nom,))
                 id_p = cursor.fetchone()[0]
                 cursor.execute("INSERT INTO movimientos (fecha_hora, tipo_movimiento, id_producto, cantidad, lote, deposito) VALUES (?,?,?,?,?,?)",
-                               (datetime.now().strftime("%d/%m/%Y %H:%M"), "Entrada", id_p, stk, str(row.get(col_lot, "S/L")), str(row.get(col_dep, "0"))))
-            conn.commit()
-            conn.close()
-            st.success("✅ Importación completada.")
+                               (datetime.now().strftime("%d/%m/%Y %H:%M"), "Entrada", id_p, stk, str(row.get('lote', 'S/L')), str(row.get('deposito', '0'))))
+            conn.commit(); conn.close()
+            st.success("✅ Datos actualizados.")
             st.rerun()
 
 st.markdown("---")
