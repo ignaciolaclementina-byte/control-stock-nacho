@@ -29,7 +29,8 @@ st.markdown("""
     .card-low { border-left: 8px solid #ffc107; }
     .card-warning { border-left: 8px solid #dc3545; }
     
-    .stock-title { font-size: 0.95rem; color: #1a1c21; font-weight: 700; margin-bottom: 8px; line-height: 1.2; min-height: 2.4em; }
+    .stock-title { font-size: 0.95rem; color: #1a1c21; font-weight: 700; margin-bottom: 4px; line-height: 1.2; min-height: 2.4em; }
+    .stock-code { font-size: 0.75rem; color: #6c757d; margin-bottom: 8px; font-family: monospace; }
     .stock-value { font-size: 1.5rem; color: #007bff; font-weight: 800; display: block; }
     .stock-unit { font-size: 0.8rem; color: #6c757d; font-weight: 400; }
     .stock-info { 
@@ -54,9 +55,14 @@ def inicializar_db():
         CREATE TABLE IF NOT EXISTS productos (
             id_producto INTEGER PRIMARY KEY AUTOINCREMENT, 
             nombre TEXT NOT NULL UNIQUE, 
+            codigo_interno TEXT,
             unidad TEXT NOT NULL
         )
     """)
+    # Asegurar que la columna de código existe
+    try: cursor.execute("ALTER TABLE productos ADD COLUMN codigo_interno TEXT")
+    except: pass
+
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS movimientos (
             id_movimiento INTEGER PRIMARY KEY AUTOINCREMENT, 
@@ -70,10 +76,6 @@ def inicializar_db():
             FOREIGN KEY (id_producto) REFERENCES productos(id_producto)
         )
     """)
-    try:
-        cursor.execute("ALTER TABLE movimientos ADD COLUMN deposito TEXT DEFAULT '0'")
-    except:
-        pass
     conn.commit()
     conn.close()
 
@@ -88,8 +90,8 @@ def borrar_datos_totales():
 def obtener_stock_full():
     conn = conectar_db()
     query = """
-        SELECT p.nombre as Producto, p.unidad as Unidad, m.lote as Lote, m.deposito as Deposito, 
-               m.tipo_movimiento, m.cantidad 
+        SELECT p.nombre as Producto, p.codigo_interno as Codigo, p.unidad as Unidad, 
+               m.lote as Lote, m.deposito as Deposito, m.tipo_movimiento, m.cantidad 
         FROM movimientos m 
         JOIN productos p ON m.id_producto = p.id_producto
     """
@@ -102,7 +104,7 @@ def obtener_stock_full():
     if df.empty: return pd.DataFrame()
     
     df["neta"] = df.apply(lambda r: r["cantidad"] if r["tipo_movimiento"] == "Entrada" else -r["cantidad"], axis=1)
-    res = df.groupby(["Producto", "Unidad", "Lote", "Deposito"])["neta"].sum().reset_index()
+    res = df.groupby(["Producto", "Codigo", "Unidad", "Lote", "Deposito"])["neta"].sum().reset_index()
     return res.rename(columns={"neta": "Stock Actual"})
 
 def decodificar_qr_reforzado(foto_input):
@@ -114,10 +116,8 @@ def decodificar_qr_reforzado(foto_input):
             img_cv = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
             detector = cv2.QRCodeDetector()
             valor, _, _ = detector.detectAndDecode(img_cv)
-            if valor: return valor.strip()
-            return None
-        except:
-            return None
+            return valor.strip() if valor else None
+        except: return None
     return None
 
 def descargar_excel_limpio(df):
@@ -147,17 +147,18 @@ with tab1:
         with c_cam1:
             foto = st.file_uploader("Sacá foto al QR", type=["jpg", "png", "jpeg"], key="uploader_qr")
         with c_cam2:
-            st.write("") 
             if st.button("🔄 Limpiar"):
                 st.session_state.qr_detectado = "Todos"
                 st.rerun()
 
         if foto:
-            codigo = decodificar_qr_reforzado(foto)
-            if codigo:
-                matches = [p for p in stock_df["Producto"].unique() if codigo.lower() in p.lower()]
-                if matches:
-                    st.session_state.qr_detectado = matches[0]
+            codigo_qr = decodificar_qr_reforzado(foto)
+            if codigo_qr:
+                # Busca coincidencia por nombre o por código exacto
+                match = stock_df[(stock_df["Producto"].str.contains(codigo_qr, case=False)) | 
+                                 (stock_df["Codigo"].astype(str) == codigo_qr)]
+                if not match.empty:
+                    st.session_state.qr_detectado = match.iloc[0]["Producto"]
                     st.rerun()
 
         st.markdown("---")
@@ -167,26 +168,26 @@ with tab1:
         with c1:
             lista_productos = ["Todos"] + sorted(stock_df["Producto"].unique().tolist())
             idx_inicio = lista_productos.index(st.session_state.qr_detectado) if st.session_state.qr_detectado in lista_productos else 0
-            f_prod = st.selectbox("Producto", lista_productos, index=idx_inicio)
+            f_prod = st.selectbox("Producto (Nombre)", lista_productos, index=idx_inicio)
             st.session_state.qr_detectado = f_prod
         
-        with c2: f_lote = st.text_input("Lote", placeholder="Ej: AF05...")
-        with c3: f_depo = st.text_input("Depósito", placeholder="Ej: 0")
+        with c2: f_code = st.text_input("Buscar por Código", placeholder="Ej: 10192...")
+        with c3: f_lote = st.text_input("Lote", placeholder="Ej: AF05...")
         with c4: hide_neg = st.toggle("Solo con stock", value=True)
 
         df_f = stock_df.copy()
         if st.session_state.qr_detectado != "Todos":
             df_f = df_f[df_f["Producto"] == st.session_state.qr_detectado]
+        if f_code:
+            df_f = df_f[df_f["Codigo"].astype(str).str.contains(f_code)]
         if f_lote: 
             df_f = df_f[df_f["Lote"].astype(str).str.contains(f_lote, case=False)]
-        if f_depo: 
-            df_f = df_f[df_f["Deposito"].astype(str) == str(f_depo)]
         if hide_neg: 
             df_f = df_f[df_f["Stock Actual"] > 0]
 
         if not df_f.empty:
             excel_bin = descargar_excel_limpio(df_f)
-            st.download_button(label="📥 Descargar Excel", data=excel_bin, file_name='stock_actual.xlsx')
+            st.download_button(label="📥 Descargar Excel Filtrado", data=excel_bin, file_name='stock_consulta.xlsx')
 
             items = df_f.to_dict('records')
             cols_grid = st.columns(4)
@@ -197,6 +198,7 @@ with tab1:
                     st.markdown(f"""
                         <div class="stock-card {clase}">
                             <div class="stock-title">{item['Producto']}</div>
+                            <div class="stock-code">CÓDIGO: {item['Codigo']}</div>
                             <span class="stock-value">{stk_val:,.1f} <small class="stock-unit">{item['Unidad']}</small></span>
                             <div class="stock-info">
                                 <b>📍 Dep:</b> <span class="label-blue">{item['Deposito']}</span><br>
@@ -205,49 +207,26 @@ with tab1:
                         </div>
                     """, unsafe_allow_html=True)
 
-with tab2:
-    if not stock_df.empty:
-        st.dataframe(stock_df, use_container_width=True, hide_index=True)
-
 with tab3:
     if not stock_df.empty:
-        st.subheader("📊 Análisis Consolidado (Totales)")
-        df_consolidado = stock_df.groupby(["Producto", "Deposito", "Unidad"])["Stock Actual"].sum().reset_index()
-        df_consolidado = df_consolidado[df_consolidado["Stock Actual"] > 0]
-        
-        c_filtro1, c_filtro2 = st.columns(2)
-        with c_filtro1:
-            sel_p = st.selectbox("Ver suma total de:", sorted(df_consolidado["Producto"].unique()))
-        with c_filtro2:
-            sel_d = st.selectbox("En el depósito:", ["Todos"] + sorted(df_consolidado["Deposito"].unique().tolist()))
-        
-        df_target = df_consolidado[df_consolidado["Producto"] == sel_p]
-        if sel_d != "Todos":
-            df_target = df_target[df_target["Deposito"] == sel_d]
-        
-        suma_final = df_target["Stock Actual"].sum()
-        st.metric(f"Total de {sel_p}", f"{suma_final:,.1f}")
-
-        st.dataframe(df_consolidado.sort_values(by="Stock Actual", ascending=False), use_container_width=True, hide_index=True)
+        st.subheader("📊 Análisis de Totales por Depósito")
+        df_consolidado = stock_df.groupby(["Producto", "Codigo", "Deposito", "Unidad"])["Stock Actual"].sum().reset_index()
+        st.dataframe(df_consolidado[df_consolidado["Stock Actual"] > 0].sort_values("Stock Actual", ascending=False), use_container_width=True, hide_index=True)
 
 with tab4:
     st.subheader("⚙️ Importación de Datos MacroGest")
-    archivo = st.file_uploader("Subí Excel o CSV", type=["xlsx", "csv"])
+    archivo = st.file_uploader("Subí Excel o CSV de MacroGest", type=["xlsx", "csv"])
     if archivo and st.button("🚀 ACTUALIZAR TODO"):
-        with st.spinner('Sincronizando...'):
+        with st.spinner('Procesando archivo...'):
             try:
-                if archivo.name.endswith('.csv'):
-                    df_import = pd.read_csv(archivo, sep=None, engine='python', decimal=',', encoding='latin1')
-                else:
-                    df_import = pd.read_excel(archivo)
-                
-                # Normalizar nombres de columnas
+                df_import = pd.read_excel(archivo) if archivo.name.endswith('.xlsx') else pd.read_csv(archivo, sep=None, engine='python', encoding='latin1')
                 df_import.columns = [str(c).strip().lower() for c in df_import.columns]
                 
-                # Mapeo inteligente de columnas
-                col_prod = next((c for c in df_import.columns if 'descripcion' in c or 'producto' in c), None)
-                col_stock = next((c for c in df_import.columns if 'stock' in c or 'actual' in c), None)
-                col_depo = next((c for c in df_import.columns if 'deposito' in c or 'sector' in c), None)
+                # Mapeo de columnas basado en tus capturas
+                col_cod = next((c for c in df_import.columns if 'codigo' in c), None)
+                col_prod = next((c for c in df_import.columns if 'descripcion' in c), None)
+                col_stock = next((c for c in df_import.columns if 'stock' in c), None)
+                col_depo = next((c for c in df_import.columns if 'deposito' in c), None)
                 col_lote = next((c for c in df_import.columns if 'lote' in c), None)
                 col_un = next((c for c in df_import.columns if 'unidad' in c), None)
 
@@ -256,21 +235,19 @@ with tab4:
                     conn = conectar_db(); cursor = conn.cursor()
                     
                     for _, row in df_import.iterrows():
-                        # SOLUCIÓN AL ERROR: Acceso directo por nombre de columna
                         nom = str(row[col_prod]).strip()
-                        
-                        # Limpieza de valores numéricos
+                        cod = str(row[col_cod]).strip() if col_cod else "S/C"
                         try:
-                            val_raw = str(row[col_stock]).replace('.', '').replace(',', '.')
-                            stk = float(val_raw)
-                        except:
-                            stk = 0.0
+                            # Limpieza de formatos numéricos (puntos y comas)
+                            v = str(row[col_stock]).replace('.', '').replace(',', '.')
+                            stk = float(v)
+                        except: stk = 0.0
                         
                         un = str(row[col_un]).strip() if col_un else "LTS"
                         lt = str(row[col_lote]).strip() if col_lote else "S/L"
                         dp = str(row[col_depo]).strip() if col_depo else "0"
 
-                        cursor.execute("INSERT OR IGNORE INTO productos (nombre, unidad) VALUES (?,?)", (nom, un))
+                        cursor.execute("INSERT OR IGNORE INTO productos (nombre, codigo_interno, unidad) VALUES (?,?,?)", (nom, cod, un))
                         cursor.execute("SELECT id_producto FROM productos WHERE nombre = ?", (nom,))
                         id_p = cursor.fetchone()[0]
                         cursor.execute("""
@@ -279,12 +256,10 @@ with tab4:
                         """, (datetime.now().strftime("%d/%m/%Y %H:%M"), "Entrada", id_p, stk, lt, dp))
                     
                     conn.commit(); conn.close()
-                    st.success("✅ Sistema actualizado correctamente.")
+                    st.success("✅ Base de datos actualizada con éxito.")
                     st.rerun()
-                else:
-                    st.error("❌ No se detectaron las columnas 'descripcion' o 'stock'.")
             except Exception as e:
-                st.error(f"❌ Error crítico: {e}")
+                st.error(f"❌ Error: {e}")
 
 st.markdown("---")
 st.caption("Desarrollado por Ignacio Diaz")
