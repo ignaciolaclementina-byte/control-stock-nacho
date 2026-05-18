@@ -232,15 +232,13 @@ with tab2:
     if not stock_df.empty:
         st.dataframe(stock_df, use_container_width=True, hide_index=True)
 
-# --- PESTAÑA ANÁLISIS MEJORADA (DASHBOARD EXPLICATIVO) ---
+# --- PESTAÑA ANÁLISIS MEJORADA ---
 with tab3:
     if not stock_df.empty:
         st.subheader("📊 Dashboard de Inventario Explicativo")
-        
-        # Filtramos para el análisis (solo stock positivo)
         df_ana = stock_df[stock_df["Stock Actual"] > 0].copy()
         
-        # 1. KPIs Principales (Métricas rápidas)
+        # 1. KPIs Principales
         kpi1, kpi2, kpi3 = st.columns(3)
         with kpi1:
             st.metric("📦 Stock Total Acumulado", f"{df_ana['Stock Actual'].sum():,.1f}")
@@ -253,7 +251,6 @@ with tab3:
         
         # 2. Distribución y Rankings
         col_pie, col_rank = st.columns(2)
-        
         with col_pie:
             st.markdown("**Distribución de Stock por Depósito (%)**")
             df_pie = df_ana.groupby("Deposito")["Stock Actual"].sum().reset_index()
@@ -272,12 +269,12 @@ with tab3:
 
         st.markdown("---")
         
-        # 3. Gráfico de Barras Principal (Ocupación de Depósitos)
+        # 3. Gráfico de Barras Principal
         st.markdown("**Volumen de Stock por N° de Depósito**")
         df_bar = df_ana.groupby("Deposito")["Stock Actual"].sum().reset_index()
         fig_bar = px.bar(df_bar, x='Deposito', y='Stock Actual', 
                          color='Stock Actual', text_auto='.2s',
-                         color_continuous_scale='Viridis', labels={'Stock Actual': 'Cantidad Total'})
+                         color_continuous_scale='Viridis')
         st.plotly_chart(fig_bar, use_container_width=True)
 
 with tab4:
