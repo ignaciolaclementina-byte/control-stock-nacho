@@ -179,7 +179,11 @@ with tab1:
         
         with c2: f_lote = st.text_input("Lote", placeholder="Ej: AF05...")
         with c3: f_depo = st.text_input("Depósito", placeholder="Ej: 0")
-        with c4: hide_neg = st.toggle("Solo con stock", value=True)
+        with c4: f_cod_manual = st.text_input("Buscar por Código", placeholder="Ej: 10007") # REESTABLECIDO
+
+        c_filt_bot1, c_filt_bot2 = st.columns([1, 3])
+        with c_filt_bot1:
+            hide_neg = st.toggle("Solo con stock", value=True)
 
         df_f = stock_df.copy()
         if st.session_state.qr_detectado != "Todos":
@@ -188,6 +192,8 @@ with tab1:
             df_f = df_f[df_f["Lote"].astype(str).str.contains(f_lote, case=False)]
         if f_depo: 
             df_f = df_f[df_f["Deposito"].astype(str) == str(f_depo)]
+        if f_cod_manual:
+            df_f = df_f[df_f["Código"].astype(str).str.contains(f_cod_manual, case=False)]
         if hide_neg: 
             df_f = df_f[df_f["Stock Actual"] > 0]
 
@@ -221,7 +227,6 @@ with tab2:
 with tab3:
     if not stock_df.empty:
         st.subheader("📊 Análisis Consolidado (Totales)")
-        
         df_consolidado = stock_df.groupby(["Producto", "Deposito", "Unidad"])["Stock Actual"].sum().reset_index()
         df_consolidado = df_consolidado[df_consolidado["Stock Actual"] > 0] 
         
@@ -239,10 +244,9 @@ with tab3:
         st.metric(f"Total de {sel_p} (Dep: {sel_d})", f"{suma_final:,.1f} {df_target['Unidad'].iloc[0] if not df_target.empty else ''}")
 
         st.markdown("---")
-        st.write("**Detalle de Totales por Depósito (Suma de todos los lotes):**")
+        st.write("**Detalle de Totales por Depósito:**")
         st.dataframe(df_consolidado.sort_values(by="Stock Actual", ascending=False), use_container_width=True, hide_index=True)
 
-        st.markdown("**Volumen Total Consolidado por Depósito**")
         fig_vol = px.bar(df_consolidado.groupby("Deposito")["Stock Actual"].sum().reset_index(), 
                          x='Deposito', y='Stock Actual', color='Stock Actual', text_auto='.2s',
                          color_continuous_scale='Viridis', title="Suma total de litros por sector")
@@ -272,19 +276,17 @@ with tab4:
                         nom = str(row[col_prod]).strip()
                         cod = str(row[col_cod]).strip() if col_cod else "S/C"
                         
-                        # --- CORRECCIÓN DE SUMA (LÓGICA DE DECIMALES) ---
+                        # --- MEJORA DEFINITIVA EN LÓGICA NUMÉRICA ---
                         val_raw = str(row[col_stock]).strip()
                         if "," in val_raw:
-                            # Formato 1.234,56 -> quito punto de miles, cambio coma por punto decimal
+                            # Formato 1.234,50 -> Quita el punto y cambia la coma por punto decimal
                             stk_val = val_raw.replace('.', '').replace(',', '.')
                         else:
-                            # Formato 1234.56 o 1234 -> dejo como está
+                            # Formato 90.0 o 1234 -> Lo deja igual (no quita el punto porque es decimal)
                             stk_val = val_raw
                         
-                        try:
-                            stk = float(stk_val)
-                        except: 
-                            stk = 0.0
+                        try: stk = float(stk_val)
+                        except: stk = 0.0
                         
                         un = str(row[col_un]) if col_un else "LTS"
                         lt = str(row[col_lote]) if col_lote else "S/L"
