@@ -7,6 +7,7 @@ import numpy as np
 import cv2
 import io
 from PIL import Image
+import re
 
 # --- 1. CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="Gestión de Agroquímicos", layout="wide")
@@ -179,10 +180,10 @@ with tab1:
         
         with c2: f_lote = st.text_input("Lote", placeholder="Ej: AF05...")
         with c3: f_depo = st.text_input("Depósito", placeholder="Ej: 0")
-        with c4: f_cod_manual = st.text_input("Buscar por Código", placeholder="Ej: 10007") # REESTABLECIDO
+        with c4: f_cod_txt = st.text_input("Código", placeholder="Ej: 10007") # BUSQUEDA POR CODIGO RESTAURADA
 
-        c_filt_bot1, c_filt_bot2 = st.columns([1, 3])
-        with c_filt_bot1:
+        c_filt_ext, _ = st.columns([1, 3])
+        with c_filt_ext:
             hide_neg = st.toggle("Solo con stock", value=True)
 
         df_f = stock_df.copy()
@@ -192,8 +193,8 @@ with tab1:
             df_f = df_f[df_f["Lote"].astype(str).str.contains(f_lote, case=False)]
         if f_depo: 
             df_f = df_f[df_f["Deposito"].astype(str) == str(f_depo)]
-        if f_cod_manual:
-            df_f = df_f[df_f["Código"].astype(str).str.contains(f_cod_manual, case=False)]
+        if f_cod_txt:
+            df_f = df_f[df_f["Código"].astype(str).str.contains(f_cod_txt, case=False)]
         if hide_neg: 
             df_f = df_f[df_f["Stock Actual"] > 0]
 
@@ -271,18 +272,20 @@ with tab4:
                 if col_prod and col_stock:
                     borrar_datos_totales()
                     conn = conectar_db(); cursor = conn.cursor()
-                    
                     for _, row in df_import.iterrows():
                         nom = str(row[col_prod]).strip()
                         cod = str(row[col_cod]).strip() if col_cod else "S/C"
                         
-                        # --- MEJORA DEFINITIVA EN LÓGICA NUMÉRICA ---
+                        # --- LÓGICA DE LIMPIEZA NUMÉRICA BLINDADA ---
                         val_raw = str(row[col_stock]).strip()
+                        
+                        # Si tiene coma (formato 1.234,50), quitamos el punto de miles y cambiamos coma por punto
                         if "," in val_raw:
-                            # Formato 1.234,50 -> Quita el punto y cambia la coma por punto decimal
+                            # Solo quita el punto si está seguido de 3 dígitos y luego una coma (miles)
+                            # O simplemente quita todos los puntos si hay una coma presente (formato estándar ES)
                             stk_val = val_raw.replace('.', '').replace(',', '.')
                         else:
-                            # Formato 90.0 o 1234 -> Lo deja igual (no quita el punto porque es decimal)
+                            # Si NO tiene coma, el punto que tenga ES decimal (90.0). Lo dejamos como está.
                             stk_val = val_raw
                         
                         try: stk = float(stk_val)
@@ -297,12 +300,11 @@ with tab4:
                         id_p = cursor.fetchone()[0]
                         cursor.execute("INSERT INTO movimientos (fecha_hora, tipo_movimiento, id_producto, cantidad, lote, deposito) VALUES (?,?,?,?,?,?)",
                                        (datetime.now().strftime("%d/%m/%Y %H:%M"), "Entrada", id_p, stk, lt, dp))
-                    
                     conn.commit(); conn.close()
-                    st.success("✅ Sistema actualizado correctamente con valores corregidos.")
+                    st.success("✅ Sistema actualizado correctamente.")
                     st.rerun()
             except Exception as e:
-                st.error(f"❌ Error en la importación: {e}")
+                st.error(f"❌ Error: {e}")
 
 st.markdown("---")
 st.caption("Desarrollado por Ignacio Diaz")
