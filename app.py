@@ -205,7 +205,6 @@ with tab3:
     if not stock_df.empty:
         st.subheader("📊 Análisis de Stock Real")
         
-        # Filtro para gráfico: Solo positivos para evitar escalas rotas
         df_grafico = stock_df[stock_df["Stock Actual"] > 0]
         
         if not df_grafico.empty:
@@ -226,7 +225,6 @@ with tab3:
         st.markdown("---")
         st.subheader("📋 Resumen por Unidad y Depósito")
         
-        # Tabla pivote limpia
         tabla_resumen = stock_df.pivot_table(
             index="Deposito", 
             columns="Unidad", 
@@ -235,10 +233,7 @@ with tab3:
             fill_value=0
         )
         
-        # Ocultamos columnas de unidades que están todas en cero
         tabla_resumen = tabla_resumen.loc[:, (tabla_resumen != 0).any(axis=0)]
-        
-        # Mostramos la tabla formateada (sin gradiente para evitar el error de matplotlib)
         st.dataframe(tabla_resumen.style.format("{:.2f}"), use_container_width=True)
         
     else:
@@ -251,20 +246,33 @@ with tab4:
     if archivo:
         try:
             df_import = pd.read_csv(archivo) if archivo.name.endswith('.csv') else pd.read_excel(archivo)
-            st.write("Vista previa:")
-            st.dataframe(df_import.head(2), use_container_width=True)
+            
+            # NORMALIZACIÓN: Quitamos espacios y pasamos a minúsculas los nombres de las columnas
+            df_import.columns = df_import.columns.str.strip().str.lower()
+            
+            st.write("Vista previa de datos detectados:")
+            st.dataframe(df_import.head(3), use_container_width=True)
             
             if st.button("🚀 INICIAR PROCESAMIENTO"):
                 with st.spinner('Sincronizando...'):
                     borrar_datos_totales()
                     conn = conectar_db()
                     cursor = conn.cursor()
+                    
+                    # Identificar columnas con nombres flexibles
+                    col_nom = 'descripcion_1' if 'descripcion_1' in df_import.columns else df_import.columns[1]
+                    col_stk = 'stock_actual' if 'stock_actual' in df_import.columns else 'stock actual'
+                    col_uni = 'unidad_medida' if 'unidad_medida' in df_import.columns else 'unidad'
+                    col_lot = 'lote' if 'lote' in df_import.columns else 'lotes'
+                    col_dep = 'deposito' if 'deposito' in df_import.columns else 'dep'
+                    
                     for _, row in df_import.iterrows():
-                        nom = str(row['descripcion_1']).strip()
-                        stk = float(row['stock_actual'])
-                        uni = str(row['unidad_medida']) if pd.notna(row['unidad_medida']) else "UN"
-                        lot = str(row['lotes']) if pd.notna(row['lotes']) else "S/L"
-                        dep = str(row['deposito']) if pd.notna(row['deposito']) else "0"
+                        nom = str(row[col_nom]).strip()
+                        stk = float(row[col_stk])
+                        # Validaciones de seguridad para campos vacíos
+                        uni = str(row[col_uni]).strip() if col_uni in df_import.columns and pd.notna(row[col_uni]) else "UN"
+                        lot = str(row[col_lot]).strip() if col_lot in df_import.columns and pd.notna(row[col_lot]) else "S/L"
+                        dep = str(row[col_dep]).strip() if col_dep in df_import.columns and pd.notna(row[col_dep]) else "0"
                         
                         cursor.execute("INSERT OR IGNORE INTO productos (nombre, unidad) VALUES (?,?)", (nom, uni))
                         cursor.execute("SELECT id_producto FROM productos WHERE nombre = ?", (nom,))
@@ -273,12 +281,13 @@ with tab4:
                             INSERT INTO movimientos (fecha_hora, tipo_movimiento, id_producto, cantidad, lote, deposito, referencia) 
                             VALUES (?,?,?,?,?,?,?)
                         """, (datetime.now().strftime("%d/%m/%Y %H:%M"), "Entrada", id_p, stk, lot, dep, "CARGA_MACRO"))
+                    
                     conn.commit()
                     conn.close()
                     st.success("✅ Datos importados correctamente.")
                     st.rerun()
         except Exception as e:
-            st.error(f"Error en columnas: descripcion_1, stock_actual, lotes, deposito. ({e})")
+            st.error(f"Error al procesar el archivo: {e}")
 
 st.markdown("---")
 st.caption("Desarrollado por Ignacio Diaz")
