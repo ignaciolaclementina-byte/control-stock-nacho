@@ -11,7 +11,7 @@ from PIL import Image
 # --- 1. CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="Gestión de Agroquímicos", layout="wide")
 
-# Estilos profesionales mantenidos
+# Estilos profesionales mantenidos y mejorados con indicadores de color
 st.markdown("""
     <style>
     .main { background-color: #f4f7f6; }
@@ -25,8 +25,10 @@ st.markdown("""
         margin-bottom: 12px;
         border: 1px solid #e1e4e8;
     }
-    .card-normal { border-left: 6px solid #28a745; } 
-    .card-warning { border-left: 6px solid #dc3545; } 
+    /* Indicadores de estado en el borde izquierdo */
+    .card-normal { border-left: 8px solid #28a745; }  /* Verde: Stock OK */
+    .card-low { border-left: 8px solid #ffc107; }     /* Amarillo: Stock Bajo */
+    .card-warning { border-left: 8px solid #dc3545; }  /* Rojo: Crítico/Sin stock */
     
     .stock-title { font-size: 0.95rem; color: #1a1c21; font-weight: 700; margin-bottom: 8px; line-height: 1.2; min-height: 2.4em; }
     .stock-value { font-size: 1.5rem; color: #007bff; font-weight: 800; display: block; }
@@ -38,7 +40,7 @@ st.markdown("""
         font-size: 0.8rem; 
         color: #495057; 
     }
-    .label-blue { color: #007bff; font-weight: bold; }
+    .label-blue { background-color: #e7f3ff; color: #007bff; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -174,10 +176,8 @@ with tab1:
                             st.session_state.qr_detectado = matches[0]
                             st.success(f"✅ Producto: {matches[0]}")
                             st.rerun()
-                    else:
-                        st.error(f"❌ El código '{codigo}' no figura en el stock.")
                 elif btn_procesar:
-                    st.warning("⚠️ No se pudo leer el QR. Intentá con más luz.")
+                    st.warning("⚠️ No se pudo leer el QR.")
 
         st.markdown("---")
         st.subheader("🔍 Filtros y Resultados")
@@ -186,12 +186,12 @@ with tab1:
         with c1:
             lista_productos = ["Todos"] + sorted(stock_df["Producto"].unique().tolist())
             idx_inicio = lista_productos.index(st.session_state.qr_detectado) if st.session_state.qr_detectado in lista_productos else 0
-            f_prod = st.selectbox("Producto Seleccionado", lista_productos, index=idx_inicio, key="prod_select")
+            f_prod = st.selectbox("Producto", lista_productos, index=idx_inicio, key="prod_select")
             st.session_state.qr_detectado = f_prod
         
-        with c2: f_lote = st.text_input("Filtrar Lote", placeholder="Ej: AF05...")
-        with c3: f_depo = st.text_input("Depósito Exacto", placeholder="Ej: 0")
-        with c4: hide_neg = st.toggle("Solo disponible", value=True)
+        with c2: f_lote = st.text_input("Lote", placeholder="Ej: AF05...")
+        with c3: f_depo = st.text_input("Depósito", placeholder="Ej: 0")
+        with c4: hide_neg = st.toggle("Solo con stock", value=True)
 
         df_f = stock_df.copy()
         if st.session_state.qr_detectado != "Todos":
@@ -205,24 +205,24 @@ with tab1:
 
         if not df_f.empty:
             excel_bin = descargar_excel_limpio(df_f)
-            st.download_button(
-                label="📥 Descargar Excel (Columnas Separadas)", 
-                data=excel_bin, 
-                file_name=f'stock_agro_{datetime.now().strftime("%d-%m-%H%M")}.xlsx',
-                mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-            )
+            st.download_button(label="📥 Descargar Excel", data=excel_bin, file_name='stock_actual.xlsx', mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
             items = df_f.to_dict('records')
             cols_grid = st.columns(4)
             for i, item in enumerate(items[:40]): 
                 with cols_grid[i % 4]:
-                    clase = "card-normal" if item['Stock Actual'] > 0 else "card-warning"
+                    # Lógica de color dinámica
+                    stk_val = item['Stock Actual']
+                    if stk_val <= 0: clase = "card-warning"
+                    elif stk_val < 20: clase = "card-low"
+                    else: clase = "card-normal"
+
                     st.markdown(f"""
                         <div class="stock-card {clase}">
                             <div class="stock-title">{item['Producto']}</div>
-                            <span class="stock-value">{item['Stock Actual']:.1f} <small class="stock-unit">{item['Unidad']}</small></span>
+                            <span class="stock-value">{stk_val:,.1f} <small class="stock-unit">{item['Unidad']}</small></span>
                             <div class="stock-info">
-                                <b>📍 Dep:</b> <span class="label-blue">{item['Deposito']}</span> | 
+                                <b>📍 Dep:</b> <span class="label-blue">{item['Deposito']}</span><br>
                                 <b>🏷️ Lote:</b> {item['Lote']}
                             </div>
                         </div>
@@ -232,61 +232,51 @@ with tab2:
     if not stock_df.empty:
         st.dataframe(stock_df, use_container_width=True, hide_index=True)
 
-# --- PESTAÑA ANÁLISIS MEJORADA ---
+# --- TAB 3: ANÁLISIS EXPLICATIVO (MEJORADO) ---
 with tab3:
     if not stock_df.empty:
-        st.subheader("📊 Dashboard de Inventario Explicativo")
+        st.subheader("📊 Dashboard de Inventario")
         df_ana = stock_df[stock_df["Stock Actual"] > 0].copy()
         
-        # 1. KPIs Principales
-        kpi1, kpi2, kpi3 = st.columns(3)
-        with kpi1:
-            st.metric("📦 Stock Total Acumulado", f"{df_ana['Stock Actual'].sum():,.1f}")
-        with kpi2:
-            st.metric("🏷️ Variedad de Productos", len(df_ana['Producto'].unique()))
-        with kpi3:
-            st.metric("📍 Depósitos con Carga", len(df_ana['Deposito'].unique()))
+        # Métricas de resumen (KPIs)
+        k1, k2, k3 = st.columns(3)
+        k1.metric("Stock Total", f"{df_ana['Stock Actual'].sum():,.0f}")
+        k2.metric("Productos Activos", len(df_ana['Producto'].unique()))
+        k3.metric("Depósitos en Uso", len(df_ana['Deposito'].unique()))
         
         st.markdown("---")
         
-        # 2. Distribución y Rankings
-        col_pie, col_rank = st.columns(2)
-        with col_pie:
-            st.markdown("**Distribución de Stock por Depósito (%)**")
-            df_pie = df_ana.groupby("Deposito")["Stock Actual"].sum().reset_index()
-            fig_pie = px.pie(df_pie, values='Stock Actual', names='Deposito', 
-                             hole=0.4, color_discrete_sequence=px.colors.qualitative.Safe)
-            fig_pie.update_traces(textposition='inside', textinfo='percent+label')
+        c_pie, c_bar = st.columns(2)
+        with c_pie:
+            st.markdown("**Distribución por Depósito**")
+            fig_pie = px.pie(df_ana.groupby("Deposito")["Stock Actual"].sum().reset_index(), 
+                             values='Stock Actual', names='Deposito', hole=0.4,
+                             color_discrete_sequence=px.colors.qualitative.Pastel)
             st.plotly_chart(fig_pie, use_container_width=True)
             
-        with col_rank:
-            st.markdown("**Top 10 Productos con Mayor Existencia**")
+        with c_bar:
+            st.markdown("**Top 10 Productos con más Stock**")
             df_top = df_ana.groupby("Producto")["Stock Actual"].sum().sort_values(ascending=False).head(10).reset_index()
-            fig_top = px.bar(df_top, x='Stock Actual', y='Producto', orientation='h',
-                             color='Stock Actual', color_continuous_scale='Blues')
-            fig_top.update_layout(yaxis={'categoryorder':'total ascending'}, showlegend=False)
-            st.plotly_chart(fig_top, use_container_width=True)
+            fig_rank = px.bar(df_top, x='Stock Actual', y='Producto', orientation='h', 
+                              color='Stock Actual', color_continuous_scale='Blues')
+            fig_rank.update_layout(yaxis={'categoryorder':'total ascending'}, showlegend=False)
+            st.plotly_chart(fig_rank, use_container_width=True)
 
-        st.markdown("---")
-        
-        # 3. Gráfico de Barras Principal
-        st.markdown("**Volumen de Stock por N° de Depósito**")
-        df_bar = df_ana.groupby("Deposito")["Stock Actual"].sum().reset_index()
-        fig_bar = px.bar(df_bar, x='Deposito', y='Stock Actual', 
-                         color='Stock Actual', text_auto='.2s',
+        st.markdown("**Volumen Total por Depósito**")
+        fig_vol = px.bar(df_ana.groupby("Deposito")["Stock Actual"].sum().reset_index(), 
+                         x='Deposito', y='Stock Actual', color='Stock Actual', text_auto='.2s',
                          color_continuous_scale='Viridis')
-        st.plotly_chart(fig_bar, use_container_width=True)
+        st.plotly_chart(fig_vol, use_container_width=True)
 
 with tab4:
-    st.subheader("⚙️ Importación de Datos")
-    archivo = st.file_uploader("Subí el Export de MacroGest (Excel o CSV)", type=["xlsx", "csv"])
-    if archivo and st.button("🚀 ACTUALIZAR SISTEMA"):
+    st.subheader("⚙️ Importación de Datos MacroGest")
+    archivo = st.file_uploader("Subí Excel o CSV", type=["xlsx", "csv"])
+    if archivo and st.button("🚀 ACTUALIZAR TODO"):
         with st.spinner('Sincronizando...'):
             borrar_datos_totales()
             conn = conectar_db(); cursor = conn.cursor()
             df_import = pd.read_csv(archivo) if archivo.name.endswith('.csv') else pd.read_excel(archivo)
             df_import.columns = df_import.columns.str.strip().str.lower()
-            
             for _, row in df_import.iterrows():
                 nom = str(row.get('descripcion_1', row.iloc[:,1])).strip()
                 stk = float(row.get('stock_actual', 0))
@@ -296,7 +286,7 @@ with tab4:
                 cursor.execute("INSERT INTO movimientos (fecha_hora, tipo_movimiento, id_producto, cantidad, lote, deposito) VALUES (?,?,?,?,?,?)",
                                (datetime.now().strftime("%d/%m/%Y %H:%M"), "Entrada", id_p, stk, str(row.get('lote', 'S/L')), str(row.get('deposito', '0'))))
             conn.commit(); conn.close()
-            st.success("✅ Sistema actualizado.")
+            st.success("✅ Sistema actualizado correctamente.")
             st.rerun()
 
 st.markdown("---")
