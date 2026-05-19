@@ -11,7 +11,7 @@ from PIL import Image
 # --- 1. CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="Gestión de Agroquímicos", layout="wide")
 
-# Estilos profesionales mantenidos
+# Estilos profesionales mantenidos y mejorados
 st.markdown("""
     <style>
     .main { background-color: #f4f7f6; }
@@ -21,9 +21,10 @@ st.markdown("""
         background-color: white; 
         padding: 18px; 
         border-radius: 12px;
-        box-shadow: 0 4px 66px rgba(0,0,0,0.07); 
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05); 
         margin-bottom: 12px;
         border: 1px solid #e1e4e8;
+        position: relative;
     }
     .card-normal { border-left: 8px solid #28a745; } 
     .card-low { border-left: 8px solid #ffc107; }      
@@ -32,6 +33,22 @@ st.markdown("""
     .stock-title { font-size: 0.95rem; color: #1a1c21; font-weight: 700; margin-bottom: 8px; line-height: 1.2; min-height: 2.4em; }
     .stock-value { font-size: 1.5rem; color: #007bff; font-weight: 800; display: block; }
     .stock-unit { font-size: 0.8rem; color: #6c757d; font-weight: 400; }
+    
+    /* Badge de estado dentro de la tarjeta */
+    .status-badge {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        font-size: 0.7rem;
+        padding: 2px 8px;
+        border-radius: 10px;
+        color: white;
+        font-weight: bold;
+    }
+    .bg-normal { background-color: #28a745; }
+    .bg-low { background-color: #ffc107; color: #000; }
+    .bg-warning { background-color: #dc3545; }
+
     .stock-info { 
         margin-top: 10px; 
         padding-top: 8px; 
@@ -140,6 +157,19 @@ with tab1:
     if stock_df.empty:
         st.warning("⚠️ No hay datos cargados. Por favor, subí el archivo en la pestaña 'Configuración'.")
     else:
+        # --- MEJORA 1: KPIs DE CABECERA ---
+        df_kpi = stock_df.copy()
+        c_kpi1, c_kpi2, c_kpi3, c_kpi4 = st.columns(4)
+        with c_kpi1:
+            st.metric("Total Productos", len(df_kpi["Producto"].unique()))
+        with c_kpi2:
+            st.metric("Volumen Total", f"{df_kpi['Stock Actual'].sum():,.0f}")
+        with c_kpi3:
+            criticos_n = len(df_kpi[df_kpi["Stock Actual"] < 20])
+            st.metric("Alertas Críticas", criticos_n, delta=-criticos_n, delta_color="inverse")
+        with c_kpi4:
+            st.metric("Depósitos", df_kpi["Deposito"].nunique())
+
         st.markdown("### 📷 Identificar Producto")
         c_cam1, c_cam2 = st.columns([3, 1])
         
@@ -170,36 +200,24 @@ with tab1:
         st.markdown("---")
         st.subheader("🔍 Filtros Dinámicos")
         
-        # --- MEJORA: BUSCADOR DINÁMICO ---
         search_query = st.text_input("⌨️ Buscar por nombre o código", placeholder="Empiece a escribir para filtrar...", key="search_input")
         
         c1, c2, c3, c4 = st.columns(4)
-        
         with c1:
             lista_productos = ["Todos"] + sorted(stock_df["Producto"].unique().tolist())
             idx_inicio = lista_productos.index(st.session_state.qr_detectado) if st.session_state.qr_detectado in lista_productos else 0
             f_prod = st.selectbox("O selecciona de la lista", lista_productos, index=idx_inicio, key="prod_select")
-            # Sincronizamos el selectbox con el estado del QR
             st.session_state.qr_detectado = f_prod
         
         with c2: f_lote = st.text_input("Lote", placeholder="Ej: AF05...")
         with c3: f_depo = st.text_input("Depósito", placeholder="Ej: 0")
         with c4: hide_neg = st.toggle("Solo con stock", value=True)
 
-        # Aplicación de filtros en cascada
         df_f = stock_df.copy()
-        
-        # Filtro por buscador de texto (Mejora dinámica)
         if search_query:
-            df_f = df_f[
-                df_f["Producto"].str.contains(search_query, case=False) | 
-                df_f["Código"].astype(str).str.contains(search_query, case=False)
-            ]
-        
-        # Filtro por selector (si no es "Todos" y no se ha buscado por texto manualmente)
+            df_f = df_f[df_f["Producto"].str.contains(search_query, case=False) | df_f["Código"].astype(str).str.contains(search_query, case=False)]
         if st.session_state.qr_detectado != "Todos" and not search_query:
             df_f = df_f[df_f["Producto"] == st.session_state.qr_detectado]
-            
         if f_lote: 
             df_f = df_f[df_f["Lote"].astype(str).str.contains(f_lote, case=False)]
         if f_depo: 
@@ -216,10 +234,17 @@ with tab1:
             for i, item in enumerate(items[:40]): 
                 with cols_grid[i % 4]:
                     stk_val = item['Stock Actual']
-                    clase = "card-warning" if stk_val <= 0 else "card-low" if stk_val < 20 else "card-normal"
+                    # MEJORA: Definición de clases y etiquetas
+                    if stk_val <= 0:
+                        clase, txt_status, bg_status = "card-warning", "SIN STOCK", "bg-warning"
+                    elif stk_val < 20:
+                        clase, txt_status, bg_status = "card-low", "REPORNER", "bg-low"
+                    else:
+                        clase, txt_status, bg_status = "card-normal", "ÓPTIMO", "bg-normal"
 
                     st.markdown(f"""
                         <div class="stock-card {clase}">
+                            <div class="status-badge {bg_status}">{txt_status}</div>
                             <div class="stock-title">{item['Producto']}</div>
                             <span class="stock-value">{stk_val:,.1f} <small class="stock-unit">{item['Unidad']}</small></span>
                             <div class="stock-info">
@@ -244,13 +269,20 @@ with tab3:
         
         if not df_criticos.empty:
             st.error(f"Se encontraron {len(df_criticos)} productos con stock por debajo del umbral de seguridad.")
-            st.dataframe(
-                df_criticos.style.background_gradient(cmap='Reds', subset=['Stock Actual']),
-                use_container_width=True, hide_index=True
-            )
+            st.dataframe(df_criticos.style.background_gradient(cmap='Reds', subset=['Stock Actual']), use_container_width=True, hide_index=True)
         else:
             st.success("✅ No hay productos en niveles críticos.")
         
+        st.markdown("---")
+        # MEJORA: GRÁFICO DE PARETO (TOP 10 VOLUMEN)
+        st.subheader("🔝 Top 10 Productos por Volumen")
+        df_pareto = stock_df.groupby("Producto")["Stock Actual"].sum().sort_values(ascending=False).head(10).reset_index()
+        fig_pareto = px.bar(df_pareto, x='Stock Actual', y='Producto', orientation='h', 
+                           color='Stock Actual', color_continuous_scale='Greens',
+                           text_auto='.2s', title="Productos con Mayor Existencia")
+        fig_pareto.update_layout(yaxis={'categoryorder':'total ascending'})
+        st.plotly_chart(fig_pareto, use_container_width=True)
+
         st.markdown("---")
         st.subheader("📊 Análisis Consolidado (Totales)")
         df_consolidado = stock_df.groupby(["Producto", "Deposito", "Unidad"])["Stock Actual"].sum().reset_index()
@@ -270,7 +302,6 @@ with tab3:
         unid_txt = df_target['Unidad'].iloc[0] if not df_target.empty else ''
         st.metric(f"Total de {sel_p}", f"{suma_final:,.1f} {unid_txt}")
 
-        st.markdown("---")
         st.write("**Detalle de Totales por Depósito:**")
         st.dataframe(df_consolidado.sort_values(by="Stock Actual", ascending=False), use_container_width=True, hide_index=True)
 
@@ -302,16 +333,13 @@ with tab4:
                     for _, row in df_import.iterrows():
                         nom = str(row[col_prod]).strip()
                         cod = str(row[col_cod]).strip() if col_cod else "S/C"
-                        
                         val_raw = str(row[col_stock]).strip()
                         if "," in val_raw:
                             stk_val = val_raw.replace('.', '').replace(',', '.')
                         else:
                             stk_val = val_raw
-                        
                         try: stk = float(stk_val)
                         except: stk = 0.0
-                        
                         un = str(row[col_un]) if col_un else "LTS"
                         lt = str(row[col_lote]) if col_lote else "S/L"
                         dp = str(row[col_depo]) if col_depo else "0"
