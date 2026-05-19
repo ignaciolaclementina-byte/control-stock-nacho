@@ -35,6 +35,7 @@ st.markdown("""
     .stock-value { font-size: 1.5rem; color: #007bff; font-weight: 800; display: block; }
     .stock-unit { font-size: 0.8rem; color: #6c757d; font-weight: 400; }
     
+    /* Badge de estado dentro de la tarjeta */
     .status-badge {
         position: absolute;
         top: 10px;
@@ -58,6 +59,7 @@ st.markdown("""
     }
     .label-blue { background-color: #e7f3ff; color: #007bff; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
     
+    /* Botón de WhatsApp mejorado */
     .wa-btn {
         display: inline-flex;
         align-items: center;
@@ -223,7 +225,7 @@ with tab1:
             st.session_state.qr_detectado = f_prod
         
         with c2: f_lote = st.text_input("Lote", placeholder="Ej: AF05...")
-        with c3: f_depo = st.text_input("Depósito", placeholder="Ej: SAN JORGE...")
+        with c3: f_depo = st.text_input("Depósito", placeholder="Ej: 0")
         with c4: hide_neg = st.toggle("Solo con stock", value=True)
 
         df_f = stock_df.copy()
@@ -234,7 +236,7 @@ with tab1:
         if f_lote: 
             df_f = df_f[df_f["Lote"].astype(str).str.contains(f_lote, case=False)]
         if f_depo: 
-            df_f = df_f[df_f["Deposito"].astype(str).str.contains(f_depo, case=False)]
+            df_f = df_f[df_f["Deposito"].astype(str) == str(f_depo)]
         if hide_neg: 
             df_f = df_f[df_f["Stock Actual"] > 0]
 
@@ -254,7 +256,8 @@ with tab1:
                     else:
                         clase, txt_status, bg_status = "card-normal", "ÓPTIMO", "bg-normal"
 
-                    msg_wa = urllib.parse.quote(f"Hola! Reporto stock de {item['Producto']}. Depósito: {item['Deposito']}. Cantidad actual: {stk_val} {item['Unidad']}.")
+                    # MEJORA: Link de WhatsApp
+                    msg_wa = urllib.parse.quote(f"Hola! Reporto stock de {item['Producto']}. Lote: {item['Lote']}. Cantidad actual: {stk_val} {item['Unidad']}.")
                     link_wa = f"https://wa.me/5493406123456?text={msg_wa}"
 
                     st.markdown(f"""
@@ -279,66 +282,95 @@ with tab2:
 
 with tab3:
     if not stock_df.empty:
-        st.subheader("📊 Análisis de Stock")
+        st.subheader("⚠️ Alerta de Productos Críticos")
+        df_criticos = stock_df.groupby(["Producto", "Unidad", "Código"])["Stock Actual"].sum().reset_index()
+        df_criticos = df_criticos[df_criticos["Stock Actual"] < 20].sort_values(by="Stock Actual")
+        
+        if not df_criticos.empty:
+            st.error(f"Se encontraron {len(df_criticos)} productos con stock por debajo del umbral de seguridad.")
+            st.dataframe(df_criticos.style.background_gradient(cmap='Reds', subset=['Stock Actual']), use_container_width=True, hide_index=True)
+        else:
+            st.success("✅ No hay productos en niveles críticos.")
+        
+        st.markdown("---")
+        st.subheader("🔝 Top 10 Productos por Volumen")
         df_pareto = stock_df.groupby("Producto")["Stock Actual"].sum().sort_values(ascending=False).head(10).reset_index()
         fig_pareto = px.bar(df_pareto, x='Stock Actual', y='Producto', orientation='h', 
-                            color='Stock Actual', color_continuous_scale='Greens',
-                            title="Top 10 Productos por Volumen")
+                           color='Stock Actual', color_continuous_scale='Greens',
+                           text_auto='.2s', title="Productos con Mayor Existencia")
+        fig_pareto.update_layout(yaxis={'categoryorder':'total ascending'})
         st.plotly_chart(fig_pareto, use_container_width=True)
 
+        st.markdown("---")
+        st.subheader("📊 Análisis Consolidado (Totales)")
+        df_consolidado = stock_df.groupby(["Producto", "Deposito", "Unidad"])["Stock Actual"].sum().reset_index()
+        df_consolidado = df_consolidado[df_consolidado["Stock Actual"] > 0] 
+        
+        c_filtro1, c_filtro2 = st.columns(2)
+        with c_filtro1:
+            sel_p = st.selectbox("Ver suma total de:", sorted(df_consolidado["Producto"].unique()), key="ana_prod")
+        with c_filtro2:
+            sel_d = st.selectbox("En el depósito:", ["Todos"] + sorted(df_consolidado["Deposito"].unique().tolist()), key="ana_depo")
+        
+        df_target = df_consolidado[df_consolidado["Producto"] == sel_p]
+        if sel_d != "Todos":
+            df_target = df_target[df_target["Deposito"] == sel_d]
+        
+        suma_final = df_target["Stock Actual"].sum()
+        unid_txt = df_target['Unidad'].iloc[0] if not df_target.empty else ''
+        st.metric(f"Total de {sel_p}", f"{suma_final:,.1f} {unid_txt}")
+
+        st.write("**Detalle de Totales por Depósito:**")
+        st.dataframe(df_consolidado.sort_values(by="Stock Actual", ascending=False), use_container_width=True, hide_index=True)
+
+        fig_vol = px.bar(df_consolidado.groupby("Deposito")["Stock Actual"].sum().reset_index(), 
+                         x='Deposito', y='Stock Actual', color='Stock Actual', text_auto='.2s',
+                         color_continuous_scale='Viridis', title="Ocupación por Depósito")
+        st.plotly_chart(fig_vol, use_container_width=True)
+
 with tab4:
-    st.subheader("⚙️ Importación de Datos (Estructura Personalizada)")
-    archivo = st.file_uploader("Subí el archivo 'export 3.xls' o similar (.csv/.xlsx)", type=["xlsx", "csv"])
-    
-    if archivo and st.button("🚀 PROCESAR E IMPORTAR"):
-        with st.spinner('Sincronizando datos...'):
+    st.subheader("⚙️ Importación de Datos MacroGest")
+    archivo = st.file_uploader("Subí Excel o CSV", type=["xlsx", "csv"])
+    if archivo and st.button("🚀 ACTUALIZAR TODO"):
+        with st.spinner('Sincronizando...'):
             try:
-                # Lectura flexible
-                if archivo.name.endswith('.csv'):
-                    df_import = pd.read_csv(archivo, sep=None, engine='python', encoding='latin1')
-                else:
-                    df_import = pd.read_excel(archivo)
+                df_import = pd.read_csv(archivo, sep=None, engine='python', decimal=',', encoding='latin1') if archivo.name.endswith('.csv') else pd.read_excel(archivo)
+                df_import.columns = [str(c).strip().lower() for c in df_import.columns]
                 
-                # Limpieza de nombres de columnas
-                df_import.columns = [str(c).strip() for c in df_import.columns]
-                
-                # Lógica para detectar si es el formato de "export 3.xls" (Columnas: Artículo, Descripción, Depósitos...)
-                if 'Artículo' in df_import.columns and 'Descripción' in df_import.columns:
+                col_cod = next((c for c in df_import.columns if 'codigo' in c or 'código' in c), None)
+                col_prod = next((c for c in df_import.columns if 'producto' in c or 'descripcion' in c), None)
+                col_stock = next((c for c in df_import.columns if 'stock' in c or 'actual' in c), None)
+                col_depo = next((c for c in df_import.columns if 'deposito' in c or 'sector' in c), None)
+                col_lote = next((c for c in df_import.columns if 'lote' in c), None)
+                col_un = next((c for c in df_import.columns if 'unidad' in c), None)
+
+                if col_prod and col_stock:
                     borrar_datos_totales()
-                    conn = conectar_db()
-                    cursor = conn.cursor()
-                    
-                    # Las columnas de depósitos son todas menos 'Artículo' y 'Descripción'
-                    cols_depositos = [c for c in df_import.columns if c not in ['Artículo', 'Descripción'] and "Unnamed" not in c]
+                    conn = conectar_db(); cursor = conn.cursor()
                     
                     for _, row in df_import.iterrows():
-                        nom = str(row['Descripción']).strip()
-                        cod = str(row['Artículo']).strip()
-                        if pd.isna(nom) or nom == "" or nom == "nan": continue
-                        
-                        cursor.execute("INSERT OR IGNORE INTO productos (nombre, unidad, codigo) VALUES (?,?,?)", (nom, "UNID", cod))
+                        nom = str(row[col_prod]).strip()
+                        cod = str(row[col_cod]).strip() if col_cod else "S/C"
+                        val_raw = str(row[col_stock]).strip()
+                        if "," in val_raw:
+                            stk_val = val_raw.replace('.', '').replace(',', '.')
+                        else:
+                            stk_val = val_raw
+                        try: stk = float(stk_val)
+                        except: stk = 0.0
+                        un = str(row[col_un]) if col_un else "LTS"
+                        lt = str(row[col_lote]) if col_lote else "S/L"
+                        dp = str(row[col_depo]) if col_depo else "0"
+
+                        cursor.execute("INSERT OR IGNORE INTO productos (nombre, unidad, codigo) VALUES (?,?,?)", (nom, un, cod))
                         cursor.execute("SELECT id_producto FROM productos WHERE nombre = ?", (nom,))
                         id_p = cursor.fetchone()[0]
-                        
-                        for depo in cols_depositos:
-                            try:
-                                # Limpiar valor de stock
-                                val_raw = str(row[depo]).replace('.', '').replace(',', '.')
-                                val = float(val_raw)
-                                if val != 0 and not pd.isna(val):
-                                    cursor.execute("""
-                                        INSERT INTO movimientos (fecha_hora, tipo_movimiento, id_producto, cantidad, lote, deposito) 
-                                        VALUES (?,?,?,?,?,?)""",
-                                        (datetime.now().strftime("%d/%m/%Y %H:%M"), "Entrada", id_p, val, "S/L", depo))
-                            except: continue
-                    conn.commit()
-                    conn.close()
-                    st.success("✅ Importación exitosa desde formato multidepósito.")
-                    st.rerun()
-                
-                else:
-                    st.error("❌ El formato del archivo no coincide. Asegurate que tenga las columnas 'Artículo' y 'Descripción'.")
+                        cursor.execute("INSERT INTO movimientos (fecha_hora, tipo_movimiento, id_producto, cantidad, lote, deposito) VALUES (?,?,?,?,?,?)",
+                                       (datetime.now().strftime("%d/%m/%Y %H:%M"), "Entrada", id_p, stk, lt, dp))
                     
+                    conn.commit(); conn.close()
+                    st.success("✅ Sistema actualizado correctamente.")
+                    st.rerun()
             except Exception as e:
                 st.error(f"❌ Error durante la importación: {e}")
 
