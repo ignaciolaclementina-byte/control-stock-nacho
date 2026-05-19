@@ -149,7 +149,7 @@ with tab1:
         with c_cam2:
             st.write("") 
             btn_procesar = st.button("🔍 ESCANEAR QR")
-            if st.button("🔄 Limpiar"):
+            if st.button("🔄 Limpiar Búsqueda"):
                 st.session_state.qr_detectado = "Todos"
                 st.rerun()
 
@@ -168,22 +168,38 @@ with tab1:
                     st.warning("⚠️ No se pudo leer el QR.")
 
         st.markdown("---")
-        st.subheader("🔍 Filtros y Resultados")
+        st.subheader("🔍 Filtros Dinámicos")
+        
+        # --- MEJORA: BUSCADOR DINÁMICO ---
+        search_query = st.text_input("⌨️ Buscar por nombre o código", placeholder="Empiece a escribir para filtrar...", key="search_input")
+        
         c1, c2, c3, c4 = st.columns(4)
         
         with c1:
             lista_productos = ["Todos"] + sorted(stock_df["Producto"].unique().tolist())
             idx_inicio = lista_productos.index(st.session_state.qr_detectado) if st.session_state.qr_detectado in lista_productos else 0
-            f_prod = st.selectbox("Producto", lista_productos, index=idx_inicio, key="prod_select")
+            f_prod = st.selectbox("O selecciona de la lista", lista_productos, index=idx_inicio, key="prod_select")
+            # Sincronizamos el selectbox con el estado del QR
             st.session_state.qr_detectado = f_prod
         
         with c2: f_lote = st.text_input("Lote", placeholder="Ej: AF05...")
         with c3: f_depo = st.text_input("Depósito", placeholder="Ej: 0")
         with c4: hide_neg = st.toggle("Solo con stock", value=True)
 
+        # Aplicación de filtros en cascada
         df_f = stock_df.copy()
-        if st.session_state.qr_detectado != "Todos":
+        
+        # Filtro por buscador de texto (Mejora dinámica)
+        if search_query:
+            df_f = df_f[
+                df_f["Producto"].str.contains(search_query, case=False) | 
+                df_f["Código"].astype(str).str.contains(search_query, case=False)
+            ]
+        
+        # Filtro por selector (si no es "Todos" y no se ha buscado por texto manualmente)
+        if st.session_state.qr_detectado != "Todos" and not search_query:
             df_f = df_f[df_f["Producto"] == st.session_state.qr_detectado]
+            
         if f_lote: 
             df_f = df_f[df_f["Lote"].astype(str).str.contains(f_lote, case=False)]
         if f_depo: 
@@ -193,7 +209,7 @@ with tab1:
 
         if not df_f.empty:
             excel_bin = descargar_excel_limpio(df_f)
-            st.download_button(label="📥 Descargar Excel", data=excel_bin, file_name='stock_actual.xlsx', mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            st.download_button(label="📥 Descargar Excel Filtrado", data=excel_bin, file_name='stock_actual.xlsx', mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
             items = df_f.to_dict('records')
             cols_grid = st.columns(4)
@@ -213,6 +229,8 @@ with tab1:
                             </div>
                         </div>
                     """, unsafe_allow_html=True)
+        else:
+            st.info("No se encontraron productos que coincidan con la búsqueda.")
 
 with tab2:
     if not stock_df.empty:
@@ -220,15 +238,12 @@ with tab2:
 
 with tab3:
     if not stock_df.empty:
-        # --- MEJORA: PRODUCTOS CRÍTICOS ---
         st.subheader("⚠️ Alerta de Productos Críticos")
-        # Consolidamos por producto (sumando todos los depósitos y lotes)
         df_criticos = stock_df.groupby(["Producto", "Unidad", "Código"])["Stock Actual"].sum().reset_index()
-        # Definimos crítico como menos de 20 unidades
         df_criticos = df_criticos[df_criticos["Stock Actual"] < 20].sort_values(by="Stock Actual")
         
         if not df_criticos.empty:
-            st.error(f"Se encontraron {len(df_criticos)} productos con stock bajo.")
+            st.error(f"Se encontraron {len(df_criticos)} productos con stock por debajo del umbral de seguridad.")
             st.dataframe(
                 df_criticos.style.background_gradient(cmap='Reds', subset=['Stock Actual']),
                 use_container_width=True, hide_index=True
@@ -243,24 +258,25 @@ with tab3:
         
         c_filtro1, c_filtro2 = st.columns(2)
         with c_filtro1:
-            sel_p = st.selectbox("Ver suma total de:", sorted(df_consolidado["Producto"].unique()))
+            sel_p = st.selectbox("Ver suma total de:", sorted(df_consolidado["Producto"].unique()), key="ana_prod")
         with c_filtro2:
-            sel_d = st.selectbox("En el depósito:", ["Todos"] + sorted(df_consolidado["Deposito"].unique().tolist()))
+            sel_d = st.selectbox("En el depósito:", ["Todos"] + sorted(df_consolidado["Deposito"].unique().tolist()), key="ana_depo")
         
         df_target = df_consolidado[df_consolidado["Producto"] == sel_p]
         if sel_d != "Todos":
             df_target = df_target[df_target["Deposito"] == sel_d]
         
         suma_final = df_target["Stock Actual"].sum()
-        st.metric(f"Total de {sel_p} (Dep: {sel_d})", f"{suma_final:,.1f} {df_target['Unidad'].iloc[0] if not df_target.empty else ''}")
+        unid_txt = df_target['Unidad'].iloc[0] if not df_target.empty else ''
+        st.metric(f"Total de {sel_p}", f"{suma_final:,.1f} {unid_txt}")
 
         st.markdown("---")
-        st.write("**Detalle de Totales por Depósito (Suma de todos los lotes):**")
+        st.write("**Detalle de Totales por Depósito:**")
         st.dataframe(df_consolidado.sort_values(by="Stock Actual", ascending=False), use_container_width=True, hide_index=True)
 
         fig_vol = px.bar(df_consolidado.groupby("Deposito")["Stock Actual"].sum().reset_index(), 
                          x='Deposito', y='Stock Actual', color='Stock Actual', text_auto='.2s',
-                         color_continuous_scale='Viridis', title="Suma total de litros por sector")
+                         color_continuous_scale='Viridis', title="Ocupación por Depósito")
         st.plotly_chart(fig_vol, use_container_width=True)
 
 with tab4:
@@ -310,7 +326,7 @@ with tab4:
                     st.success("✅ Sistema actualizado correctamente.")
                     st.rerun()
             except Exception as e:
-                st.error(f"❌ Error: {e}")
+                st.error(f"❌ Error durante la importación: {e}")
 
 st.markdown("---")
 st.caption("Desarrollado por Ignacio Diaz")
