@@ -26,7 +26,7 @@ st.markdown("""
         border: 1px solid #e1e4e8;
     }
     .card-normal { border-left: 8px solid #28a745; } 
-    .card-low { border-left: 8px solid #ffc107; }     
+    .card-low { border-left: 8px solid #ffc107; }      
     .card-warning { border-left: 8px solid #dc3545; } 
     
     .stock-title { font-size: 0.95rem; color: #1a1c21; font-weight: 700; margin-bottom: 8px; line-height: 1.2; min-height: 2.4em; }
@@ -220,6 +220,23 @@ with tab2:
 
 with tab3:
     if not stock_df.empty:
+        # --- MEJORA: PRODUCTOS CRÍTICOS ---
+        st.subheader("⚠️ Alerta de Productos Críticos")
+        # Consolidamos por producto (sumando todos los depósitos y lotes)
+        df_criticos = stock_df.groupby(["Producto", "Unidad", "Código"])["Stock Actual"].sum().reset_index()
+        # Definimos crítico como menos de 20 unidades
+        df_criticos = df_criticos[df_criticos["Stock Actual"] < 20].sort_values(by="Stock Actual")
+        
+        if not df_criticos.empty:
+            st.error(f"Se encontraron {len(df_criticos)} productos con stock bajo.")
+            st.dataframe(
+                df_criticos.style.background_gradient(cmap='Reds', subset=['Stock Actual']),
+                use_container_width=True, hide_index=True
+            )
+        else:
+            st.success("✅ No hay productos en niveles críticos.")
+        
+        st.markdown("---")
         st.subheader("📊 Análisis Consolidado (Totales)")
         df_consolidado = stock_df.groupby(["Producto", "Deposito", "Unidad"])["Stock Actual"].sum().reset_index()
         df_consolidado = df_consolidado[df_consolidado["Stock Actual"] > 0] 
@@ -270,14 +287,10 @@ with tab4:
                         nom = str(row[col_prod]).strip()
                         cod = str(row[col_cod]).strip() if col_cod else "S/C"
                         
-                        # --- LÓGICA DE LIMPIEZA NUMÉRICA CORREGIDA ---
                         val_raw = str(row[col_stock]).strip()
-                        
-                        # Solo reemplazamos puntos si hay una coma (caso 1.250,50)
                         if "," in val_raw:
                             stk_val = val_raw.replace('.', '').replace(',', '.')
                         else:
-                            # Si no hay coma, el punto que venga ya es decimal (caso 90.0)
                             stk_val = val_raw
                         
                         try: stk = float(stk_val)
