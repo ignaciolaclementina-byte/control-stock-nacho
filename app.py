@@ -148,6 +148,19 @@ def decodificar_qr_reforzado(foto_input):
         except: return None
     return None
 
+def descargar_planilla_inventario(df):
+    # Función específica para auditoría de depósito
+    output = io.BytesIO()
+    df_planilla = df.copy()
+    # Añadimos columnas vacías para que el operario escriba
+    df_planilla["CONTEO FÍSICO"] = ""
+    df_planilla["DIFERENCIA"] = ""
+    df_planilla["OBSERVACIONES"] = ""
+    
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df_planilla.to_excel(writer, index=False, sheet_name='Toma_Stock')
+    return output.getvalue()
+
 def descargar_excel_limpio(df):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -162,7 +175,7 @@ st.title("🧪 Control de Depósito Inteligente")
 if 'qr_detectado' not in st.session_state:
     st.session_state.qr_detectado = "Todos"
 
-tab1, tab2, tab3, tab4 = st.tabs(["⚡ Panel de Control", "📋 Historial Completo", "📊 Análisis", "⚙️ Configuración"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["⚡ Panel de Control", "📋 Planilla Toma Stock", "📜 Historial", "📊 Análisis", "⚙️ Configuración"])
 
 with tab1:
     stock_df = obtener_stock_full()
@@ -227,12 +240,10 @@ with tab1:
         with c4: 
             st.write("Ver:")
             hide_neg = st.toggle("Solo con stock", value=True)
-            # --- NUEVA MEJORA: FILTRO PARA REPONER ---
             filter_reponer = st.toggle("🚨 Mercadería a reponer (<20)", value=False)
 
         df_f = stock_df.copy()
         
-        # Aplicación de filtros lógicos
         if search_query:
             df_f = df_f[df_f["Producto"].str.contains(search_query, case=False) | df_f["Código"].astype(str).str.contains(search_query, case=False)]
         if st.session_state.qr_detectado != "Todos" and not search_query:
@@ -282,10 +293,33 @@ with tab1:
             st.info("No se encontraron productos que coincidan con la búsqueda.")
 
 with tab2:
+    st.subheader("📋 Planilla para Inventario Físico")
+    st.write("Esta sección genera una lista lista para imprimir o usar en depósito para verificar el stock real.")
+    
+    if not stock_df.empty:
+        depo_list = sorted(stock_df["Deposito"].unique().tolist())
+        sel_depo = st.selectbox("Seleccionar Depósito para Auditar", ["Todos"] + depo_list)
+        
+        df_audit = stock_df.copy()
+        if sel_depo != "Todos":
+            df_audit = df_audit[df_audit["Deposito"] == sel_depo]
+            
+        st.dataframe(df_audit, use_container_width=True, hide_index=True)
+        
+        excel_audit = descargar_planilla_inventario(df_audit)
+        st.download_button(
+            label=f"📥 Descargar Planilla de Conteo ({sel_depo})",
+            data=excel_audit,
+            file_name=f'planilla_inventario_{sel_depo}_{datetime.now().strftime("%d_%m")}.xlsx',
+            mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        st.info("💡 El Excel descargado incluye columnas para Conteo Físico y Diferencias.")
+
+with tab3:
     if not stock_df.empty:
         st.dataframe(stock_df, use_container_width=True, hide_index=True)
 
-with tab3:
+with tab4:
     if not stock_df.empty:
         st.subheader("📊 Análisis de Stock")
         df_pareto = stock_df.groupby("Producto")["Stock Actual"].sum().sort_values(ascending=False).head(10).reset_index()
@@ -294,7 +328,7 @@ with tab3:
                             title="Top 10 Productos por Volumen")
         st.plotly_chart(fig_pareto, use_container_width=True)
 
-with tab4:
+with tab5:
     st.subheader("⚙️ Importación de Datos (Estructura MacroGest)")
     archivo = st.file_uploader("Subí el archivo 'export 3.xls' o similar (.csv/.xlsx)", type=["xlsx", "csv"])
     
@@ -308,7 +342,6 @@ with tab4:
                 
                 df_import.columns = [str(c).strip() for c in df_import.columns]
                 
-                # Formato multidepósito (export 3.xls)
                 if 'Artículo' in df_import.columns and 'Descripción' in df_import.columns:
                     borrar_datos_totales()
                     conn = conectar_db()
@@ -337,12 +370,10 @@ with tab4:
                             except: continue
                     conn.commit()
                     conn.close()
-                    st.success("✅ Importación exitosa desde formato multidepósito.")
+                    st.success("✅ Importación exitosa.")
                     st.rerun()
-                else:
-                    st.error("❌ El formato del archivo no es reconocido. Debe contener 'Artículo' y 'Descripción'.")
             except Exception as e:
-                st.error(f"❌ Error durante la importación: {e}")
+                st.error(f"❌ Error: {e}")
 
 st.markdown("---")
 st.caption("Creado por Ignacio Diaz")
