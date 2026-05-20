@@ -149,14 +149,11 @@ def decodificar_qr_reforzado(foto_input):
     return None
 
 def descargar_planilla_inventario(df):
-    # Función específica para auditoría de depósito
     output = io.BytesIO()
     df_planilla = df.copy()
-    # Añadimos columnas vacías para que el operario escriba
     df_planilla["CONTEO FÍSICO"] = ""
     df_planilla["DIFERENCIA"] = ""
     df_planilla["OBSERVACIONES"] = ""
-    
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df_planilla.to_excel(writer, index=False, sheet_name='Toma_Stock')
     return output.getvalue()
@@ -177,31 +174,25 @@ if 'qr_detectado' not in st.session_state:
 
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["⚡ Panel de Control", "📋 Planilla Toma Stock", "📜 Historial", "📊 Análisis", "⚙️ Configuración"])
 
+stock_df = obtener_stock_full()
+
 with tab1:
-    stock_df = obtener_stock_full()
-    
     if stock_df.empty:
         st.warning("⚠️ No hay datos cargados. Por favor, subí el archivo en la pestaña 'Configuración'.")
     else:
         # --- KPIs DE CABECERA ---
-        df_kpi = stock_df.copy()
         c_kpi1, c_kpi2, c_kpi3, c_kpi4 = st.columns(4)
-        with c_kpi1:
-            st.metric("Total Productos", len(df_kpi["Producto"].unique()))
-        with c_kpi2:
-            st.metric("Volumen Total", f"{df_kpi['Stock Actual'].sum():,.0f}")
+        with c_kpi1: st.metric("Total Productos", len(stock_df["Producto"].unique()))
+        with c_kpi2: st.metric("Volumen Total", f"{stock_df['Stock Actual'].sum():,.0f}")
         with c_kpi3:
-            criticos_n = len(df_kpi[df_kpi["Stock Actual"] < 20])
+            criticos_n = len(stock_df[stock_df["Stock Actual"] < 20])
             st.metric("Alertas Críticas", criticos_n, delta=-criticos_n, delta_color="inverse")
-        with c_kpi4:
-            st.metric("Depósitos", df_kpi["Deposito"].nunique())
+        with c_kpi4: st.metric("Depósitos", stock_df["Deposito"].nunique())
 
         st.markdown("### 📷 Identificar Producto")
         c_cam1, c_cam2 = st.columns([3, 1])
-        
         with c_cam1:
             foto = st.file_uploader("Sacá foto al QR", type=["jpg", "png", "jpeg"], key="uploader_qr")
-        
         with c_cam2:
             st.write("") 
             btn_procesar = st.button("🔍 ESCANEAR QR")
@@ -226,32 +217,37 @@ with tab1:
         st.markdown("---")
         st.subheader("🔍 Filtros Dinámicos")
         
-        search_query = st.text_input("⌨️ Buscar por nombre o código", placeholder="Empiece a escribir para filtrar...", key="search_input")
+        search_query = st.text_input("⌨️ Buscar por nombre o código", placeholder="Empiece a escribir...", key="search_input")
         
         c1, c2, c3, c4 = st.columns(4)
         with c1:
             lista_productos = ["Todos"] + sorted(stock_df["Producto"].unique().tolist())
             idx_inicio = lista_productos.index(st.session_state.qr_detectado) if st.session_state.qr_detectado in lista_productos else 0
-            f_prod = st.selectbox("O selecciona de la lista", lista_productos, index=idx_inicio, key="prod_select")
+            f_prod = st.selectbox("Producto", lista_productos, index=idx_inicio, key="prod_select")
             st.session_state.qr_detectado = f_prod
         
         with c2: f_lote = st.text_input("Lote", placeholder="Ej: AF05...")
-        with c3: f_depo = st.text_input("Depósito", placeholder="Ej: SAN JORGE...")
+        
+        with c3:
+            # MEJORA SOLICITADA: Buscador de depósito automático (Menú desplegable)
+            listado_depo = ["Todos"] + sorted(stock_df["Deposito"].unique().tolist())
+            f_depo = st.selectbox("📍 Filtrar por Depósito", listado_depo)
+            
         with c4: 
             st.write("Ver:")
             hide_neg = st.toggle("Solo con stock", value=True)
-            filter_reponer = st.toggle("🚨 Mercadería a reponer (<20)", value=False)
+            filter_reponer = st.toggle("🚨 Reponer (<20)", value=False)
 
+        # Aplicar filtros
         df_f = stock_df.copy()
-        
         if search_query:
             df_f = df_f[df_f["Producto"].str.contains(search_query, case=False) | df_f["Código"].astype(str).str.contains(search_query, case=False)]
         if st.session_state.qr_detectado != "Todos" and not search_query:
             df_f = df_f[df_f["Producto"] == st.session_state.qr_detectado]
         if f_lote: 
             df_f = df_f[df_f["Lote"].astype(str).str.contains(f_lote, case=False)]
-        if f_depo: 
-            df_f = df_f[df_f["Deposito"].astype(str).str.contains(f_depo, case=False)]
+        if f_depo != "Todos": 
+            df_f = df_f[df_f["Deposito"] == f_depo]
         if hide_neg: 
             df_f = df_f[df_f["Stock Actual"] > 0]
         if filter_reponer:
@@ -266,12 +262,9 @@ with tab1:
             for i, item in enumerate(items[:40]): 
                 with cols_grid[i % 4]:
                     stk_val = item['Stock Actual']
-                    if stk_val <= 0:
-                        clase, txt_status, bg_status = "card-warning", "SIN STOCK", "bg-warning"
-                    elif stk_val < 20:
-                        clase, txt_status, bg_status = "card-low", "REPONER", "bg-low"
-                    else:
-                        clase, txt_status, bg_status = "card-normal", "ÓPTIMO", "bg-normal"
+                    clase = "card-warning" if stk_val <= 0 else ("card-low" if stk_val < 20 else "card-normal")
+                    txt_status = "SIN STOCK" if stk_val <= 0 else ("REPONER" if stk_val < 20 else "ÓPTIMO")
+                    bg_status = "bg-warning" if stk_val <= 0 else ("bg-low" if stk_val < 20 else "bg-normal")
 
                     msg_wa = urllib.parse.quote(f"Hola! Reporto stock de {item['Producto']}. Depósito: {item['Deposito']}. Cantidad actual: {stk_val} {item['Unidad']}.")
                     link_wa = f"https://wa.me/5493406123456?text={msg_wa}"
@@ -290,30 +283,24 @@ with tab1:
                         </div>
                     """, unsafe_allow_html=True)
         else:
-            st.info("No se encontraron productos que coincidan con la búsqueda.")
+            st.info("No se encontraron coincidencias.")
 
 with tab2:
     st.subheader("📋 Planilla para Inventario Físico")
-    st.write("Esta sección genera una lista lista para imprimir o usar en depósito para verificar el stock real.")
-    
     if not stock_df.empty:
-        depo_list = sorted(stock_df["Deposito"].unique().tolist())
-        sel_depo = st.selectbox("Seleccionar Depósito para Auditar", ["Todos"] + depo_list)
+        # Mejorado también aquí para facilitar la auditoría por depósito
+        sel_depo_audit = st.selectbox("Elegir Depósito para Auditar", sorted(stock_df["Deposito"].unique().tolist()))
+        df_audit = stock_df[stock_df["Deposito"] == sel_depo_audit]
         
-        df_audit = stock_df.copy()
-        if sel_depo != "Todos":
-            df_audit = df_audit[df_audit["Deposito"] == sel_depo]
-            
         st.dataframe(df_audit, use_container_width=True, hide_index=True)
         
         excel_audit = descargar_planilla_inventario(df_audit)
         st.download_button(
-            label=f"📥 Descargar Planilla de Conteo ({sel_depo})",
+            label=f"📥 Descargar Planilla de {sel_depo_audit}",
             data=excel_audit,
-            file_name=f'planilla_inventario_{sel_depo}_{datetime.now().strftime("%d_%m")}.xlsx',
+            file_name=f'inventario_{sel_depo_audit}.xlsx',
             mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
-        st.info("💡 El Excel descargado incluye columnas para Conteo Físico y Diferencias.")
 
 with tab3:
     if not stock_df.empty:
@@ -322,58 +309,42 @@ with tab3:
 with tab4:
     if not stock_df.empty:
         st.subheader("📊 Análisis de Stock")
-        df_pareto = stock_df.groupby("Producto")["Stock Actual"].sum().sort_values(ascending=False).head(10).reset_index()
-        fig_pareto = px.bar(df_pareto, x='Stock Actual', y='Producto', orientation='h', 
-                            color='Stock Actual', color_continuous_scale='Greens',
-                            title="Top 10 Productos por Volumen")
-        st.plotly_chart(fig_pareto, use_container_width=True)
+        df_resumen = stock_df.groupby("Deposito")["Stock Actual"].sum().reset_index()
+        fig = px.pie(df_resumen, values='Stock Actual', names='Deposito', title="Distribución de Volumen por Depósito")
+        st.plotly_chart(fig, use_container_width=True)
 
 with tab5:
-    st.subheader("⚙️ Importación de Datos (Estructura MacroGest)")
-    archivo = st.file_uploader("Subí el archivo 'export 3.xls' o similar (.csv/.xlsx)", type=["xlsx", "csv"])
-    
+    st.subheader("⚙️ Importación MacroGest")
+    archivo = st.file_uploader("Subir Excel de Stock", type=["xlsx", "csv"])
     if archivo and st.button("🚀 PROCESAR E IMPORTAR"):
-        with st.spinner('Sincronizando datos...'):
+        with st.spinner('Sincronizando...'):
             try:
-                if archivo.name.endswith('.csv'):
-                    df_import = pd.read_csv(archivo, sep=None, engine='python', encoding='latin1')
-                else:
-                    df_import = pd.read_excel(archivo)
-                
+                df_import = pd.read_excel(archivo) if archivo.name.endswith('.xlsx') else pd.read_csv(archivo, encoding='latin1')
                 df_import.columns = [str(c).strip() for c in df_import.columns]
                 
                 if 'Artículo' in df_import.columns and 'Descripción' in df_import.columns:
                     borrar_datos_totales()
-                    conn = conectar_db()
-                    cursor = conn.cursor()
-                    
-                    cols_depositos = [c for c in df_import.columns if c not in ['Artículo', 'Descripción'] and "Unnamed" not in c]
+                    conn = conectar_db(); cursor = conn.cursor()
+                    cols_depo = [c for c in df_import.columns if c not in ['Artículo', 'Descripción'] and "Unnamed" not in c]
                     
                     for _, row in df_import.iterrows():
                         nom = str(row['Descripción']).strip()
-                        cod = str(row['Artículo']).strip()
                         if pd.isna(nom) or nom == "" or nom == "nan": continue
-                        
-                        cursor.execute("INSERT OR IGNORE INTO productos (nombre, unidad, codigo) VALUES (?,?,?)", (nom, "UNID", cod))
+                        cursor.execute("INSERT OR IGNORE INTO productos (nombre, unidad, codigo) VALUES (?,?,?)", (nom, "UNID", str(row['Artículo'])))
                         cursor.execute("SELECT id_producto FROM productos WHERE nombre = ?", (nom,))
                         id_p = cursor.fetchone()[0]
-                        
-                        for depo in cols_depositos:
+                        for d in cols_depo:
                             try:
-                                val_raw = str(row[depo]).replace('.', '').replace(',', '.')
-                                val = float(val_raw)
-                                if val != 0 and not pd.isna(val):
-                                    cursor.execute("""
-                                        INSERT INTO movimientos (fecha_hora, tipo_movimiento, id_producto, cantidad, lote, deposito) 
-                                        VALUES (?,?,?,?,?,?)""",
-                                        (datetime.now().strftime("%d/%m/%Y %H:%M"), "Entrada", id_p, val, "S/L", depo))
+                                val = float(str(row[d]).replace('.', '').replace(',', '.'))
+                                if val != 0:
+                                    cursor.execute("INSERT INTO movimientos (fecha_hora, tipo_movimiento, id_producto, cantidad, lote, deposito) VALUES (?,?,?,?,?,?)",
+                                                   (datetime.now().strftime("%d/%m/%Y %H:%M"), "Entrada", id_p, val, "S/L", d))
                             except: continue
-                    conn.commit()
-                    conn.close()
-                    st.success("✅ Importación exitosa.")
+                    conn.commit(); conn.close()
+                    st.success("✅ Datos sincronizados correctamente.")
                     st.rerun()
             except Exception as e:
-                st.error(f"❌ Error: {e}")
+                st.error(f"Error: {e}")
 
 st.markdown("---")
 st.caption("Creado por Ignacio Diaz")
