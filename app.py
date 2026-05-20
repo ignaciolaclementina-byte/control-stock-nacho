@@ -114,7 +114,8 @@ def borrar_datos_totales():
     conn.commit()
     conn.close()
 
-def obtener_datos_base():
+# MEJORA: Función para traer stock incluyendo LOTE para historial/planilla
+def obtener_stock_con_lote():
     conn = conectar_db()
     query = """
         SELECT p.nombre as Producto, p.codigo as Código, p.unidad as Unidad, m.lote as Lote, m.deposito as Deposito, 
@@ -127,23 +128,19 @@ def obtener_datos_base():
     except:
         df = pd.DataFrame()
     conn.close()
+    
     if df.empty: return pd.DataFrame()
+    
     df["neta"] = df.apply(lambda r: r["cantidad"] if r["tipo_movimiento"] == "Entrada" else -r["cantidad"], axis=1)
-    return df
-
-def obtener_stock_agrupado_producto():
-    df = obtener_datos_base()
-    if df.empty: return df
-    # Agrupación para Panel y Excel comparativo: Ignora lotes
-    res = df.groupby(["Producto", "Código", "Unidad", "Deposito"])["neta"].sum().reset_index()
-    return res.rename(columns={"neta": "Stock Actual"})
-
-def obtener_stock_detallado_lote():
-    df = obtener_datos_base()
-    if df.empty: return df
-    # Agrupación para Historial y Planilla: Mantiene lotes
     res = df.groupby(["Producto", "Código", "Unidad", "Lote", "Deposito"])["neta"].sum().reset_index()
     return res.rename(columns={"neta": "Stock Actual"})
+
+# Mantenemos la versión sin lote para el Excel Comparativo y el Panel si es necesario
+def obtener_stock_full():
+    df = obtener_stock_con_lote()
+    if df.empty: return df
+    res = df.groupby(["Producto", "Código", "Unidad", "Deposito"])["Stock Actual"].sum().reset_index()
+    return res
 
 def decodificar_qr_reforzado(foto_input):
     if foto_input is not None:
@@ -159,9 +156,8 @@ def decodificar_qr_reforzado(foto_input):
         except: return None
     return None
 
-def descargar_excel_comparativo(df):
+def descargar_excel_agrupado_sin_lote(df):
     output = io.BytesIO()
-    # Pivotamos usando Producto y Código como filas, Depósitos como columnas (Ignorando lotes)
     df_pivot = df.pivot_table(
         index=['Producto', 'Código', 'Unidad'], 
         columns='Deposito', 
@@ -195,12 +191,12 @@ if 'qr_detectado' not in st.session_state:
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["⚡ Panel de Control", "📋 Planilla Toma Stock", "📜 Historial", "📊 Análisis", "⚙️ Configuración"])
 
 with tab1:
-    stock_df = obtener_stock_agrupado_producto()
+    stock_df = obtener_stock_full()
     
     if stock_df.empty:
         st.warning("⚠️ No hay datos cargados. Por favor, subí el archivo en la pestaña 'Configuración'.")
     else:
-        # KPIs
+        # KPIs y Filtros (Igual a tu base)
         df_kpi = stock_df.copy()
         c_kpi1, c_kpi2, c_kpi3, c_kpi4 = st.columns(4)
         with c_kpi1: st.metric("Total Productos", len(df_kpi["Producto"].unique()))
@@ -212,27 +208,34 @@ with tab1:
 
         st.markdown("---")
         st.subheader("🔍 Filtros Dinámicos")
-        search_query = st.text_input("⌨️ Buscar por nombre o código", placeholder="Filtrar...", key="search_input")
+        search_query = st.text_input("⌨️ Buscar por nombre o código", placeholder="Escriba aquí...", key="search_input")
         
-        c1, c2 = st.columns(2)
+        c1, c2, c3 = st.columns(3)
         with c1:
+            lista_productos = ["Todos"] + sorted(stock_df["Producto"].unique().tolist())
+            idx_inicio = lista_productos.index(st.session_state.qr_detectado) if st.session_state.qr_detectado in lista_productos else 0
+            f_prod = st.selectbox("Producto", lista_productos, index=idx_inicio)
+            st.session_state.qr_detectado = f_prod
+        with c2: 
             lista_depos = ["Todos"] + sorted(stock_df["Deposito"].unique().tolist())
             f_depo = st.selectbox("Filtrar por Depósito", lista_depos)
-        with c2: 
+        with c3: 
             st.write("Ver:")
             hide_neg = st.toggle("Solo con stock", value=True)
+            filter_reponer = st.toggle("🚨 Reponer (<20)", value=False)
 
         df_f = stock_df.copy()
         if search_query:
             df_f = df_f[df_f["Producto"].str.contains(search_query, case=False) | df_f["Código"].astype(str).str.contains(search_query, case=False)]
-        if f_depo != "Todos": 
-            df_f = df_f[df_f["Deposito"] == f_depo]
-        if hide_neg: 
-            df_f = df_f[df_f["Stock Actual"] > 0]
+        if st.session_state.qr_detectado != "Todos" and not search_query:
+            df_f = df_f[df_f["Producto"] == st.session_state.qr_detectado]
+        if f_depo != "Todos": df_f = df_f[df_f["Deposito"] == f_depo]
+        if hide_neg: df_f = df_f[df_f["Stock Actual"] > 0]
+        if filter_reponer: df_f = df_f[df_f["Stock Actual"] < 20]
 
         if not df_f.empty:
-            excel_bin = descargar_excel_comparativo(df_f)
-            st.download_button(label="📥 Descargar Comparativa de Depósitos", data=excel_bin, file_name='stock_comparativo.xlsx')
+            excel_bin = descargar_excel_agrupado_sin_lote(df_f)
+            st.download_button(label="📥 Descargar Comparativa Total", data=excel_bin, file_name='stock_agrupado.xlsx')
 
             items = df_f.to_dict('records')
             cols_grid = st.columns(4)
@@ -240,59 +243,61 @@ with tab1:
                 with cols_grid[i % 4]:
                     stk_val = item['Stock Actual']
                     clase = "card-warning" if stk_val <= 0 else ("card-low" if stk_val < 20 else "card-normal")
-                    msg_wa = urllib.parse.quote(f"Stock {item['Producto']} - Dep: {item['Deposito']} - Cant: {stk_val}")
+                    msg_wa = urllib.parse.quote(f"Reporte: {item['Producto']}. Dep: {item['Deposito']}. Stock: {stk_val}")
                     link_wa = f"https://wa.me/5493406123456?text={msg_wa}"
                     st.markdown(f"""
                         <div class="stock-card {clase}">
                             <div class="stock-title">{item['Producto']}</div>
                             <span class="stock-value">{stk_val:,.1f} <small class="stock-unit">{item['Unidad']}</small></span>
                             <div class="stock-info"><b>🆔 Cód:</b> {item['Código']}<br><b>📍 Dep:</b> <span class="label-blue">{item['Deposito']}</span></div>
-                            <a href="{link_wa}" target="_blank" class="wa-btn">💬 Avisar</a>
+                            <a href="{link_wa}" target="_blank" class="wa-btn">💬 Reportar</a>
                         </div>
                     """, unsafe_allow_html=True)
 
 with tab2:
-    st.subheader("📋 Planilla para Inventario Físico (Detalle por Lote)")
-    df_lotes = obtener_stock_detallado_lote()
-    if not df_lotes.empty:
-        st.dataframe(df_lotes, use_container_width=True, hide_index=True)
-        excel_audit = descargar_planilla_inventario(df_lotes)
-        st.download_button(label="📥 Descargar Planilla de Conteo", data=excel_audit, file_name='planilla_conteo.xlsx')
+    st.subheader("📋 Planilla para Inventario Físico (CON LOTES)")
+    stock_lotes = obtener_stock_con_lote()
+    if not stock_lotes.empty:
+        depo_audit = st.selectbox("Depósito a Auditar", ["Todos"] + sorted(stock_lotes["Deposito"].unique().tolist()), key="audit_depo")
+        df_audit = stock_lotes.copy()
+        if depo_audit != "Todos": df_audit = df_audit[df_audit["Deposito"] == depo_audit]
+        st.dataframe(df_audit, use_container_width=True, hide_index=True)
+        st.download_button(label="📥 Descargar Planilla", data=descargar_planilla_inventario(df_audit), file_name='toma_stock_lotes.xlsx')
 
 with tab3:
-    st.subheader("📜 Historial de Stock (Con Lotes)")
-    df_hist = obtener_stock_detallado_lote()
-    if not df_hist.empty:
-        st.dataframe(df_hist.sort_values(by=["Producto", "Lote"]), use_container_width=True, hide_index=True)
+    st.subheader("📜 Historial Detallado por Lote")
+    if not stock_lotes.empty:
+        st.dataframe(stock_lotes.sort_values(by="Producto"), use_container_width=True, hide_index=True)
 
 with tab4:
     if not stock_df.empty:
         df_pareto = stock_df.groupby("Producto")["Stock Actual"].sum().sort_values(ascending=False).head(10).reset_index()
-        fig_pareto = px.bar(df_pareto, x='Stock Actual', y='Producto', orientation='h', color_continuous_scale='Greens')
+        fig_pareto = px.bar(df_pareto, x='Stock Actual', y='Producto', orientation='h', color='Stock Actual', color_continuous_scale='Greens')
         st.plotly_chart(fig_pareto, use_container_width=True)
 
 with tab5:
     st.subheader("⚙️ Configuración")
-    archivo = st.file_uploader("Subir archivo Excel", type=["xlsx", "csv"])
-    if archivo and st.button("🚀 IMPORTAR DATOS"):
+    archivo = st.file_uploader("Subí el archivo 'export 3.xls'", type=["xlsx", "csv"])
+    if archivo and st.button("🚀 PROCESAR E IMPORTAR"):
         try:
             df_import = pd.read_excel(archivo) if archivo.name.endswith('.xlsx') else pd.read_csv(archivo, encoding='latin1')
             df_import.columns = [str(c).strip() for c in df_import.columns]
-            borrar_datos_totales()
-            conn = conectar_db(); cursor = conn.cursor()
-            cols_dep = [c for c in df_import.columns if c not in ['Artículo', 'Descripción'] and "Unnamed" not in c]
-            for _, row in df_import.iterrows():
-                nom = str(row['Descripción']).strip()
-                if pd.isna(nom) or nom == "" or nom == "nan": continue
-                cursor.execute("INSERT OR IGNORE INTO productos (nombre, unidad, codigo) VALUES (?,?,?)", (nom, "UNID", str(row['Artículo'])))
-                cursor.execute("SELECT id_producto FROM productos WHERE nombre = ?", (nom,))
-                id_p = cursor.fetchone()[0]
-                for d in cols_dep:
-                    try:
-                        v = float(str(row[d]).replace('.', '').replace(',', '.'))
-                        if v != 0: cursor.execute("INSERT INTO movimientos (fecha_hora, tipo_movimiento, id_producto, cantidad, lote, deposito) VALUES (?,?,?,?,?,?)", (datetime.now().strftime("%d/%m/%Y %H:%M"), "Entrada", id_p, v, "S/L", d))
-                    except: continue
-            conn.commit(); conn.close(); st.success("✅ Importación exitosa."); st.rerun()
+            if 'Artículo' in df_import.columns:
+                borrar_datos_totales()
+                conn = conectar_db(); cursor = conn.cursor()
+                cols_dep = [c for c in df_import.columns if c not in ['Artículo', 'Descripción'] and "Unnamed" not in c]
+                for _, row in df_import.iterrows():
+                    nom = str(row['Descripción']).strip()
+                    if pd.isna(nom) or nom == "" or nom == "nan": continue
+                    cursor.execute("INSERT OR IGNORE INTO productos (nombre, unidad, codigo) VALUES (?,?,?)", (nom, "UNID", str(row['Artículo'])))
+                    cursor.execute("SELECT id_producto FROM productos WHERE nombre = ?", (nom,))
+                    id_p = cursor.fetchone()[0]
+                    for d in cols_dep:
+                        try:
+                            v = float(str(row[d]).replace('.', '').replace(',', '.'))
+                            if v != 0: cursor.execute("INSERT INTO movimientos (fecha_hora, tipo_movimiento, id_producto, cantidad, lote, deposito) VALUES (?,?,?,?,?,?)", (datetime.now().strftime("%d/%m/%Y %H:%M"), "Entrada", id_p, v, "S/L", d))
+                        except: continue
+                conn.commit(); conn.close(); st.success("✅ Importación exitosa."); st.rerun()
         except Exception as e: st.error(f"❌ Error: {e}")
 
 st.markdown("---")
