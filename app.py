@@ -117,7 +117,7 @@ def borrar_datos_totales():
 def obtener_stock_full():
     conn = conectar_db()
     query = """
-        SELECT p.nombre as Producto, p.codigo as Código, p.unidad as Unidad, m.lote as Lote, m.deposito as Deposito, 
+        SELECT p.nombre as Producto, p.codigo as Código, p.unidad as Unidad, m.deposito as Deposito, 
                m.tipo_movimiento, m.cantidad 
         FROM movimientos m 
         JOIN productos p ON m.id_producto = p.id_producto
@@ -131,7 +131,8 @@ def obtener_stock_full():
     if df.empty: return pd.DataFrame()
     
     df["neta"] = df.apply(lambda r: r["cantidad"] if r["tipo_movimiento"] == "Entrada" else -r["cantidad"], axis=1)
-    res = df.groupby(["Producto", "Código", "Unidad", "Lote", "Deposito"])["neta"].sum().reset_index()
+    # MEJORA: Agrupación exclusivamente por Producto y Código (Lote ignorado)
+    res = df.groupby(["Producto", "Código", "Unidad", "Deposito"])["neta"].sum().reset_index()
     return res.rename(columns={"neta": "Stock Actual"})
 
 def decodificar_qr_reforzado(foto_input):
@@ -148,6 +149,24 @@ def decodificar_qr_reforzado(foto_input):
         except: return None
     return None
 
+def descargar_excel_agrupado_sin_lote(df):
+    output = io.BytesIO()
+    # Pivotamos usando Producto y Código como filas, Depósitos como columnas
+    df_pivot = df.pivot_table(
+        index=['Producto', 'Código', 'Unidad'], 
+        columns='Deposito', 
+        values='Stock Actual',
+        aggfunc='sum'
+    ).fillna(0)
+    
+    # Total por producto sumando todos los depósitos
+    df_pivot['TOTAL GENERAL'] = df_pivot.sum(axis=1)
+    df_pivot = df_pivot.reset_index()
+    
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df_pivot.to_excel(writer, index=False, sheet_name='Comparativa_Stock_Total')
+    return output.getvalue()
+
 def descargar_planilla_inventario(df):
     output = io.BytesIO()
     df_planilla = df.copy()
@@ -156,29 +175,6 @@ def descargar_planilla_inventario(df):
     df_planilla["OBSERVACIONES"] = ""
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df_planilla.to_excel(writer, index=False, sheet_name='Toma_Stock')
-    return output.getvalue()
-
-# --- MEJORA SOLICITADA: AGRUPAR POR DEPÓSITO EN COLUMNAS ---
-def descargar_excel_agrupado_depositos(df):
-    output = io.BytesIO()
-    
-    # Creamos una tabla pivote: Filas fijas (Producto, Código, Lote) 
-    # y los depósitos se convierten en columnas
-    df_pivot = df.pivot_table(
-        index=['Producto', 'Código', 'Unidad', 'Lote'], 
-        columns='Deposito', 
-        values='Stock Actual',
-        aggfunc='sum'
-    ).fillna(0) # Rellenar con 0 donde no hay stock en ese depósito
-    
-    # Agregamos una columna de Total General para facilitar el control
-    df_pivot['TOTAL GENERAL'] = df_pivot.sum(axis=1)
-    
-    # Resetear el index para que Producto, Código, etc. vuelvan a ser columnas normales
-    df_pivot = df_pivot.reset_index()
-    
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df_pivot.to_excel(writer, index=False, sheet_name='Stock_Comparativo')
     return output.getvalue()
 
 inicializar_db()
@@ -234,7 +230,7 @@ with tab1:
         
         search_query = st.text_input("⌨️ Buscar por nombre o código", placeholder="Empiece a escribir para filtrar...", key="search_input")
         
-        c1, c2, c3, c4 = st.columns(4)
+        c1, c2, c3 = st.columns(3)
         with c1:
             lista_productos = ["Todos"] + sorted(stock_df["Producto"].unique().tolist())
             idx_inicio = lista_productos.index(st.session_state.qr_detectado) if st.session_state.qr_detectado in lista_productos else 0
@@ -242,14 +238,10 @@ with tab1:
             st.session_state.qr_detectado = f_prod
         
         with c2: 
-            lista_lotes = ["Todos"] + sorted(stock_df["Lote"].unique().tolist())
-            f_lote = st.selectbox("Filtrar por Lote", lista_lotes)
-            
-        with c3: 
             lista_depos = ["Todos"] + sorted(stock_df["Deposito"].unique().tolist())
             f_depo = st.selectbox("Filtrar por Depósito", lista_depos)
             
-        with c4: 
+        with c3: 
             st.write("Ver:")
             hide_neg = st.toggle("Solo con stock", value=True)
             filter_reponer = st.toggle("🚨 Reponer (<20)", value=False)
@@ -261,8 +253,6 @@ with tab1:
             df_f = df_f[df_f["Producto"].str.contains(search_query, case=False) | df_f["Código"].astype(str).str.contains(search_query, case=False)]
         if st.session_state.qr_detectado != "Todos" and not search_query:
             df_f = df_f[df_f["Producto"] == st.session_state.qr_detectado]
-        if f_lote != "Todos": 
-            df_f = df_f[df_f["Lote"] == f_lote]
         if f_depo != "Todos": 
             df_f = df_f[df_f["Deposito"] == f_depo]
         if hide_neg: 
@@ -273,12 +263,12 @@ with tab1:
         if not df_f.empty:
             st.write(f"Mostrando **{len(df_f)}** registros encontrados.")
             
-            # BOTÓN DE EXCEL CON LA MEJORA DE AGRUPACIÓN POR DEPÓSITO
-            excel_bin = descargar_excel_agrupado_depositos(df_f)
+            # BOTÓN DE EXCEL AGRUPADO SIN LOTES
+            excel_bin = descargar_excel_agrupado_sin_lote(df_f)
             st.download_button(
-                label="📥 Descargar Excel Comparativo (Depósitos en columnas)", 
+                label="📥 Descargar Comparativa Total (Depósitos al lado)", 
                 data=excel_bin, 
-                file_name=f'stock_comparativo_{datetime.now().strftime("%d_%m")}.xlsx', 
+                file_name=f'stock_agrupado_{datetime.now().strftime("%d_%m")}.xlsx', 
                 mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
             )
 
@@ -294,7 +284,7 @@ with tab1:
                     else:
                         clase, txt_status, bg_status = "card-normal", "ÓPTIMO", "bg-normal"
 
-                    msg_wa = urllib.parse.quote(f"Hola! Reporto stock de {item['Producto']}. Depósito: {item['Deposito']}. Lote: {item['Lote']}. Cantidad: {stk_val} {item['Unidad']}.")
+                    msg_wa = urllib.parse.quote(f"Reporte de Stock: {item['Producto']}. Depósito: {item['Deposito']}. Cantidad: {stk_val} {item['Unidad']}.")
                     link_wa = f"https://wa.me/5493406123456?text={msg_wa}"
 
                     st.markdown(f"""
@@ -304,14 +294,13 @@ with tab1:
                             <span class="stock-value">{stk_val:,.1f} <small class="stock-unit">{item['Unidad']}</small></span>
                             <div class="stock-info">
                                 <b>🆔 Cód:</b> {item['Código']}<br>
-                                <b>📍 Dep:</b> <span class="label-blue">{item['Deposito']}</span><br>
-                                <b>🏷️ Lote:</b> {item['Lote']}
+                                <b>📍 Dep:</b> <span class="label-blue">{item['Deposito']}</span>
                             </div>
-                            <a href="{link_wa}" target="_blank" class="wa-btn">💬 Reportar Stock</a>
+                            <a href="{link_wa}" target="_blank" class="wa-btn">💬 Reportar</a>
                         </div>
                     """, unsafe_allow_html=True)
         else:
-            st.info("No se encontraron productos con los filtros seleccionados.")
+            st.info("No se encontraron productos.")
 
 with tab2:
     st.subheader("📋 Planilla para Inventario Físico")
@@ -336,7 +325,7 @@ with tab4:
         st.plotly_chart(fig_pareto, use_container_width=True)
 
 with tab5:
-    st.subheader("⚙️ Importación MacroGest")
+    st.subheader("⚙️ Configuración")
     archivo = st.file_uploader("Subí el archivo 'export 3.xls'", type=["xlsx", "csv"])
     if archivo and st.button("🚀 PROCESAR E IMPORTAR"):
         with st.spinner('Sincronizando...'):
@@ -357,6 +346,7 @@ with tab5:
                             try:
                                 val = float(str(row[depo]).replace('.', '').replace(',', '.'))
                                 if val != 0:
+                                    # Se guarda con lote "S/L" por defecto pero el sistema ya no lo agrupa por lote
                                     cursor.execute("INSERT INTO movimientos (fecha_hora, tipo_movimiento, id_producto, cantidad, lote, deposito) VALUES (?,?,?,?,?,?)",
                                                    (datetime.now().strftime("%d/%m/%Y %H:%M"), "Entrada", id_p, val, "S/L", depo))
                             except: continue
