@@ -158,10 +158,27 @@ def descargar_planilla_inventario(df):
         df_planilla.to_excel(writer, index=False, sheet_name='Toma_Stock')
     return output.getvalue()
 
-def descargar_excel_limpio(df):
+# --- MEJORA SOLICITADA: AGRUPAR POR DEPÓSITO EN COLUMNAS ---
+def descargar_excel_agrupado_depositos(df):
     output = io.BytesIO()
+    
+    # Creamos una tabla pivote: Filas fijas (Producto, Código, Lote) 
+    # y los depósitos se convierten en columnas
+    df_pivot = df.pivot_table(
+        index=['Producto', 'Código', 'Unidad', 'Lote'], 
+        columns='Deposito', 
+        values='Stock Actual',
+        aggfunc='sum'
+    ).fillna(0) # Rellenar con 0 donde no hay stock en ese depósito
+    
+    # Agregamos una columna de Total General para facilitar el control
+    df_pivot['TOTAL GENERAL'] = df_pivot.sum(axis=1)
+    
+    # Resetear el index para que Producto, Código, etc. vuelvan a ser columnas normales
+    df_pivot = df_pivot.reset_index()
+    
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Stock_Actual')
+        df_pivot.to_excel(writer, index=False, sheet_name='Stock_Comparativo')
     return output.getvalue()
 
 inicializar_db()
@@ -225,12 +242,10 @@ with tab1:
             st.session_state.qr_detectado = f_prod
         
         with c2: 
-            # MEJORA: Lista desplegable de lotes para mayor precisión
             lista_lotes = ["Todos"] + sorted(stock_df["Lote"].unique().tolist())
             f_lote = st.selectbox("Filtrar por Lote", lista_lotes)
             
         with c3: 
-            # MEJORA: Lista desplegable de depósitos
             lista_depos = ["Todos"] + sorted(stock_df["Deposito"].unique().tolist())
             f_depo = st.selectbox("Filtrar por Depósito", lista_depos)
             
@@ -257,10 +272,16 @@ with tab1:
 
         if not df_f.empty:
             st.write(f"Mostrando **{len(df_f)}** registros encontrados.")
-            excel_bin = descargar_excel_limpio(df_f)
-            st.download_button(label="📥 Descargar Excel Filtrado", data=excel_bin, file_name='stock_actual.xlsx', mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            
+            # BOTÓN DE EXCEL CON LA MEJORA DE AGRUPACIÓN POR DEPÓSITO
+            excel_bin = descargar_excel_agrupado_depositos(df_f)
+            st.download_button(
+                label="📥 Descargar Excel Comparativo (Depósitos en columnas)", 
+                data=excel_bin, 
+                file_name=f'stock_comparativo_{datetime.now().strftime("%d_%m")}.xlsx', 
+                mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            )
 
-            # Renderizado de tarjetas - REMOVIDO EL LÍMITE [:40]
             items = df_f.to_dict('records')
             cols_grid = st.columns(4)
             for i, item in enumerate(items): 
