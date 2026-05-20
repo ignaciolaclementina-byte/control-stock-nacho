@@ -12,7 +12,7 @@ import urllib.parse
 # --- 1. CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="Gestión de Agroquímicos", layout="wide")
 
-# Estilos profesionales mantenidos y mejorados
+# Estilos profesionales mantenidos
 st.markdown("""
     <style>
     .main { background-color: #f4f7f6; }
@@ -148,6 +148,16 @@ def decodificar_qr_reforzado(foto_input):
         except: return None
     return None
 
+def descargar_planilla_inventario(df):
+    output = io.BytesIO()
+    df_planilla = df.copy()
+    df_planilla["CONTEO FÍSICO"] = ""
+    df_planilla["DIFERENCIA"] = ""
+    df_planilla["OBSERVACIONES"] = ""
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df_planilla.to_excel(writer, index=False, sheet_name='Toma_Stock')
+    return output.getvalue()
+
 def descargar_excel_limpio(df):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -162,7 +172,7 @@ st.title("🧪 Control de Depósito Inteligente")
 if 'qr_detectado' not in st.session_state:
     st.session_state.qr_detectado = "Todos"
 
-tab1, tab2, tab3, tab4 = st.tabs(["⚡ Panel de Control", "📋 Historial Completo", "📊 Análisis", "⚙️ Configuración"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["⚡ Panel de Control", "📋 Planilla Toma Stock", "📜 Historial", "📊 Análisis", "⚙️ Configuración"])
 
 with tab1:
     stock_df = obtener_stock_full()
@@ -211,28 +221,33 @@ with tab1:
         with c1:
             lista_productos = ["Todos"] + sorted(stock_df["Producto"].unique().tolist())
             idx_inicio = lista_productos.index(st.session_state.qr_detectado) if st.session_state.qr_detectado in lista_productos else 0
-            f_prod = st.selectbox("O selecciona de la lista", lista_productos, index=idx_inicio, key="prod_select")
+            f_prod = st.selectbox("Producto", lista_productos, index=idx_inicio, key="prod_select")
             st.session_state.qr_detectado = f_prod
         
-        with c2: f_lote = st.text_input("Lote", placeholder="Ej: AF05...")
+        with c2: 
+            # MEJORA: Lista desplegable de lotes para mayor precisión
+            lista_lotes = ["Todos"] + sorted(stock_df["Lote"].unique().tolist())
+            f_lote = st.selectbox("Filtrar por Lote", lista_lotes)
+            
         with c3: 
-            # MEJORA: Selector de depósitos para que no tengas que escribirlo
+            # MEJORA: Lista desplegable de depósitos
             lista_depos = ["Todos"] + sorted(stock_df["Deposito"].unique().tolist())
-            f_depo = st.selectbox("Seleccionar Depósito", lista_depos)
+            f_depo = st.selectbox("Filtrar por Depósito", lista_depos)
+            
         with c4: 
             st.write("Ver:")
             hide_neg = st.toggle("Solo con stock", value=True)
-            filter_reponer = st.toggle("🚨 Mercadería a reponer (<20)", value=False)
+            filter_reponer = st.toggle("🚨 Reponer (<20)", value=False)
 
+        # Aplicación de filtros
         df_f = stock_df.copy()
         
-        # Filtros Lógicos - SIN LÍMITES DE VISUALIZACIÓN
         if search_query:
             df_f = df_f[df_f["Producto"].str.contains(search_query, case=False) | df_f["Código"].astype(str).str.contains(search_query, case=False)]
         if st.session_state.qr_detectado != "Todos" and not search_query:
             df_f = df_f[df_f["Producto"] == st.session_state.qr_detectado]
-        if f_lote: 
-            df_f = df_f[df_f["Lote"].astype(str).str.contains(f_lote, case=False)]
+        if f_lote != "Todos": 
+            df_f = df_f[df_f["Lote"] == f_lote]
         if f_depo != "Todos": 
             df_f = df_f[df_f["Deposito"] == f_depo]
         if hide_neg: 
@@ -241,12 +256,13 @@ with tab1:
             df_f = df_f[df_f["Stock Actual"] < 20]
 
         if not df_f.empty:
+            st.write(f"Mostrando **{len(df_f)}** registros encontrados.")
             excel_bin = descargar_excel_limpio(df_f)
             st.download_button(label="📥 Descargar Excel Filtrado", data=excel_bin, file_name='stock_actual.xlsx', mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
+            # Renderizado de tarjetas - REMOVIDO EL LÍMITE [:40]
             items = df_f.to_dict('records')
             cols_grid = st.columns(4)
-            # SE ELIMINÓ EL LÍMITE [:40] PARA MOSTRAR TODO
             for i, item in enumerate(items): 
                 with cols_grid[i % 4]:
                     stk_val = item['Stock Actual']
@@ -257,7 +273,7 @@ with tab1:
                     else:
                         clase, txt_status, bg_status = "card-normal", "ÓPTIMO", "bg-normal"
 
-                    msg_wa = urllib.parse.quote(f"Hola! Reporto stock de {item['Producto']}. Depósito: {item['Deposito']}. Cantidad actual: {stk_val} {item['Unidad']}.")
+                    msg_wa = urllib.parse.quote(f"Hola! Reporto stock de {item['Producto']}. Depósito: {item['Deposito']}. Lote: {item['Lote']}. Cantidad: {stk_val} {item['Unidad']}.")
                     link_wa = f"https://wa.me/5493406123456?text={msg_wa}"
 
                     st.markdown(f"""
@@ -274,39 +290,49 @@ with tab1:
                         </div>
                     """, unsafe_allow_html=True)
         else:
-            st.info("No se encontraron productos que coincidan con la búsqueda.")
+            st.info("No se encontraron productos con los filtros seleccionados.")
 
 with tab2:
+    st.subheader("📋 Planilla para Inventario Físico")
     if not stock_df.empty:
-        st.dataframe(stock_df, use_container_width=True, hide_index=True)
+        depo_list = sorted(stock_df["Deposito"].unique().tolist())
+        sel_depo = st.selectbox("Seleccionar Depósito para Auditar", ["Todos"] + depo_list)
+        df_audit = stock_df.copy()
+        if sel_depo != "Todos":
+            df_audit = df_audit[df_audit["Deposito"] == sel_depo]
+        st.dataframe(df_audit, use_container_width=True, hide_index=True)
+        excel_audit = descargar_planilla_inventario(df_audit)
+        st.download_button(label=f"📥 Descargar Planilla de Conteo", data=excel_audit, file_name=f'planilla_conteo_{datetime.now().strftime("%d_%m")}.xlsx', mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
 with tab3:
     if not stock_df.empty:
-        df_pareto = stock_df.groupby("Producto")["Stock Actual"].sum().sort_values(ascending=False).head(10).reset_index()
-        fig_pareto = px.bar(df_pareto, x='Stock Actual', y='Producto', orientation='h', 
-                            color='Stock Actual', color_continuous_scale='Greens',
-                            title="Top 10 Productos por Volumen")
-        st.plotly_chart(fig_pareto, use_container_width=True)
+        st.dataframe(stock_df, use_container_width=True, hide_index=True)
 
 with tab4:
-    st.subheader("⚙️ Importación de Datos (Estructura MacroGest)")
-    archivo = st.file_uploader("Subir el archivo 'export 3.xls' o similar (.csv/.xlsx)", type=["xlsx", "csv"])
+    if not stock_df.empty:
+        df_pareto = stock_df.groupby("Producto")["Stock Actual"].sum().sort_values(ascending=False).head(10).reset_index()
+        fig_pareto = px.bar(df_pareto, x='Stock Actual', y='Producto', orientation='h', color='Stock Actual', color_continuous_scale='Greens')
+        st.plotly_chart(fig_pareto, use_container_width=True)
+
+with tab5:
+    st.subheader("⚙️ Importación MacroGest")
+    archivo = st.file_uploader("Subí el archivo 'export 3.xls'", type=["xlsx", "csv"])
     if archivo and st.button("🚀 PROCESAR E IMPORTAR"):
-        with st.spinner('Sincronizando datos...'):
+        with st.spinner('Sincronizando...'):
             try:
                 df_import = pd.read_excel(archivo) if archivo.name.endswith('.xlsx') else pd.read_csv(archivo, encoding='latin1')
                 df_import.columns = [str(c).strip() for c in df_import.columns]
                 if 'Artículo' in df_import.columns and 'Descripción' in df_import.columns:
                     borrar_datos_totales()
                     conn = conectar_db(); cursor = conn.cursor()
-                    cols_depo = [c for c in df_import.columns if c not in ['Artículo', 'Descripción'] and "Unnamed" not in c]
+                    cols_depositos = [c for c in df_import.columns if c not in ['Artículo', 'Descripción'] and "Unnamed" not in c]
                     for _, row in df_import.iterrows():
                         nom = str(row['Descripción']).strip()
                         if pd.isna(nom) or nom == "" or nom == "nan": continue
                         cursor.execute("INSERT OR IGNORE INTO productos (nombre, unidad, codigo) VALUES (?,?,?)", (nom, "UNID", str(row['Artículo'])))
                         cursor.execute("SELECT id_producto FROM productos WHERE nombre = ?", (nom,))
                         id_p = cursor.fetchone()[0]
-                        for depo in cols_depo:
+                        for depo in cols_depositos:
                             try:
                                 val = float(str(row[depo]).replace('.', '').replace(',', '.'))
                                 if val != 0:
@@ -316,8 +342,7 @@ with tab4:
                     conn.commit(); conn.close()
                     st.success("✅ Importación exitosa.")
                     st.rerun()
-            except Exception as e:
-                st.error(f"❌ Error: {e}")
+            except Exception as e: st.error(f"❌ Error: {e}")
 
 st.markdown("---")
 st.caption("Creado por Ignacio Diaz")
