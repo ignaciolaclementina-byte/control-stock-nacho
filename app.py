@@ -114,7 +114,7 @@ def borrar_datos_totales():
     conn.commit()
     conn.close()
 
-# MEJORA: Función para traer stock incluyendo LOTE para historial/planilla
+# Función para traer stock incluyendo LOTE para historial/planilla
 def obtener_stock_con_lote():
     conn = conectar_db()
     query = """
@@ -135,7 +135,7 @@ def obtener_stock_con_lote():
     res = df.groupby(["Producto", "Código", "Unidad", "Lote", "Deposito"])["neta"].sum().reset_index()
     return res.rename(columns={"neta": "Stock Actual"})
 
-# Mantenemos la versión sin lote para el Excel Comparativo y el Panel si es necesario
+# Versión sin lote para el Excel Comparativo y el Panel
 def obtener_stock_full():
     df = obtener_stock_con_lote()
     if df.empty: return df
@@ -196,7 +196,6 @@ with tab1:
     if stock_df.empty:
         st.warning("⚠️ No hay datos cargados. Por favor, subí el archivo en la pestaña 'Configuración'.")
     else:
-        # KPIs y Filtros (Igual a tu base)
         df_kpi = stock_df.copy()
         c_kpi1, c_kpi2, c_kpi3, c_kpi4 = st.columns(4)
         with c_kpi1: st.metric("Total Productos", len(df_kpi["Producto"].unique()))
@@ -277,28 +276,63 @@ with tab4:
 
 with tab5:
     st.subheader("⚙️ Configuración")
-    archivo = st.file_uploader("Subí el archivo 'export 3.xls'", type=["xlsx", "csv"])
+    archivo = st.file_uploader("Subí el archivo 'export 3.xlsx' o 'export 3.csv'", type=["xlsx", "csv", "xls"])
+    
     if archivo and st.button("🚀 PROCESAR E IMPORTAR"):
         try:
-            df_import = pd.read_excel(archivo) if archivo.name.endswith('.xlsx') else pd.read_csv(archivo, encoding='latin1')
+            # Lectura unificada y robusta sin importar variaciones sutiles de extensión
+            if archivo.name.endswith('.csv'):
+                df_import = pd.read_csv(archivo, encoding='latin1')
+            else:
+                df_import = pd.read_excel(archivo)
+                
             df_import.columns = [str(c).strip() for c in df_import.columns]
+            
             if 'Artículo' in df_import.columns:
                 borrar_datos_totales()
-                conn = conectar_db(); cursor = conn.cursor()
+                conn = conectar_db()
+                cursor = conn.cursor()
+                
+                # Identificar columnas de depósitos de manera limpia
                 cols_dep = [c for c in df_import.columns if c not in ['Artículo', 'Descripción'] and "Unnamed" not in c]
+                
                 for _, row in df_import.iterrows():
                     nom = str(row['Descripción']).strip()
-                    if pd.isna(nom) or nom == "" or nom == "nan": continue
-                    cursor.execute("INSERT OR IGNORE INTO productos (nombre, unidad, codigo) VALUES (?,?,?)", (nom, "UNID", str(row['Artículo'])))
+                    if pd.isna(row['Descripción']) or nom == "" or nom.lower() == "nan": 
+                        continue
+                        
+                    cursor.execute("INSERT OR IGNORE INTO productos (nombre, unidad, codigo) VALUES (?,?,?)", (nom, "UNID", str(row['Artículo']).strip()))
                     cursor.execute("SELECT id_producto FROM productos WHERE nombre = ?", (nom,))
                     id_p = cursor.fetchone()[0]
+                    
                     for d in cols_dep:
                         try:
-                            v = float(str(row[d]).replace('.', '').replace(',', '.'))
-                            if v != 0: cursor.execute("INSERT INTO movimientos (fecha_hora, tipo_movimiento, id_producto, cantidad, lote, deposito) VALUES (?,?,?,?,?,?)", (datetime.now().strftime("%d/%m/%Y %H:%M"), "Entrada", id_p, v, "S/L", d))
-                        except: continue
-                conn.commit(); conn.close(); st.success("✅ Importación exitosa."); st.rerun()
-        except Exception as e: st.error(f"❌ Error: {e}")
+                            val_raw = str(row[d]).strip()
+                            if pd.isna(row[d]) or val_raw == "" or val_raw.lower() == "nan":
+                                continue
+                            
+                            # Sanitización completa de números con formato regional (puntos de miles y comas decimales)
+                            if '.' in val_raw and ',' in val_raw:
+                                val_raw = val_raw.replace('.', '')
+                            val_raw = val_raw.replace(',', '.')
+                            
+                            v = float(val_raw)
+                            if v != 0: 
+                                cursor.execute("""
+                                    INSERT INTO movimientos (fecha_hora, tipo_movimiento, id_producto, cantidad, lote, deposito) 
+                                    VALUES (?,?,?,?,?,?)
+                                """, (datetime.now().strftime("%d/%m/%Y %H:%M"), "Entrada", id_p, v, "S/L", d))
+                        except Exception as inner_e: 
+                            continue
+                            
+                conn.commit()
+                conn.close()
+                st.success("✅ Importación exitosa.")
+                st.rerun()
+            else:
+                st.error("❌ El archivo no contiene la columna requerida 'Artículo'. Verificá la estructura.")
+        except Exception as e: 
+            st.error(f"❌ Error al procesar el archivo: {e}")
 
 st.markdown("---")
 st.caption("Creado por Ignacio Diaz")
