@@ -280,79 +280,72 @@ with tab5:
     
     if archivo and st.button("🚀 PROCESAR E IMPORTAR"):
         try:
-            # 1. Lectura inicial flexible según la extensión
+            # 1. Lectura unificada de datos
             if archivo.name.endswith('.csv'):
-                df_raw = pd.read_csv(archivo, encoding='latin1')
+                df_import = pd.read_csv(archivo, encoding='latin1')
             else:
-                df_raw = pd.read_excel(archivo)
+                df_import = pd.read_excel(archivo)
+                
+            df_import.columns = [str(c).strip().lower() for c in df_import.columns]
             
-            # 2. ESCANEO DINÁMICO DE CABECERA (Ignora filas vacías o basura de MacroGest arriba)
-            fila_cabecera = None
-            for idx, row in df_raw.iterrows():
-                row_str = row.astype(str).tolist()
-                if any('Artículo' in s or 'Articulo' in s for s in row_str):
-                    fila_cabecera = idx
-                    break
+            # Mapeo de columnas esperadas del archivo vertical subido
+            map_cols = {
+                'codigo': 'codigo',
+                'articulo': 'articulo',
+                'unidad_medida': 'unidad_medida',
+                'deposito': 'deposito',
+                'lote': 'lote',
+                'stock_actual': 'stock_actual'
+            }
             
-            # Si encontramos la cabecera real más abajo, reestructuramos el DataFrame
-            if fila_cabecera is not None:
-                nuevas_columnas = df_raw.iloc[fila_cabecera].astype(str).str.strip().tolist()
-                df_import = df_raw.iloc[fila_cabecera + 1:].copy()
-                df_import.columns = nuevas_columnas
-            else:
-                df_import = df_raw.copy()
-
-            # Normalizar nombres de columnas para evitar problemas de acentos
-            df_import.columns = [str(c).strip().replace('Articulo', 'Artículo') for c in df_import.columns]
-            
-            # 3. Procesamiento e Inserción en Base de Datos
-            if 'Artículo' in df_import.columns:
+            # Verificar si cumple la estructura del archivo vertical por lotes
+            if 'articulo' in df_import.columns and 'stock_actual' in df_import.columns:
                 borrar_datos_totales()
                 conn = conectar_db()
                 cursor = conn.cursor()
                 
-                # Identificar columnas de depósitos limpias descartando las fijas
-                cols_dep = [c for c in df_import.columns if c not in ['Artículo', 'Descripción', 'Descripcion'] and "Unnamed" not in str(c) and str(c).strip() != ""]
-                
                 for _, row in df_import.iterrows():
-                    col_desc = 'Descripción' if 'Descripción' in df_import.columns else ('Descripcion' if 'Descripcion' in df_import.columns else None)
-                    if not col_desc:
+                    nom = str(row['articulo']).strip()
+                    if pd.isna(row['articulo']) or nom == "" or nom.lower() == "nan": 
                         continue
                         
-                    nom = str(row[col_desc]).strip()
-                    if pd.isna(row[col_desc]) or nom == "" or nom.lower() == "nan": 
-                        continue
-                        
-                    cursor.execute("INSERT OR IGNORE INTO productos (nombre, unidad, codigo) VALUES (?,?,?)", (nom, "UNID", str(row['Artículo']).strip()))
+                    cod = str(row['codigo']).strip() if 'codigo' in df_import.columns else "S/C"
+                    uni = str(row['unidad_medida']).strip() if 'unidad_medida' in df_import.columns else "UNID"
+                    dep = str(row['deposito']).strip() if 'deposito' in df_import.columns else "0"
+                    lot = str(row['lote']).strip() if 'lote' in df_import.columns and not pd.isna(row['lote']) and str(row['lote']).strip() != "" else "S/L"
+                    
+                    # Guardar o ignorar producto único
+                    cursor.execute("INSERT OR IGNORE INTO productos (nombre, unidad, codigo) VALUES (?,?,?)", (nom, uni, cod))
+                    
+                    # Traer id_producto asignado
                     cursor.execute("SELECT id_producto FROM productos WHERE nombre = ?", (nom,))
                     id_p = cursor.fetchone()[0]
                     
-                    for d in cols_dep:
-                        try:
-                            val_raw = str(row[d]).strip()
-                            if pd.isna(row[d]) or val_raw == "" or val_raw.lower() == "nan":
-                                continue
-                            
-                            # Sanitización estricta de formatos regionales (puntos de miles y comas decimales)
-                            if '.' in val_raw and ',' in val_raw:
-                                val_raw = val_raw.replace('.', '')
-                            val_raw = val_raw.replace(',', '.')
-                            
-                            v = float(val_raw)
-                            if v != 0: 
-                                cursor.execute("""
-                                    INSERT INTO movimientos (fecha_hora, tipo_movimiento, id_producto, cantidad, lote, deposito) 
-                                    VALUES (?,?,?,?,?,?)
-                                """, (datetime.now().strftime("%d/%m/%Y %H:%M"), "Entrada", id_p, v, "S/L", d))
-                        except: 
-                            continue
-                            
+                    # Sanitizar valor numérico de stock_actual
+                    val_raw = str(row['stock_actual']).strip()
+                    if pd.isna(row['stock_actual']) or val_raw == "" or val_raw.lower() == "nan":
+                        continue
+                        
+                    if '.' in val_raw and ',' in val_raw:
+                        val_raw = val_raw.replace('.', '')
+                    val_raw = val_raw.replace(',', '.')
+                    
+                    try:
+                        v = float(val_raw)
+                        # Registramos el movimiento plano directo respetando depósito y lote real
+                        cursor.execute("""
+                            INSERT INTO movimientos (fecha_hora, tipo_movimiento, id_producto, cantidad, lote, deposito) 
+                            VALUES (?,?,?,?,?,?)
+                        """, (datetime.now().strftime("%d/%m/%Y %H:%M"), "Entrada", id_p, v, lot, dep))
+                    except:
+                        continue
+                        
                 conn.commit()
                 conn.close()
-                st.success("✅ Importación exitosa analizando estructura.")
+                st.success("✅ Importación por Lotes exitosa.")
                 st.rerun()
             else:
-                st.error("❌ No se encontró la columna 'Artículo'. Asegurate de que el reporte exportado sea el correcto.")
+                st.error("❌ El archivo no posee las columnas requeridas ('articulo' y 'stock_actual').")
         except Exception as e: 
             st.error(f"❌ Error al procesar el archivo: {e}")
 
