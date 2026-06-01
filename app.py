@@ -280,25 +280,47 @@ with tab5:
     
     if archivo and st.button("🚀 PROCESAR E IMPORTAR"):
         try:
-            # Lectura unificada y robusta sin importar variaciones sutiles de extensión
+            # 1. Lectura inicial flexible según la extensión
             if archivo.name.endswith('.csv'):
-                df_import = pd.read_csv(archivo, encoding='latin1')
+                df_raw = pd.read_csv(archivo, encoding='latin1')
             else:
-                df_import = pd.read_excel(archivo)
-                
-            df_import.columns = [str(c).strip() for c in df_import.columns]
+                df_raw = pd.read_excel(archivo)
             
+            # 2. ESCANEO DINÁMICO DE CABECERA (Ignora filas vacías o basura de MacroGest arriba)
+            fila_cabecera = None
+            for idx, row in df_raw.iterrows():
+                row_str = row.astype(str).tolist()
+                if any('Artículo' in s or 'Articulo' in s for s in row_str):
+                    fila_cabecera = idx
+                    break
+            
+            # Si encontramos la cabecera real más abajo, reestructuramos el DataFrame
+            if fila_cabecera is not None:
+                nuevas_columnas = df_raw.iloc[fila_cabecera].astype(str).str.strip().tolist()
+                df_import = df_raw.iloc[fila_cabecera + 1:].copy()
+                df_import.columns = nuevas_columnas
+            else:
+                df_import = df_raw.copy()
+
+            # Normalizar nombres de columnas para evitar problemas de acentos
+            df_import.columns = [str(c).strip().replace('Articulo', 'Artículo') for c in df_import.columns]
+            
+            # 3. Procesamiento e Inserción en Base de Datos
             if 'Artículo' in df_import.columns:
                 borrar_datos_totales()
                 conn = conectar_db()
                 cursor = conn.cursor()
                 
-                # Identificar columnas de depósitos de manera limpia
-                cols_dep = [c for c in df_import.columns if c not in ['Artículo', 'Descripción'] and "Unnamed" not in c]
+                # Identificar columnas de depósitos limpias descartando las fijas
+                cols_dep = [c for c in df_import.columns if c not in ['Artículo', 'Descripción', 'Descripcion'] and "Unnamed" not in str(c) and str(c).strip() != ""]
                 
                 for _, row in df_import.iterrows():
-                    nom = str(row['Descripción']).strip()
-                    if pd.isna(row['Descripción']) or nom == "" or nom.lower() == "nan": 
+                    col_desc = 'Descripción' if 'Descripción' in df_import.columns else ('Descripcion' if 'Descripcion' in df_import.columns else None)
+                    if not col_desc:
+                        continue
+                        
+                    nom = str(row[col_desc]).strip()
+                    if pd.isna(row[col_desc]) or nom == "" or nom.lower() == "nan": 
                         continue
                         
                     cursor.execute("INSERT OR IGNORE INTO productos (nombre, unidad, codigo) VALUES (?,?,?)", (nom, "UNID", str(row['Artículo']).strip()))
@@ -311,7 +333,7 @@ with tab5:
                             if pd.isna(row[d]) or val_raw == "" or val_raw.lower() == "nan":
                                 continue
                             
-                            # Sanitización completa de números con formato regional (puntos de miles y comas decimales)
+                            # Sanitización estricta de formatos regionales (puntos de miles y comas decimales)
                             if '.' in val_raw and ',' in val_raw:
                                 val_raw = val_raw.replace('.', '')
                             val_raw = val_raw.replace(',', '.')
@@ -322,15 +344,15 @@ with tab5:
                                     INSERT INTO movimientos (fecha_hora, tipo_movimiento, id_producto, cantidad, lote, deposito) 
                                     VALUES (?,?,?,?,?,?)
                                 """, (datetime.now().strftime("%d/%m/%Y %H:%M"), "Entrada", id_p, v, "S/L", d))
-                        except Exception as inner_e: 
+                        except: 
                             continue
                             
                 conn.commit()
                 conn.close()
-                st.success("✅ Importación exitosa.")
+                st.success("✅ Importación exitosa analizando estructura.")
                 st.rerun()
             else:
-                st.error("❌ El archivo no contiene la columna requerida 'Artículo'. Verificá la estructura.")
+                st.error("❌ No se encontró la columna 'Artículo'. Asegurate de que el reporte exportado sea el correcto.")
         except Exception as e: 
             st.error(f"❌ Error al procesar el archivo: {e}")
 
