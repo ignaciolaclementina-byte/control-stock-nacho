@@ -69,6 +69,18 @@ st.markdown("""
         font-weight: bold;
         margin-top: 10px;
     }
+
+    .neg-badge {
+        display: inline-block;
+        background-color: #dc3545;
+        color: white;
+        font-size: 0.65rem;
+        padding: 1px 6px;
+        border-radius: 8px;
+        font-weight: bold;
+        margin-left: 4px;
+        vertical-align: middle;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -97,11 +109,22 @@ def inicializar_db():
             lote TEXT, 
             referencia TEXT, 
             deposito TEXT,
+            origen TEXT,
             FOREIGN KEY (id_producto) REFERENCES productos(id_producto)
         )
     """)
+    # Migraciones seguras
     try: cursor.execute("ALTER TABLE productos ADD COLUMN codigo TEXT")
     except: pass
+    try: cursor.execute("ALTER TABLE movimientos ADD COLUMN origen TEXT")
+    except: pass
+    # Tabla para metadata (última actualización, etc.)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS metadata (
+            clave TEXT PRIMARY KEY,
+            valor TEXT
+        )
+    """)
     conn.commit()
     conn.close()
 
@@ -110,8 +133,38 @@ def borrar_datos_totales():
     cursor = conn.cursor()
     cursor.execute("DELETE FROM movimientos")
     cursor.execute("DELETE FROM productos")
+    cursor.execute("DELETE FROM metadata")
     conn.commit()
     conn.close()
+
+# PRO 1: Borra solo movimientos de tipo "importacion" (origen='excel'), conserva los manuales
+def borrar_solo_importacion():
+    conn = conectar_db()
+    cursor = conn.cursor()
+    # Borrar movimientos del excel anterior
+    cursor.execute("DELETE FROM movimientos WHERE origen = 'excel' OR origen IS NULL")
+    # Borrar productos que ya no tienen ningún movimiento manual
+    cursor.execute("""
+        DELETE FROM productos 
+        WHERE id_producto NOT IN (SELECT DISTINCT id_producto FROM movimientos)
+    """)
+    conn.commit()
+    conn.close()
+
+def guardar_metadata(clave, valor):
+    conn = conectar_db()
+    cursor = conn.cursor()
+    cursor.execute("INSERT OR REPLACE INTO metadata (clave, valor) VALUES (?, ?)", (clave, valor))
+    conn.commit()
+    conn.close()
+
+def obtener_metadata(clave):
+    conn = conectar_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT valor FROM metadata WHERE clave = ?", (clave,))
+    row = cursor.fetchone()
+    conn.close()
+    return row[0] if row else None
 
 def obtener_stock_con_lote():
     conn = conectar_db()
@@ -139,7 +192,6 @@ def obtener_stock_full():
     res = df.groupby(["Producto", "Código", "Unidad", "Deposito"])["Stock Actual"].sum().reset_index()
     return res
 
-# MEJORA 4: Historial real de movimientos individuales
 def obtener_historial_movimientos():
     conn = conectar_db()
     query = """
@@ -147,7 +199,8 @@ def obtener_historial_movimientos():
                p.nombre as Producto, p.codigo as Código,
                m.cantidad as Cantidad, p.unidad as Unidad,
                m.lote as Lote, m.deposito as Depósito,
-               m.referencia as Referencia
+               m.referencia as Referencia,
+               COALESCE(m.origen, 'excel') as Origen
         FROM movimientos m
         JOIN productos p ON m.id_producto = p.id_producto
         ORDER BY m.id_movimiento DESC
@@ -202,12 +255,8 @@ inicializar_db()
 # --- 3. SESSION STATE ---
 if 'qr_detectado' not in st.session_state:
     st.session_state.qr_detectado = "Todos"
-
-# MEJORA 1: Número WhatsApp configurable
 if 'wa_numero' not in st.session_state:
     st.session_state.wa_numero = "5493406123456"
-
-# MEJORA 2: Umbral de alerta configurable
 if 'umbral_alerta' not in st.session_state:
     st.session_state.umbral_alerta = 20
 
@@ -224,21 +273,28 @@ with tab1:
     else:
         U = st.session_state.umbral_alerta
 
+        # PRO 5: Fecha de última actualización
+        ultima_actualizacion = obtener_metadata("ultima_importacion")
+        if ultima_actualizacion:
+            st.caption(f"🕐 Última importación del Excel: **{ultima_actualizacion}**")
+
         df_kpi = stock_df.copy()
-        c_kpi1, c_kpi2, c_kpi3, c_kpi4 = st.columns(4)
+        # PRO 4: negativos siempre visibles en KPI
+        negativos_n = len(df_kpi[df_kpi["Stock Actual"] < 0])
+        c_kpi1, c_kpi2, c_kpi3, c_kpi4, c_kpi5 = st.columns(5)
         with c_kpi1: st.metric("Total Productos", len(df_kpi["Producto"].unique()))
         with c_kpi2: st.metric("Volumen Total", f"{df_kpi['Stock Actual'].sum():,.0f}")
         with c_kpi3:
-            # MEJORA 2: umbral variable
-            criticos_n = len(df_kpi[df_kpi["Stock Actual"] < U])
-            st.metric("Alertas Críticas", criticos_n, delta=-criticos_n, delta_color="inverse")
-        with c_kpi4: st.metric("Depósitos", df_kpi["Deposito"].nunique())
+            criticos_n = len(df_kpi[(df_kpi["Stock Actual"] >= 0) & (df_kpi["Stock Actual"] < U)])
+            st.metric("Stock Bajo", criticos_n, delta=-criticos_n, delta_color="inverse")
+        with c_kpi4:
+            st.metric("Stock Negativo ⚠️", negativos_n, delta=-negativos_n, delta_color="inverse")
+        with c_kpi5: st.metric("Depósitos", df_kpi["Deposito"].nunique())
 
         st.markdown("---")
         st.subheader("🔍 Filtros Dinámicos")
         search_query = st.text_input("⌨️ Buscar por nombre o código", placeholder="Escriba aquí...", key="search_input")
 
-        # MEJORA 3: Escaneo QR conectado a la UI
         with st.expander("📷 Escanear código QR"):
             col_cam, col_file = st.columns(2)
             with col_cam:
@@ -274,20 +330,48 @@ with tab1:
             f_depo = st.selectbox("Filtrar por Depósito", lista_depos)
         with c3: 
             st.write("Ver:")
-            hide_neg = st.toggle("Solo con stock", value=True)
-            # MEJORA 2: umbral en el label
+            hide_neg = st.toggle("Solo con stock positivo", value=True)
             filter_reponer = st.toggle(f"🚨 Reponer (<{U})", value=False)
+            # PRO 4: toggle para ver siempre negativos
+            show_neg_forced = st.toggle("⚠️ Mostrar negativos siempre", value=True)
 
         df_f = stock_df.copy()
         if search_query:
-            df_f = df_f[df_f["Producto"].str.contains(search_query, case=False, na=False) | df_f["Código"].astype(str).str.contains(search_query, case=False, na=False)]
+            df_f = df_f[
+                df_f["Producto"].str.contains(search_query, case=False, na=False) | 
+                df_f["Código"].astype(str).str.contains(search_query, case=False, na=False)
+            ]
         if st.session_state.qr_detectado != "Todos" and not search_query:
             df_f = df_f[df_f["Producto"] == st.session_state.qr_detectado]
-        if f_depo != "Todos": df_f = df_f[df_f["Deposito"] == f_depo]
-        if hide_neg: df_f = df_f[df_f["Stock Actual"] > 0]
-        if filter_reponer: df_f = df_f[df_f["Stock Actual"] < U]
+        if f_depo != "Todos":
+            df_f = df_f[df_f["Deposito"] == f_depo]
+
+        # PRO 4: lógica de filtrado que siempre incluye negativos si el toggle está activo
+        if hide_neg:
+            if show_neg_forced:
+                # Mostrar los que tienen stock > 0 UNION los negativos
+                df_f = df_f[(df_f["Stock Actual"] > 0) | (df_f["Stock Actual"] < 0)]
+            else:
+                df_f = df_f[df_f["Stock Actual"] > 0]
+        if filter_reponer:
+            df_f = df_f[df_f["Stock Actual"] < U]
 
         if not df_f.empty:
+            # PRO 3: Botón de reporte masivo por WhatsApp
+            criticos_wa = df_f[df_f["Stock Actual"] < U]
+            if not criticos_wa.empty:
+                lineas = [f"🚨 REPORTE STOCK CRÍTICO - {datetime.now().strftime('%d/%m/%Y %H:%M')}"]
+                lineas.append(f"Umbral: {U} unidades\n")
+                for _, r in criticos_wa.iterrows():
+                    emoji = "❌" if r["Stock Actual"] <= 0 else "⚠️"
+                    lineas.append(f"{emoji} {r['Producto']} | Dep: {r['Deposito']} | Stock: {r['Stock Actual']:,.1f} {r['Unidad']}")
+                msg_masivo = urllib.parse.quote("\n".join(lineas))
+                link_masivo = f"https://wa.me/{st.session_state.wa_numero}?text={msg_masivo}"
+                st.markdown(
+                    f'<a href="{link_masivo}" target="_blank" style="display:inline-flex;align-items:center;background:#25D366;color:white;padding:8px 16px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:0.85rem;margin-bottom:12px;">💬 Reportar {len(criticos_wa)} productos críticos por WhatsApp</a>',
+                    unsafe_allow_html=True
+                )
+
             excel_bin = descargar_excel_agrupado_sin_lote(df_f)
             st.download_button(label="📥 Descargar Comparativa Total", data=excel_bin, file_name='stock_agrupado.xlsx')
 
@@ -296,21 +380,20 @@ with tab1:
             for i, item in enumerate(items): 
                 with cols_grid[i % 4]:
                     stk_val = item['Stock Actual']
-                    # MEJORA 2: umbral variable en color de card
                     clase = "card-warning" if stk_val <= 0 else ("card-low" if stk_val < U else "card-normal")
+                    # PRO 4: badge "NEGATIVO" visible en la card
+                    badge_neg = '<span class="neg-badge">NEGATIVO</span>' if stk_val < 0 else ""
                     msg_wa = urllib.parse.quote(f"Reporte: {item['Producto']}. Dep: {item['Deposito']}. Stock: {stk_val}")
-                    # MEJORA 1: número dinámico
                     link_wa = f"https://wa.me/{st.session_state.wa_numero}?text={msg_wa}"
                     st.markdown(f"""
                         <div class="stock-card {clase}">
-                            <div class="stock-title">{item['Producto']}</div>
+                            <div class="stock-title">{item['Producto']}{badge_neg}</div>
                             <span class="stock-value">{stk_val:,.1f} <small class="stock-unit">{item['Unidad']}</small></span>
                             <div class="stock-info"><b>🆔 Cód:</b> {item['Código']}<br><b>📍 Dep:</b> <span class="label-blue">{item['Deposito']}</span></div>
                             <a href="{link_wa}" target="_blank" class="wa-btn">💬 Reportar</a>
                         </div>
                     """, unsafe_allow_html=True)
 
-        # MEJORA 5: Registro manual de movimientos
         st.markdown("---")
         with st.expander("➕ Registrar movimiento manual"):
             c_m1, c_m2 = st.columns(2)
@@ -331,10 +414,10 @@ with tab1:
                 if id_p:
                     cursor.execute("""
                         INSERT INTO movimientos 
-                        (fecha_hora, tipo_movimiento, id_producto, cantidad, lote, referencia, deposito)
-                        VALUES (?,?,?,?,?,?,?)
+                        (fecha_hora, tipo_movimiento, id_producto, cantidad, lote, referencia, deposito, origen)
+                        VALUES (?,?,?,?,?,?,?,?)
                     """, (datetime.now().strftime("%d/%m/%Y %H:%M"), tipo_mov,
-                          id_p[0], cantidad_mov, lote_mov, ref_mov, deposito_mov))
+                          id_p[0], cantidad_mov, lote_mov, ref_mov, deposito_mov, "manual"))
                     conn.commit()
                     st.success(f"✅ {tipo_mov} de {cantidad_mov:.2f} registrada para **{prod_sel}** en depósito **{deposito_mov}**.")
                     st.rerun()
@@ -354,28 +437,31 @@ with tab2:
     else:
         st.info("Sin datos cargados.")
 
-# MEJORA 4: Historial real de movimientos
 with tab3:
     st.subheader("📜 Historial de Movimientos")
     hist_df = obtener_historial_movimientos()
     if not hist_df.empty:
-        c_hf1, c_hf2, c_hf3 = st.columns(3)
+        c_hf1, c_hf2, c_hf3, c_hf4 = st.columns(4)
         with c_hf1:
             f_tipo_h = st.selectbox("Tipo", ["Todos", "Entrada", "Salida"], key="h_tipo")
         with c_hf2:
             f_prod_h = st.selectbox("Producto", ["Todos"] + sorted(hist_df["Producto"].unique().tolist()), key="h_prod")
         with c_hf3:
             f_dep_h = st.selectbox("Depósito", ["Todos"] + sorted(hist_df["Depósito"].unique().tolist()), key="h_dep")
+        with c_hf4:
+            f_origen_h = st.selectbox("Origen", ["Todos", "manual", "excel"], key="h_origen")
 
         df_h = hist_df.copy()
         if f_tipo_h != "Todos": df_h = df_h[df_h["Tipo"] == f_tipo_h]
         if f_prod_h != "Todos": df_h = df_h[df_h["Producto"] == f_prod_h]
         if f_dep_h != "Todos": df_h = df_h[df_h["Depósito"] == f_dep_h]
+        if f_origen_h != "Todos": df_h = df_h[df_h["Origen"] == f_origen_h]
 
-        c_hkpi1, c_hkpi2, c_hkpi3 = st.columns(3)
+        c_hkpi1, c_hkpi2, c_hkpi3, c_hkpi4 = st.columns(4)
         with c_hkpi1: st.metric("Movimientos mostrados", len(df_h))
         with c_hkpi2: st.metric("Total entradas", len(df_h[df_h["Tipo"] == "Entrada"]))
         with c_hkpi3: st.metric("Total salidas", len(df_h[df_h["Tipo"] == "Salida"]))
+        with c_hkpi4: st.metric("Manuales", len(df_h[df_h["Origen"] == "manual"]))
 
         st.dataframe(df_h.drop(columns=["ID"]), use_container_width=True, hide_index=True)
 
@@ -394,7 +480,6 @@ with tab4:
         fig_pareto = px.bar(df_pareto, x='Stock Actual', y='Producto', orientation='h', color='Stock Actual', color_continuous_scale='Greens')
         st.plotly_chart(fig_pareto, use_container_width=True)
 
-        # MEJORA 6: gráfico de distribución por depósito
         st.subheader("Distribución por depósito")
         df_dep = stock_df_an.groupby("Deposito")["Stock Actual"].sum().reset_index()
         fig_dep = px.pie(
@@ -404,7 +489,6 @@ with tab4:
         fig_dep.update_traces(textposition='inside', textinfo='percent+label')
         st.plotly_chart(fig_dep, use_container_width=True)
 
-        # Tabla resumen por depósito
         st.subheader("Resumen por depósito")
         df_resumen = stock_df_an.groupby("Deposito").agg(
             Productos=("Producto", "nunique"),
@@ -419,7 +503,6 @@ with tab4:
 with tab5:
     st.subheader("⚙️ Configuración")
 
-    # MEJORA 1: WhatsApp configurable
     st.markdown("#### 📱 WhatsApp para alertas")
     col_wa1, col_wa2 = st.columns([3,1])
     with col_wa1:
@@ -437,7 +520,6 @@ with tab5:
 
     st.markdown("---")
 
-    # MEJORA 2: Umbral de alerta configurable
     st.markdown("#### 🚨 Umbral de stock crítico")
     nuevo_umbral = st.slider(
         "Stock mínimo antes de alertar (unidades)",
@@ -451,8 +533,11 @@ with tab5:
 
     st.markdown("---")
 
-    # Importación original intacta
     st.markdown("#### 📂 Importar datos")
+
+    # PRO 1: aviso sobre comportamiento de la importación
+    st.info("💡 La importación **conserva tus movimientos manuales**. Solo reemplaza los datos del Excel anterior.")
+
     archivo = st.file_uploader("Subí el archivo 'export 3.xlsx' o 'export 3.csv'", type=["xlsx", "csv", "xls"])
     
     if archivo and st.button("🚀 PROCESAR E IMPORTAR"):
@@ -464,7 +549,6 @@ with tab5:
                 
             df_import.columns = [str(c).strip().lower() for c in df_import.columns]
             
-            # Soporte para columna 'articulo' o 'descripcion_1'
             col_nombre = None
             if 'articulo' in df_import.columns:
                 col_nombre = 'articulo'
@@ -472,9 +556,12 @@ with tab5:
                 col_nombre = 'descripcion_1'
 
             if col_nombre and 'stock_actual' in df_import.columns:
-                borrar_datos_totales()
+                # PRO 1: borrar solo los movimientos del excel anterior, NO los manuales
+                borrar_solo_importacion()
+
                 conn = conectar_db()
                 cursor = conn.cursor()
+                filas_ok = 0
                 
                 for _, row in df_import.iterrows():
                     nom = str(row[col_nombre]).strip()
@@ -500,16 +587,22 @@ with tab5:
                     
                     try:
                         v = float(val_raw)
+                        # PRO 1: marcar origen='excel' para poder borrarlos en la próxima importación
                         cursor.execute("""
-                            INSERT INTO movimientos (fecha_hora, tipo_movimiento, id_producto, cantidad, lote, deposito) 
-                            VALUES (?,?,?,?,?,?)
-                        """, (datetime.now().strftime("%d/%m/%Y %H:%M"), "Entrada", id_p, v, lot, dep))
+                            INSERT INTO movimientos (fecha_hora, tipo_movimiento, id_producto, cantidad, lote, deposito, origen) 
+                            VALUES (?,?,?,?,?,?,?)
+                        """, (datetime.now().strftime("%d/%m/%Y %H:%M"), "Entrada", id_p, v, lot, dep, "excel"))
+                        filas_ok += 1
                     except:
                         continue
                         
                 conn.commit()
                 conn.close()
-                st.success("✅ Importación por Lotes exitosa.")
+
+                # PRO 5: guardar fecha de última importación
+                guardar_metadata("ultima_importacion", datetime.now().strftime("%d/%m/%Y %H:%M"))
+
+                st.success(f"✅ Importación exitosa. {filas_ok} registros cargados. Movimientos manuales conservados.")
                 st.rerun()
             else:
                 cols_enc = ', '.join(df_import.columns.tolist())
@@ -520,7 +613,7 @@ with tab5:
     st.markdown("---")
     st.markdown("#### 🗑️ Zona peligrosa")
     with st.expander("⚠️ Borrar todos los datos"):
-        st.warning("Esta acción elimina todos los productos y movimientos de la base de datos. No se puede deshacer.")
+        st.warning("Esta acción elimina TODOS los productos y movimientos (incluidos manuales). No se puede deshacer.")
         confirmar = st.text_input("Escribí CONFIRMAR para habilitar el botón", key="confirm_borrar")
         if confirmar == "CONFIRMAR":
             if st.button("🗑️ Borrar todo", type="primary"):
