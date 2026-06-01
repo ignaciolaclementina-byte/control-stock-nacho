@@ -464,14 +464,21 @@ with tab5:
                 
             df_import.columns = [str(c).strip().lower() for c in df_import.columns]
             
-            if 'articulo' in df_import.columns and 'stock_actual' in df_import.columns:
+            # Soporte para columna 'articulo' o 'descripcion_1'
+            col_nombre = None
+            if 'articulo' in df_import.columns:
+                col_nombre = 'articulo'
+            elif 'descripcion_1' in df_import.columns:
+                col_nombre = 'descripcion_1'
+
+            if col_nombre and 'stock_actual' in df_import.columns:
                 borrar_datos_totales()
                 conn = conectar_db()
                 cursor = conn.cursor()
                 
                 for _, row in df_import.iterrows():
-                    nom = str(row['articulo']).strip()
-                    if pd.isna(row['articulo']) or nom == "" or nom.lower() == "nan": 
+                    nom = str(row[col_nombre]).strip()
+                    if pd.isna(row[col_nombre]) or nom == "" or nom.lower() == "nan": 
                         continue
                         
                     cod = str(row['codigo']).strip() if 'codigo' in df_import.columns else "S/C"
@@ -505,7 +512,8 @@ with tab5:
                 st.success("✅ Importación por Lotes exitosa.")
                 st.rerun()
             else:
-                st.error("❌ El archivo no posee las columnas requeridas ('articulo' y 'stock_actual').")
+                cols_enc = ', '.join(df_import.columns.tolist())
+                st.error(f"❌ Columnas requeridas: ('articulo' o 'descripcion_1') y 'stock_actual'. Encontradas: {cols_enc}")
         except Exception as e: 
             st.error(f"❌ Error al procesar el archivo: {e}")
 
