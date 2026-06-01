@@ -7,7 +7,6 @@ import numpy as np
 import cv2
 import io
 from PIL import Image
-import urllib.parse
 from difflib import SequenceMatcher
 
 # --- 1. CONFIGURACIÓN DE LA PÁGINA ---
@@ -51,13 +50,6 @@ st.markdown("""
     }
     .label-blue { background-color: #e7f3ff; color: #007bff; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
     .label-prov { background-color: #f0fff4; color: #28a745; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
-    
-    .wa-btn {
-        display: inline-flex; align-items: center;
-        background-color: #25D366; color: white !important;
-        padding: 5px 10px; border-radius: 6px;
-        text-decoration: none; font-size: 0.75rem; font-weight: bold; margin-top: 10px;
-    }
     .neg-badge {
         display: inline-block; background-color: #dc3545; color: white;
         font-size: 0.65rem; padding: 1px 6px; border-radius: 8px;
@@ -228,17 +220,6 @@ def obtener_historial_movimientos():
     conn.close()
     return df
 
-def guardar_proveedor_producto(nombre_producto, stock_minimo, proveedor, wa_proveedor):
-    conn = conectar_db()
-    cursor = conn.cursor()
-    cursor.execute("""
-        UPDATE productos 
-        SET stock_minimo = ?, proveedor = ?, wa_proveedor = ?
-        WHERE nombre = ?
-    """, (stock_minimo, proveedor, wa_proveedor, nombre_producto))
-    conn.commit()
-    conn.close()
-
 def obtener_todos_productos():
     conn = conectar_db()
     try:
@@ -308,8 +289,6 @@ inicializar_db()
 # --- 3. SESSION STATE ---
 if 'qr_detectado' not in st.session_state:
     st.session_state.qr_detectado = "Todos"
-if 'wa_numero' not in st.session_state:
-    st.session_state.wa_numero = "5493406123456"
 if 'umbral_alerta' not in st.session_state:
     st.session_state.umbral_alerta = 20
 # PRO confirmación de movimiento
@@ -442,22 +421,6 @@ with tab1:
             st.markdown(f'<div class="fuzzy-hint">🔍 No se encontraron resultados exactos para "<b>{search_query}</b>". Mostrando resultados similares.</div>', unsafe_allow_html=True)
 
         if not df_f.empty:
-            # Reporte masivo WhatsApp — usa número de proveedor si está disponible, sino el global
-            criticos_wa = df_f[df_f.apply(lambda r: es_critico(r, U), axis=1)]
-            if not criticos_wa.empty:
-                lineas = [f"🚨 REPORTE STOCK CRÍTICO - {datetime.now().strftime('%d/%m/%Y %H:%M')}"]
-                lineas.append(f"Umbral global: {U} unidades\n")
-                for _, r in criticos_wa.iterrows():
-                    emoji = "❌" if r["Stock Actual"] <= 0 else "⚠️"
-                    minimo_prod = r["stock_minimo"] if r["stock_minimo"] > 0 else U
-                    lineas.append(f"{emoji} {r['Producto']} | Dep: {r['Deposito']} | Stock: {r['Stock Actual']:,.1f} {r['Unidad']} | Mín: {minimo_prod:,.0f}")
-                msg_masivo = urllib.parse.quote("\n".join(lineas))
-                link_masivo = f"https://wa.me/{st.session_state.wa_numero}?text={msg_masivo}"
-                st.markdown(
-                    f'<a href="{link_masivo}" target="_blank" style="display:inline-flex;align-items:center;background:#25D366;color:white;padding:8px 16px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:0.85rem;margin-bottom:12px;">💬 Reportar {len(criticos_wa)} productos críticos por WhatsApp</a>',
-                    unsafe_allow_html=True
-                )
-
             excel_bin = descargar_excel_agrupado_sin_lote(df_f[["Producto","Código","Unidad","Deposito","Stock Actual"]])
             st.download_button(label="📥 Descargar Comparativa Total", data=excel_bin, file_name='stock_agrupado.xlsx')
 
@@ -471,14 +434,8 @@ with tab1:
                     badge_neg = '<span class="neg-badge">NEGATIVO</span>' if stk_val < 0 else ""
                     # PRO: badge de stock mínimo personalizado
                     badge_min = f'<span class="min-badge">MÍN: {minimo_prod:,.0f}</span>' if item["stock_minimo"] > 0 else ""
-                    
-                    # PRO PROVEEDOR: usar número del proveedor si existe, sino el global
-                    wa_dest = item["wa_proveedor"] if item.get("wa_proveedor","").strip() else st.session_state.wa_numero
                     prov_texto = item.get("proveedor","").strip()
                     prov_html = f'<br><b>🏭 Prov:</b> <span class="label-prov">{prov_texto}</span>' if prov_texto else ""
-
-                    msg_wa = urllib.parse.quote(f"Reporte: {item['Producto']}. Dep: {item['Deposito']}. Stock: {stk_val}")
-                    link_wa = f"https://wa.me/{wa_dest}?text={msg_wa}"
                     st.markdown(f"""
                         <div class="stock-card {clase}">
                             <div class="stock-title">{item['Producto']}{badge_neg}{badge_min}</div>
@@ -488,7 +445,6 @@ with tab1:
                                 <b>📍 Dep:</b> <span class="label-blue">{item['Deposito']}</span>
                                 {prov_html}
                             </div>
-                            <a href="{link_wa}" target="_blank" class="wa-btn">💬 Reportar</a>
                         </div>
                     """, unsafe_allow_html=True)
 
@@ -647,7 +603,8 @@ with tab5:
 
         # Editar en bloque con st.data_editor
         todos_prod_edit = todos_prod.copy()
-        todos_prod_edit.columns = ["Producto", "Stock Mínimo", "Proveedor", "WA Proveedor"]
+        todos_prod_edit = todos_prod_edit[["nombre","stock_minimo","proveedor"]]
+        todos_prod_edit.columns = ["Producto", "Stock Mínimo", "Proveedor"]
 
         df_editado = st.data_editor(
             todos_prod_edit,
@@ -658,7 +615,6 @@ with tab5:
                 "Producto": st.column_config.TextColumn("Producto", disabled=True),
                 "Stock Mínimo": st.column_config.NumberColumn("Stock Mínimo", min_value=0, step=1, help="0 = usar el umbral global"),
                 "Proveedor": st.column_config.TextColumn("Proveedor", help="Nombre del proveedor"),
-                "WA Proveedor": st.column_config.TextColumn("WA Proveedor", help="Número WhatsApp del proveedor (con código de país, sin +). Ej: 5493406999888"),
             },
             key="editor_productos"
         )
@@ -669,12 +625,11 @@ with tab5:
             for _, row in df_editado.iterrows():
                 cursor.execute("""
                     UPDATE productos 
-                    SET stock_minimo = ?, proveedor = ?, wa_proveedor = ?
+                    SET stock_minimo = ?, proveedor = ?
                     WHERE nombre = ?
                 """, (
                     float(row["Stock Mínimo"]) if row["Stock Mínimo"] else 0,
                     str(row["Proveedor"]).strip() if row["Proveedor"] else "",
-                    str(row["WA Proveedor"]).strip() if row["WA Proveedor"] else "",
                     row["Producto"]
                 ))
             conn.commit()
@@ -691,23 +646,6 @@ with tab5:
 # ===================== TAB 6: CONFIGURACIÓN =====================
 with tab6:
     st.subheader("⚙️ Configuración")
-
-    st.markdown("#### 📱 WhatsApp para alertas (número global)")
-    col_wa1, col_wa2 = st.columns([3,1])
-    with col_wa1:
-        nuevo_num = st.text_input(
-            "Número WhatsApp (con código de país, sin +)",
-            value=st.session_state.wa_numero,
-            placeholder="Ej: 5493406123456"
-        )
-    with col_wa2:
-        st.write("")
-        st.write("")
-        if st.button("💾 Guardar"):
-            st.session_state.wa_numero = nuevo_num.strip()
-            st.success("✅ Número guardado.")
-
-    st.markdown("---")
 
     st.markdown("#### 🚨 Umbral de stock crítico global")
     st.caption("Se aplica a los productos que no tienen stock mínimo propio configurado en la pestaña Productos.")
