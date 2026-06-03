@@ -16,71 +16,35 @@ st.markdown("""
     <style>
     .main { background-color: #f4f7f6; }
     .stButton>button { width: 100%; border-radius: 8px; font-weight: bold; height: 3em; }
-    
     .stock-card {
-        background-color: white; 
-        padding: 18px; 
-        border-radius: 12px;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.05); 
-        margin-bottom: 12px;
-        border: 1px solid #e1e4e8;
-        position: relative;
+        background-color: white; padding: 18px; border-radius: 12px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 12px;
+        border: 1px solid #e1e4e8; position: relative;
     }
     .card-normal { border-left: 8px solid #28a745; } 
     .card-low { border-left: 8px solid #ffc107; }      
     .card-warning { border-left: 8px solid #dc3545; } 
-    
     .stock-title { font-size: 0.95rem; color: #1a1c21; font-weight: 700; margin-bottom: 8px; line-height: 1.2; min-height: 2.4em; }
     .stock-value { font-size: 1.5rem; color: #007bff; font-weight: 800; display: block; }
     .stock-unit { font-size: 0.8rem; color: #6c757d; font-weight: 400; }
-    
-    .status-badge {
-        position: absolute;
-        top: 10px;
-        right: 10px;
-        font-size: 0.7rem;
-        padding: 2px 8px;
-        border-radius: 10px;
-        color: white;
-        font-weight: bold;
-    }
-    .bg-normal { background-color: #28a745; }
-    .bg-low { background-color: #ffc107; color: #000; }
-    .bg-warning { background-color: #dc3545; }
-
     .stock-info { 
-        margin-top: 10px; 
-        padding-top: 8px; 
-        border-top: 1px solid #f0f2f6; 
-        font-size: 0.8rem; 
-        color: #495057; 
+        margin-top: 10px; padding-top: 8px; border-top: 1px solid #f0f2f6; 
+        font-size: 0.8rem; color: #495057; 
     }
     .label-blue { background-color: #e7f3ff; color: #007bff; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
-    
-    .wa-btn {
-        display: inline-flex;
-        align-items: center;
-        background-color: #25D366;
-        color: white !important;
-        padding: 5px 10px;
-        border-radius: 6px;
-        text-decoration: none;
-        font-size: 0.75rem;
-        font-weight: bold;
-        margin-top: 10px;
-    }
-
     .neg-badge {
-        display: inline-block;
-        background-color: #dc3545;
-        color: white;
-        font-size: 0.65rem;
-        padding: 1px 6px;
-        border-radius: 8px;
-        font-weight: bold;
-        margin-left: 4px;
-        vertical-align: middle;
+        display: inline-block; background-color: #dc3545; color: white;
+        font-size: 0.65rem; padding: 1px 6px; border-radius: 8px;
+        font-weight: bold; margin-left: 4px; vertical-align: middle;
     }
+    .entrega-card {
+        background: white; border-radius: 10px; padding: 14px 16px;
+        border: 1px solid #e1e4e8; margin-bottom: 8px;
+        border-left: 6px solid #6c757d;
+    }
+    .entrega-vigente { border-left-color: #007bff; }
+    .entrega-entregado { border-left-color: #28a745; }
+    .entrega-pendiente { border-left-color: #ffc107; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -113,18 +77,35 @@ def inicializar_db():
             FOREIGN KEY (id_producto) REFERENCES productos(id_producto)
         )
     """)
-    # Migraciones seguras
-    try: cursor.execute("ALTER TABLE productos ADD COLUMN codigo TEXT")
-    except: pass
-    try: cursor.execute("ALTER TABLE movimientos ADD COLUMN origen TEXT")
-    except: pass
-    # Tabla para metadata (última actualización, etc.)
+    # Tabla entregas Monsanto/Bayer
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS entregas (
+            id_entrega INTEGER PRIMARY KEY AUTOINCREMENT,
+            rto_monsanto TEXT,
+            dia_recibido TEXT,
+            cliente TEXT,
+            cantidad_comprada REAL,
+            producto TEXT,
+            cant_entregada REAL,
+            pendiente REAL,
+            estado TEXT,
+            vendedor TEXT,
+            descontado_stock INTEGER DEFAULT 0
+        )
+    """)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS metadata (
             clave TEXT PRIMARY KEY,
             valor TEXT
         )
     """)
+    migraciones = [
+        "ALTER TABLE productos ADD COLUMN codigo TEXT",
+        "ALTER TABLE movimientos ADD COLUMN origen TEXT",
+    ]
+    for m in migraciones:
+        try: cursor.execute(m)
+        except: pass
     conn.commit()
     conn.close()
 
@@ -137,13 +118,10 @@ def borrar_datos_totales():
     conn.commit()
     conn.close()
 
-# PRO 1: Borra solo movimientos de tipo "importacion" (origen='excel'), conserva los manuales
 def borrar_solo_importacion():
     conn = conectar_db()
     cursor = conn.cursor()
-    # Borrar movimientos del excel anterior
     cursor.execute("DELETE FROM movimientos WHERE origen = 'excel' OR origen IS NULL")
-    # Borrar productos que ya no tienen ningún movimiento manual
     cursor.execute("""
         DELETE FROM productos 
         WHERE id_producto NOT IN (SELECT DISTINCT id_producto FROM movimientos)
@@ -169,7 +147,8 @@ def obtener_metadata(clave):
 def obtener_stock_con_lote():
     conn = conectar_db()
     query = """
-        SELECT p.nombre as Producto, p.codigo as Código, p.unidad as Unidad, m.lote as Lote, m.deposito as Deposito, 
+        SELECT p.nombre as Producto, p.codigo as Código, p.unidad as Unidad, 
+               m.lote as Lote, m.deposito as Deposito, 
                m.tipo_movimiento, m.cantidad 
         FROM movimientos m 
         JOIN productos p ON m.id_producto = p.id_producto
@@ -179,9 +158,7 @@ def obtener_stock_con_lote():
     except:
         df = pd.DataFrame()
     conn.close()
-    
     if df.empty: return pd.DataFrame()
-    
     df["neta"] = df.apply(lambda r: r["cantidad"] if r["tipo_movimiento"] == "Entrada" else -r["cantidad"], axis=1)
     res = df.groupby(["Producto", "Código", "Unidad", "Lote", "Deposito"])["neta"].sum().reset_index()
     return res.rename(columns={"neta": "Stock Actual"})
@@ -207,6 +184,15 @@ def obtener_historial_movimientos():
     """
     try:
         df = pd.read_sql_query(query, conn)
+    except:
+        df = pd.DataFrame()
+    conn.close()
+    return df
+
+def obtener_entregas():
+    conn = conectar_db()
+    try:
+        df = pd.read_sql_query("SELECT * FROM entregas ORDER BY dia_recibido DESC", conn)
     except:
         df = pd.DataFrame()
     conn.close()
@@ -259,12 +245,22 @@ if 'wa_numero' not in st.session_state:
     st.session_state.wa_numero = "5493406123456"
 if 'umbral_alerta' not in st.session_state:
     st.session_state.umbral_alerta = 20
+if 'mov_pendiente' not in st.session_state:
+    st.session_state.mov_pendiente = None
 
 # --- 4. INTERFAZ ---
 st.title("🧪 Control de Depósito Inteligente")
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["⚡ Panel de Control", "📋 Planilla Toma Stock", "📜 Historial", "📊 Análisis", "⚙️ Configuración"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    "⚡ Panel de Control",
+    "📦 Entregas Monsanto/Bayer",
+    "📋 Planilla Toma Stock",
+    "📜 Historial",
+    "📊 Análisis",
+    "⚙️ Configuración"
+])
 
+# ===================== TAB 1: PANEL =====================
 with tab1:
     stock_df = obtener_stock_full()
     
@@ -272,14 +268,11 @@ with tab1:
         st.warning("⚠️ No hay datos cargados. Por favor, subí el archivo en la pestaña 'Configuración'.")
     else:
         U = st.session_state.umbral_alerta
-
-        # PRO 5: Fecha de última actualización
         ultima_actualizacion = obtener_metadata("ultima_importacion")
         if ultima_actualizacion:
             st.caption(f"🕐 Última importación del Excel: **{ultima_actualizacion}**")
 
         df_kpi = stock_df.copy()
-        # PRO 4: negativos siempre visibles en KPI
         negativos_n = len(df_kpi[df_kpi["Stock Actual"] < 0])
         c_kpi1, c_kpi2, c_kpi3, c_kpi4, c_kpi5 = st.columns(5)
         with c_kpi1: st.metric("Total Productos", len(df_kpi["Producto"].unique()))
@@ -301,7 +294,6 @@ with tab1:
                 foto_camara = st.camera_input("Cámara", key="qr_camara")
             with col_file:
                 foto_archivo = st.file_uploader("O subí imagen", type=["png","jpg","jpeg"], key="qr_file")
-            
             foto_qr = foto_camara or foto_archivo
             if foto_qr:
                 resultado_qr = decodificar_qr_reforzado(foto_qr)
@@ -332,7 +324,6 @@ with tab1:
             st.write("Ver:")
             hide_neg = st.toggle("Solo con stock positivo", value=True)
             filter_reponer = st.toggle(f"🚨 Reponer (<{U})", value=False)
-            # PRO 4: toggle para ver siempre negativos
             show_neg_forced = st.toggle("⚠️ Mostrar negativos siempre", value=True)
 
         df_f = stock_df.copy()
@@ -345,11 +336,8 @@ with tab1:
             df_f = df_f[df_f["Producto"] == st.session_state.qr_detectado]
         if f_depo != "Todos":
             df_f = df_f[df_f["Deposito"] == f_depo]
-
-        # PRO 4: lógica de filtrado que siempre incluye negativos si el toggle está activo
         if hide_neg:
             if show_neg_forced:
-                # Mostrar los que tienen stock > 0 UNION los negativos
                 df_f = df_f[(df_f["Stock Actual"] > 0) | (df_f["Stock Actual"] < 0)]
             else:
                 df_f = df_f[df_f["Stock Actual"] > 0]
@@ -357,21 +345,6 @@ with tab1:
             df_f = df_f[df_f["Stock Actual"] < U]
 
         if not df_f.empty:
-            # PRO 3: Botón de reporte masivo por WhatsApp
-            criticos_wa = df_f[df_f["Stock Actual"] < U]
-            if not criticos_wa.empty:
-                lineas = [f"🚨 REPORTE STOCK CRÍTICO - {datetime.now().strftime('%d/%m/%Y %H:%M')}"]
-                lineas.append(f"Umbral: {U} unidades\n")
-                for _, r in criticos_wa.iterrows():
-                    emoji = "❌" if r["Stock Actual"] <= 0 else "⚠️"
-                    lineas.append(f"{emoji} {r['Producto']} | Dep: {r['Deposito']} | Stock: {r['Stock Actual']:,.1f} {r['Unidad']}")
-                msg_masivo = urllib.parse.quote("\n".join(lineas))
-                link_masivo = f"https://wa.me/{st.session_state.wa_numero}?text={msg_masivo}"
-                st.markdown(
-                    f'<a href="{link_masivo}" target="_blank" style="display:inline-flex;align-items:center;background:#25D366;color:white;padding:8px 16px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:0.85rem;margin-bottom:12px;">💬 Reportar {len(criticos_wa)} productos críticos por WhatsApp</a>',
-                    unsafe_allow_html=True
-                )
-
             excel_bin = descargar_excel_agrupado_sin_lote(df_f)
             st.download_button(label="📥 Descargar Comparativa Total", data=excel_bin, file_name='stock_agrupado.xlsx')
 
@@ -381,16 +354,12 @@ with tab1:
                 with cols_grid[i % 4]:
                     stk_val = item['Stock Actual']
                     clase = "card-warning" if stk_val <= 0 else ("card-low" if stk_val < U else "card-normal")
-                    # PRO 4: badge "NEGATIVO" visible en la card
                     badge_neg = '<span class="neg-badge">NEGATIVO</span>' if stk_val < 0 else ""
-                    msg_wa = urllib.parse.quote(f"Reporte: {item['Producto']}. Dep: {item['Deposito']}. Stock: {stk_val}")
-                    link_wa = f"https://wa.me/{st.session_state.wa_numero}?text={msg_wa}"
                     st.markdown(f"""
                         <div class="stock-card {clase}">
                             <div class="stock-title">{item['Producto']}{badge_neg}</div>
                             <span class="stock-value">{stk_val:,.1f} <small class="stock-unit">{item['Unidad']}</small></span>
                             <div class="stock-info"><b>🆔 Cód:</b> {item['Código']}<br><b>📍 Dep:</b> <span class="label-blue">{item['Deposito']}</span></div>
-                            <a href="{link_wa}" target="_blank" class="wa-btn">💬 Reportar</a>
                         </div>
                     """, unsafe_allow_html=True)
 
@@ -406,26 +375,228 @@ with tab1:
             lote_mov = st.text_input("Lote (opcional)", value="S/L", key="mov_lote")
             ref_mov = st.text_input("Referencia (opcional)", value="", key="mov_ref")
 
-            if st.button("✅ Registrar movimiento"):
+            if st.session_state.mov_pendiente is None:
+                if st.button("📋 Preparar movimiento"):
+                    st.session_state.mov_pendiente = {
+                        "producto": prod_sel, "tipo": tipo_mov,
+                        "cantidad": cantidad_mov, "deposito": deposito_mov,
+                        "lote": lote_mov, "referencia": ref_mov
+                    }
+                    st.rerun()
+            else:
+                p = st.session_state.mov_pendiente
+                st.warning(f"""
+                **¿Confirmar este movimiento?**
+                - **Tipo:** {p['tipo']}  
+                - **Producto:** {p['producto']}  
+                - **Cantidad:** {p['cantidad']:,.2f}  
+                - **Depósito:** {p['deposito']}  
+                - **Lote:** {p['lote']}
+                """)
+                col_conf1, col_conf2 = st.columns(2)
+                with col_conf1:
+                    if st.button("✅ Confirmar y registrar", type="primary"):
+                        conn = conectar_db()
+                        cursor = conn.cursor()
+                        cursor.execute("SELECT id_producto FROM productos WHERE nombre = ?", (p["producto"],))
+                        id_p = cursor.fetchone()
+                        if id_p:
+                            cursor.execute("""
+                                INSERT INTO movimientos 
+                                (fecha_hora, tipo_movimiento, id_producto, cantidad, lote, referencia, deposito, origen)
+                                VALUES (?,?,?,?,?,?,?,?)
+                            """, (datetime.now().strftime("%d/%m/%Y %H:%M"), p["tipo"],
+                                  id_p[0], p["cantidad"], p["lote"], p["referencia"], p["deposito"], "manual"))
+                            conn.commit()
+                            st.success(f"✅ Registrado.")
+                        conn.close()
+                        st.session_state.mov_pendiente = None
+                        st.rerun()
+                with col_conf2:
+                    if st.button("❌ Cancelar"):
+                        st.session_state.mov_pendiente = None
+                        st.rerun()
+
+# ===================== TAB 2: ENTREGAS MONSANTO/BAYER =====================
+with tab2:
+    st.subheader("📦 Entregas Monsanto / Bayer — Campaña 2024/2025")
+
+    entregas_df = obtener_entregas()
+
+    # Sección de importación del Excel de entregas
+    with st.expander("📂 Importar / Actualizar archivo de entregas", expanded=entregas_df.empty):
+        st.info("Subí el archivo de entregas Monsanto/Bayer. Se reemplazará el registro anterior de entregas.")
+        arch_entregas = st.file_uploader("Archivo de entregas (.xlsx)", type=["xlsx","xls"], key="uploader_entregas")
+
+        col_op1, col_op2 = st.columns(2)
+        with col_op1:
+            descontar_stock = st.toggle(
+                "🔄 Registrar entregas como Salidas de stock",
+                value=False,
+                help="Si activás esto, cada fila con CANT. ENTREGADA > 0 se registrará como un movimiento de Salida en el stock, descontando automáticamente."
+            )
+        with col_op2:
+            deposito_entregas = st.selectbox(
+                "Depósito origen de las entregas",
+                options=obtener_stock_full()["Deposito"].unique().tolist() if not obtener_stock_full().empty else ["0"],
+                key="dep_entregas"
+            ) if descontar_stock else None
+
+        if arch_entregas and st.button("🚀 IMPORTAR ENTREGAS", type="primary"):
+            try:
+                df_e = pd.read_excel(arch_entregas, header=1)
+                df_e.columns = [str(c).strip() for c in df_e.columns]
+
+                # Calcular pendiente real (unifica columna PENDIENTE y Unnamed: 7)
+                col_pend2 = "Unnamed: 7" if "Unnamed: 7" in df_e.columns else None
+                df_e["pendiente_real"] = df_e["PENDIENTE"].fillna(0)
+                if col_pend2:
+                    df_e["pendiente_real"] = df_e["pendiente_real"] + df_e[col_pend2].fillna(0)
+
+                df_e["DIA RECIBIDO"] = pd.to_datetime(df_e["DIA RECIBIDO"], errors="coerce")
+
                 conn = conectar_db()
                 cursor = conn.cursor()
-                cursor.execute("SELECT id_producto FROM productos WHERE nombre = ?", (prod_sel,))
-                id_p = cursor.fetchone()
-                if id_p:
-                    cursor.execute("""
-                        INSERT INTO movimientos 
-                        (fecha_hora, tipo_movimiento, id_producto, cantidad, lote, referencia, deposito, origen)
-                        VALUES (?,?,?,?,?,?,?,?)
-                    """, (datetime.now().strftime("%d/%m/%Y %H:%M"), tipo_mov,
-                          id_p[0], cantidad_mov, lote_mov, ref_mov, deposito_mov, "manual"))
-                    conn.commit()
-                    st.success(f"✅ {tipo_mov} de {cantidad_mov:.2f} registrada para **{prod_sel}** en depósito **{deposito_mov}**.")
-                    st.rerun()
-                else:
-                    st.error("No se encontró el producto en la base de datos.")
-                conn.close()
+                # Limpiar entregas anteriores
+                cursor.execute("DELETE FROM entregas")
 
-with tab2:
+                filas_ok = 0
+                filas_salida = 0
+                productos_no_match = []
+
+                for _, row in df_e.iterrows():
+                    prod = str(row.get("PRODUCTO","")).strip()
+                    if not prod or prod.lower() == "nan":
+                        continue
+
+                    cliente = str(row.get("CLIENTE","")).strip()
+                    rto = str(row.get("RTO MONSANTO","")).strip()
+                    fecha = row["DIA RECIBIDO"].strftime("%d/%m/%Y") if pd.notna(row["DIA RECIBIDO"]) else ""
+                    cant_comprada = float(row.get("CANTIDAD COMPRADA", 0) or 0)
+                    cant_entregada = float(row.get("CANT. ENTREGADA", 0) or 0)
+                    pendiente = float(row.get("pendiente_real", 0) or 0)
+                    estado = str(row.get("ESTADO","")).strip()
+                    vendedor = str(row.get("VENDEDOR","")).strip()
+
+                    cursor.execute("""
+                        INSERT INTO entregas 
+                        (rto_monsanto, dia_recibido, cliente, cantidad_comprada, producto,
+                         cant_entregada, pendiente, estado, vendedor, descontado_stock)
+                        VALUES (?,?,?,?,?,?,?,?,?,?)
+                    """, (rto, fecha, cliente, cant_comprada, prod,
+                          cant_entregada, pendiente, estado, vendedor, 0))
+                    filas_ok += 1
+
+                    # Opción B: descontar del stock como movimiento de Salida
+                    if descontar_stock and cant_entregada > 0:
+                        cursor.execute("SELECT id_producto FROM productos WHERE nombre = ?", (prod,))
+                        match = cursor.fetchone()
+                        if match:
+                            cursor.execute("""
+                                INSERT INTO movimientos 
+                                (fecha_hora, tipo_movimiento, id_producto, cantidad, lote, referencia, deposito, origen)
+                                VALUES (?,?,?,?,?,?,?,?)
+                            """, (fecha or datetime.now().strftime("%d/%m/%Y"),
+                                  "Salida", match[0], cant_entregada,
+                                  "S/L", f"Entrega a {cliente}", deposito_entregas, "entrega"))
+                            filas_salida += 1
+                        else:
+                            if prod not in productos_no_match:
+                                productos_no_match.append(prod)
+
+                conn.commit()
+                conn.close()
+                guardar_metadata("ultima_importacion_entregas", datetime.now().strftime("%d/%m/%Y %H:%M"))
+
+                msg = f"✅ {filas_ok} entregas importadas."
+                if descontar_stock:
+                    msg += f" {filas_salida} movimientos de salida registrados en stock."
+                st.success(msg)
+                if productos_no_match:
+                    st.warning(f"⚠️ Estos productos del archivo de entregas no coincidieron con el stock (no se descontaron): {', '.join(productos_no_match)}")
+                st.rerun()
+
+            except Exception as ex:
+                st.error(f"❌ Error al importar: {ex}")
+
+    if not entregas_df.empty:
+        ultima_ent = obtener_metadata("ultima_importacion_entregas")
+        if ultima_ent:
+            st.caption(f"🕐 Última importación de entregas: **{ultima_ent}**")
+
+        # KPIs de entregas
+        total_comprado = entregas_df["cantidad_comprada"].sum()
+        total_entregado = entregas_df["cant_entregada"].sum()
+        total_pendiente = entregas_df["pendiente"].sum()
+        pct_entregado = (total_entregado / total_comprado * 100) if total_comprado > 0 else 0
+
+        ck1, ck2, ck3, ck4 = st.columns(4)
+        with ck1: st.metric("Clientes únicos", entregas_df["cliente"].nunique())
+        with ck2: st.metric("Total comprado", f"{total_comprado:,.0f}")
+        with ck3: st.metric("Total entregado", f"{total_entregado:,.0f}", delta=f"{pct_entregado:.1f}%")
+        with ck4: st.metric("Pendiente total", f"{total_pendiente:,.0f}", delta=f"-{total_pendiente:,.0f}", delta_color="inverse")
+
+        st.markdown("---")
+
+        # Filtros
+        cf1, cf2, cf3, cf4 = st.columns(4)
+        with cf1:
+            f_estado = st.selectbox("Estado", ["Todos"] + sorted(entregas_df["estado"].dropna().unique().tolist()), key="f_est")
+        with cf2:
+            f_prod_e = st.selectbox("Producto", ["Todos"] + sorted(entregas_df["producto"].dropna().unique().tolist()), key="f_prod_e")
+        with cf3:
+            f_vend = st.selectbox("Vendedor", ["Todos"] + sorted(entregas_df["vendedor"].dropna().unique().tolist()), key="f_vend")
+        with cf4:
+            f_cliente = st.text_input("🔍 Buscar cliente", placeholder="Nombre...", key="f_cli")
+
+        df_e_f = entregas_df.copy()
+        if f_estado != "Todos": df_e_f = df_e_f[df_e_f["estado"] == f_estado]
+        if f_prod_e != "Todos": df_e_f = df_e_f[df_e_f["producto"] == f_prod_e]
+        if f_vend != "Todos": df_e_f = df_e_f[df_e_f["vendedor"] == f_vend]
+        if f_cliente: df_e_f = df_e_f[df_e_f["cliente"].str.contains(f_cliente, case=False, na=False)]
+
+        st.markdown(f"**{len(df_e_f)} registros** encontrados")
+
+        # Subtotales por producto filtrado
+        if not df_e_f.empty:
+            sub = df_e_f.groupby("producto").agg(
+                Comprado=("cantidad_comprada","sum"),
+                Entregado=("cant_entregada","sum"),
+                Pendiente=("pendiente","sum"),
+                Clientes=("cliente","nunique")
+            ).reset_index().rename(columns={"producto":"Producto"})
+            sub["% Entregado"] = (sub["Entregado"] / sub["Comprado"] * 100).round(1).astype(str) + "%"
+            st.dataframe(sub, use_container_width=True, hide_index=True)
+
+            st.markdown("---")
+
+            # Tabla detalle
+            cols_mostrar = ["dia_recibido","cliente","producto","cantidad_comprada","cant_entregada","pendiente","estado","vendedor"]
+            cols_mostrar = [c for c in cols_mostrar if c in df_e_f.columns]
+            df_tabla = df_e_f[cols_mostrar].copy()
+            df_tabla.columns = ["Fecha","Cliente","Producto","Comprado","Entregado","Pendiente","Estado","Vendedor"]
+            st.dataframe(df_tabla, use_container_width=True, hide_index=True)
+
+            # Exportar
+            output_e = io.BytesIO()
+            with pd.ExcelWriter(output_e, engine='openpyxl') as writer:
+                df_tabla.to_excel(writer, index=False, sheet_name='Entregas')
+            st.download_button("📥 Exportar vista actual", data=output_e.getvalue(), file_name="entregas_filtradas.xlsx")
+
+            # Gráfico de pendiente por producto
+            if df_e_f["pendiente"].sum() > 0:
+                st.markdown("---")
+                st.subheader("📊 Pendiente por producto")
+                pend_chart = df_e_f[df_e_f["pendiente"] > 0].groupby("producto")["pendiente"].sum().reset_index()
+                fig_pend = px.bar(pend_chart, x="producto", y="pendiente",
+                                  color="pendiente", color_continuous_scale="Reds",
+                                  labels={"producto":"Producto","pendiente":"Pendiente"})
+                st.plotly_chart(fig_pend, use_container_width=True)
+    else:
+        st.info("Sin entregas cargadas. Usá el importador de arriba para cargar el archivo de Monsanto/Bayer.")
+
+# ===================== TAB 3: PLANILLA =====================
+with tab3:
     st.subheader("📋 Planilla para Inventario Físico (CON LOTES)")
     stock_lotes = obtener_stock_con_lote()
     if not stock_lotes.empty:
@@ -437,7 +608,8 @@ with tab2:
     else:
         st.info("Sin datos cargados.")
 
-with tab3:
+# ===================== TAB 4: HISTORIAL =====================
+with tab4:
     st.subheader("📜 Historial de Movimientos")
     hist_df = obtener_historial_movimientos()
     if not hist_df.empty:
@@ -449,7 +621,7 @@ with tab3:
         with c_hf3:
             f_dep_h = st.selectbox("Depósito", ["Todos"] + sorted(hist_df["Depósito"].unique().tolist()), key="h_dep")
         with c_hf4:
-            f_origen_h = st.selectbox("Origen", ["Todos", "manual", "excel"], key="h_origen")
+            f_origen_h = st.selectbox("Origen", ["Todos", "manual", "excel", "entrega"], key="h_origen")
 
         df_h = hist_df.copy()
         if f_tipo_h != "Todos": df_h = df_h[df_h["Tipo"] == f_tipo_h]
@@ -459,8 +631,8 @@ with tab3:
 
         c_hkpi1, c_hkpi2, c_hkpi3, c_hkpi4 = st.columns(4)
         with c_hkpi1: st.metric("Movimientos mostrados", len(df_h))
-        with c_hkpi2: st.metric("Total entradas", len(df_h[df_h["Tipo"] == "Entrada"]))
-        with c_hkpi3: st.metric("Total salidas", len(df_h[df_h["Tipo"] == "Salida"]))
+        with c_hkpi2: st.metric("Entradas", len(df_h[df_h["Tipo"] == "Entrada"]))
+        with c_hkpi3: st.metric("Salidas", len(df_h[df_h["Tipo"] == "Salida"]))
         with c_hkpi4: st.metric("Manuales", len(df_h[df_h["Origen"] == "manual"]))
 
         st.dataframe(df_h.drop(columns=["ID"]), use_container_width=True, hide_index=True)
@@ -472,35 +644,49 @@ with tab3:
     else:
         st.info("Sin movimientos registrados.")
 
-with tab4:
+# ===================== TAB 5: ANÁLISIS =====================
+with tab5:
     stock_df_an = obtener_stock_full()
     if not stock_df_an.empty:
         st.subheader("Top 10 productos por stock")
         df_pareto = stock_df_an.groupby("Producto")["Stock Actual"].sum().sort_values(ascending=False).head(10).reset_index()
-        fig_pareto = px.bar(df_pareto, x='Stock Actual', y='Producto', orientation='h', color='Stock Actual', color_continuous_scale='Greens')
+        fig_pareto = px.bar(df_pareto, x='Stock Actual', y='Producto', orientation='h',
+                            color='Stock Actual', color_continuous_scale='Greens')
         st.plotly_chart(fig_pareto, use_container_width=True)
 
         st.subheader("Distribución por depósito")
         df_dep = stock_df_an.groupby("Deposito")["Stock Actual"].sum().reset_index()
-        fig_dep = px.pie(
-            df_dep, names="Deposito", values="Stock Actual",
-            color_discrete_sequence=px.colors.qualitative.Set2
-        )
+        fig_dep = px.pie(df_dep, names="Deposito", values="Stock Actual",
+                         color_discrete_sequence=px.colors.qualitative.Set2)
         fig_dep.update_traces(textposition='inside', textinfo='percent+label')
         st.plotly_chart(fig_dep, use_container_width=True)
 
         st.subheader("Resumen por depósito")
         df_resumen = stock_df_an.groupby("Deposito").agg(
-            Productos=("Producto", "nunique"),
-            Stock_Total=("Stock Actual", "sum"),
-            Stock_Promedio=("Stock Actual", "mean")
+            Productos=("Producto","nunique"),
+            Stock_Total=("Stock Actual","sum"),
+            Stock_Promedio=("Stock Actual","mean")
         ).reset_index()
         df_resumen["Stock_Promedio"] = df_resumen["Stock_Promedio"].round(1)
         st.dataframe(df_resumen, use_container_width=True, hide_index=True)
+
+        # Cruce entregas vs stock
+        entregas_an = obtener_entregas()
+        if not entregas_an.empty:
+            st.markdown("---")
+            st.subheader("🔗 Cruce: Stock actual vs Pendiente de entrega")
+            pend_by_prod = entregas_an[entregas_an["pendiente"] > 0].groupby("producto")["pendiente"].sum().reset_index()
+            pend_by_prod.columns = ["Producto", "Pendiente entregas"]
+            stock_tot = stock_df_an.groupby("Producto")["Stock Actual"].sum().reset_index()
+            cruce = stock_tot.merge(pend_by_prod, on="Producto", how="inner")
+            cruce["Diferencia"] = cruce["Stock Actual"] - cruce["Pendiente entregas"]
+            cruce["Estado"] = cruce["Diferencia"].apply(lambda x: "✅ Alcanza" if x >= 0 else "❌ Falta")
+            st.dataframe(cruce, use_container_width=True, hide_index=True)
     else:
         st.info("Sin datos para analizar.")
 
-with tab5:
+# ===================== TAB 6: CONFIGURACIÓN =====================
+with tab6:
     st.subheader("⚙️ Configuración")
 
     st.markdown("#### 📱 WhatsApp para alertas")
@@ -519,7 +705,6 @@ with tab5:
             st.success("✅ Número guardado.")
 
     st.markdown("---")
-
     st.markdown("#### 🚨 Umbral de stock crítico")
     nuevo_umbral = st.slider(
         "Stock mínimo antes de alertar (unidades)",
@@ -532,10 +717,7 @@ with tab5:
         st.rerun()
 
     st.markdown("---")
-
-    st.markdown("#### 📂 Importar datos")
-
-    # PRO 1: aviso sobre comportamiento de la importación
+    st.markdown("#### 📂 Importar datos de stock")
     st.info("💡 La importación **conserva tus movimientos manuales**. Solo reemplaza los datos del Excel anterior.")
 
     archivo = st.file_uploader("Subí el archivo 'export 3.xlsx' o 'export 3.csv'", type=["xlsx", "csv", "xls"])
@@ -546,7 +728,6 @@ with tab5:
                 df_import = pd.read_csv(archivo, encoding='latin1')
             else:
                 df_import = pd.read_excel(archivo)
-                
             df_import.columns = [str(c).strip().lower() for c in df_import.columns]
             
             col_nombre = None
@@ -556,38 +737,29 @@ with tab5:
                 col_nombre = 'descripcion_1'
 
             if col_nombre and 'stock_actual' in df_import.columns:
-                # PRO 1: borrar solo los movimientos del excel anterior, NO los manuales
                 borrar_solo_importacion()
-
                 conn = conectar_db()
                 cursor = conn.cursor()
                 filas_ok = 0
-                
                 for _, row in df_import.iterrows():
                     nom = str(row[col_nombre]).strip()
                     if pd.isna(row[col_nombre]) or nom == "" or nom.lower() == "nan": 
                         continue
-                        
                     cod = str(row['codigo']).strip() if 'codigo' in df_import.columns else "S/C"
                     uni = str(row['unidad_medida']).strip() if 'unidad_medida' in df_import.columns else "UNID"
                     dep = str(row['deposito']).strip() if 'deposito' in df_import.columns else "0"
                     lot = str(row['lote']).strip() if 'lote' in df_import.columns and not pd.isna(row['lote']) and str(row['lote']).strip() != "" else "S/L"
-                    
                     cursor.execute("INSERT OR IGNORE INTO productos (nombre, unidad, codigo) VALUES (?,?,?)", (nom, uni, cod))
                     cursor.execute("SELECT id_producto FROM productos WHERE nombre = ?", (nom,))
                     id_p = cursor.fetchone()[0]
-                    
                     val_raw = str(row['stock_actual']).strip()
                     if pd.isna(row['stock_actual']) or val_raw == "" or val_raw.lower() == "nan":
                         continue
-                        
                     if '.' in val_raw and ',' in val_raw:
                         val_raw = val_raw.replace('.', '')
                     val_raw = val_raw.replace(',', '.')
-                    
                     try:
                         v = float(val_raw)
-                        # PRO 1: marcar origen='excel' para poder borrarlos en la próxima importación
                         cursor.execute("""
                             INSERT INTO movimientos (fecha_hora, tipo_movimiento, id_producto, cantidad, lote, deposito, origen) 
                             VALUES (?,?,?,?,?,?,?)
@@ -595,13 +767,9 @@ with tab5:
                         filas_ok += 1
                     except:
                         continue
-                        
                 conn.commit()
                 conn.close()
-
-                # PRO 5: guardar fecha de última importación
                 guardar_metadata("ultima_importacion", datetime.now().strftime("%d/%m/%Y %H:%M"))
-
                 st.success(f"✅ Importación exitosa. {filas_ok} registros cargados. Movimientos manuales conservados.")
                 st.rerun()
             else:
@@ -613,13 +781,23 @@ with tab5:
     st.markdown("---")
     st.markdown("#### 🗑️ Zona peligrosa")
     with st.expander("⚠️ Borrar todos los datos"):
-        st.warning("Esta acción elimina TODOS los productos y movimientos (incluidos manuales). No se puede deshacer.")
+        st.warning("Esta acción elimina TODOS los productos, movimientos y entregas. No se puede deshacer.")
         confirmar = st.text_input("Escribí CONFIRMAR para habilitar el botón", key="confirm_borrar")
         if confirmar == "CONFIRMAR":
-            if st.button("🗑️ Borrar todo", type="primary"):
-                borrar_datos_totales()
-                st.success("Base de datos limpiada.")
-                st.rerun()
+            col_b1, col_b2 = st.columns(2)
+            with col_b1:
+                if st.button("🗑️ Borrar stock y movimientos", type="primary"):
+                    borrar_datos_totales()
+                    st.success("Stock limpiado.")
+                    st.rerun()
+            with col_b2:
+                if st.button("🗑️ Borrar solo entregas"):
+                    conn = conectar_db()
+                    conn.execute("DELETE FROM entregas")
+                    conn.commit()
+                    conn.close()
+                    st.success("Entregas eliminadas.")
+                    st.rerun()
 
 st.markdown("---")
 st.caption("Creado por Ignacio Diaz")
