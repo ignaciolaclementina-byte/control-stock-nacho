@@ -62,37 +62,12 @@ def inicializar_db():
             FOREIGN KEY (id_producto) REFERENCES productos(id_producto)
         )
     """)
-    # Tabla unificada de entregas garantizando la columna 'hoja'
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS entregas (
-            id_entrega INTEGER PRIMARY KEY AUTOINCREMENT,
-            hoja TEXT,
-            rto TEXT,
-            dia_recibido TEXT,
-            cliente TEXT,
-            deposito TEXT,
-            cantidad_comprada REAL,
-            producto TEXT,
-            lote TEXT,
-            cant_entregada REAL,
-            pendiente REAL,
-            estado TEXT,
-            vendedor TEXT
-        )
-    """)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS metadata (
             clave TEXT PRIMARY KEY,
             valor TEXT
         )
     """)
-    
-    # Verificación de columnas críticas por migración manual limpia
-    try:
-        cursor.execute("ALTER TABLE entregas ADD COLUMN hoja TEXT")
-    except:
-        pass
-        
     migraciones = [
         "ALTER TABLE productos ADD COLUMN codigo TEXT",
         "ALTER TABLE movimientos ADD COLUMN origen TEXT",
@@ -109,7 +84,7 @@ def borrar_datos_totales():
     cursor.execute("DELETE FROM movimientos")
     cursor.execute("DELETE FROM productos")
     cursor.execute("DELETE FROM metadata")
-    cursor.execute("DELETE FROM entregas")
+    cursor.execute("DROP TABLE IF EXISTS entregas")
     conn.commit()
     conn.close()
 
@@ -179,7 +154,8 @@ def obtener_entregas(hoja=None):
             df = pd.read_sql_query("SELECT * FROM entregas WHERE hoja=? ORDER BY dia_recibido DESC", conn, params=(hoja,))
         else:
             df = pd.read_sql_query("SELECT * FROM entregas ORDER BY hoja, dia_recibido DESC", conn)
-    except: df = pd.DataFrame()
+    except: 
+        df = pd.DataFrame()
     conn.close()
     return df
 
@@ -217,15 +193,6 @@ def descargar_planilla_inventario(df):
         df_planilla.to_excel(writer, index=False, sheet_name='Toma_Stock')
     return output.getvalue()
 
-def safe_float(val):
-    """Convierte de forma segura celdas vacías, NaN o NaT a float 0.0"""
-    if pd.isna(val) or val is None:
-        return 0.0
-    try:
-        return float(val)
-    except:
-        return 0.0
-
 def parsear_entregas_excel(archivo):
     registros = []
 
@@ -237,22 +204,27 @@ def parsear_entregas_excel(archivo):
         pend_extra = "Unnamed: 7" if "Unnamed: 7" in df.columns else None
         for _, r in df.iterrows():
             prod = str(r.get("PRODUCTO","")).strip()
-            if not prod or prod.lower() in ["nan", ""]: continue
-            pend = safe_float(r.get("PENDIENTE", 0))
-            if pend_extra: pend += safe_float(r.get(pend_extra, 0))
+            if not prod or prod.lower()=="nan": continue
+            
+            pend = pd.to_numeric(r.get("PENDIENTE", 0), errors="coerce")
+            if pd.isna(pend): pend = 0.0
+            if pend_extra: 
+                pextra = pd.to_numeric(r.get(pend_extra, 0), errors="coerce")
+                if pd.notna(pextra): pend += pextra
+                
             registros.append({
                 "hoja": "LA CLEMENTINA S.A",
-                "rto": str(r.get("RTO MONSANTO","")).strip().replace("nan",""),
+                "rto": str(r.get("RTO MONSANTO","")).strip().replace("nan", "").replace("NaN", ""),
                 "dia_recibido": r["DIA RECIBIDO"].strftime("%d/%m/%Y") if pd.notna(r["DIA RECIBIDO"]) else "",
-                "cliente": str(r.get("CLIENTE","")).strip().replace("nan",""),
+                "cliente": str(r.get("CLIENTE","")).strip(),
                 "deposito": "LA CLEMENTINA",
-                "cantidad_comprada": safe_float(r.get("CANTIDAD COMPRADA", 0)),
+                "cantidad_comprada": float(pd.to_numeric(r.get("CANTIDAD COMPRADA", 0), errors="coerce") or 0),
                 "producto": prod,
                 "lote": "",
-                "cant_entregada": safe_float(r.get("CANT. ENTREGADA", 0)),
-                "pendiente": pend,
-                "estado": str(r.get("ESTADO","")).strip().replace("nan",""),
-                "vendedor": str(r.get("VENDEDOR","")).strip().replace("nan",""),
+                "cant_entregada": float(pd.to_numeric(r.get("CANT. ENTREGADA", 0), errors="coerce") or 0),
+                "pendiente": float(pend),
+                "estado": str(r.get("ESTADO","")).strip(),
+                "vendedor": str(r.get("VENDEDOR","")).strip(),
             })
     except Exception as e:
         st.warning(f"Hoja 'LA CLEMENTINA S.A': {e}")
@@ -264,20 +236,20 @@ def parsear_entregas_excel(archivo):
         df["DIA RECIBIDO"] = pd.to_datetime(df["DIA RECIBIDO"], errors="coerce")
         for _, r in df.iterrows():
             prod = str(r.get("PRODUCTO","")).strip()
-            if not prod or prod.lower() in ["nan", ""]: continue
+            if not prod or prod.lower()=="nan": continue
             registros.append({
                 "hoja": "LCAGRO S.A",
-                "rto": str(r.get("RTO MONSANTO","")).strip().replace("nan",""),
+                "rto": str(r.get("RTO MONSANTO","")).strip().replace("nan", "").replace("NaN", ""),
                 "dia_recibido": r["DIA RECIBIDO"].strftime("%d/%m/%Y") if pd.notna(r["DIA RECIBIDO"]) else "",
-                "cliente": str(r.get("CLIENTE","")).strip().replace("nan",""),
+                "cliente": str(r.get("CLIENTE","")).strip(),
                 "deposito": "LCAGRO",
-                "cantidad_comprada": safe_float(r.get("CANTIDAD COMPRADA", 0)),
+                "cantidad_comprada": float(pd.to_numeric(r.get("CANTIDAD COMPRADA", 0), errors="coerce") or 0),
                 "producto": prod,
                 "lote": "",
-                "cant_entregada": safe_float(r.get("CANT. ENTREGADA", 0)),
-                "pendiente": safe_float(r.get("PENDIENTE", 0)),
-                "estado": str(r.get("ESTADO","")).strip().replace("nan",""),
-                "vendedor": str(r.get("VENDEDOR","")).strip().replace("nan",""),
+                "cant_entregada": float(pd.to_numeric(r.get("CANT. ENTREGADA", 0), errors="coerce") or 0),
+                "pendiente": float(pd.to_numeric(r.get("PENDIENTE", 0), errors="coerce") or 0),
+                "estado": str(r.get("ESTADO","")).strip(),
+                "vendedor": str(r.get("VENDEDOR","")).strip(),
             })
     except Exception as e:
         st.warning(f"Hoja 'LCAGRO S.A': {e}")
@@ -289,20 +261,20 @@ def parsear_entregas_excel(archivo):
         df["DIA"] = pd.to_datetime(df["DIA"], errors="coerce")
         for _, r in df.iterrows():
             prod = str(r.get("PRODUCTO","")).strip()
-            if not prod or prod.lower() in ["nan", ""]: continue
+            if not prod or prod.lower()=="nan": continue
             registros.append({
                 "hoja": "BAYER DEP55",
                 "rto": "",
                 "dia_recibido": r["DIA"].strftime("%d/%m/%Y") if pd.notna(r["DIA"]) else "",
-                "cliente": str(r.get("PRODUCTOR","")).strip().replace("nan",""),
+                "cliente": str(r.get("PRODUCTOR","")).strip(),
                 "deposito": "DEP 55",
-                "cantidad_comprada": safe_float(r.get("CANTIDAD", 0)),
+                "cantidad_comprada": float(pd.to_numeric(r.get("CANTIDAD", 0), errors="coerce") or 0),
                 "producto": prod,
-                "lote": str(r.get("LOTE","")).strip().replace("nan",""),
-                "cant_entregada": safe_float(r.get("CANTIDAD ENT", 0)),
-                "pendiente": safe_float(r.get("CANTIDAD PEND", 0)),
-                "estado": str(r.get("ESTADO","")).strip().replace("nan",""),
-                "vendedor": str(r.get("VENDEDOR","")).strip().replace("nan",""),
+                "lote": str(r.get("LOTE","")).strip().replace("nan", "").replace("NaN", ""),
+                "cant_entregada": float(pd.to_numeric(r.get("CANTIDAD ENT", 0), errors="coerce") or 0),
+                "pendiente": float(pd.to_numeric(r.get("CANTIDAD PEND", 0), errors="coerce") or 0),
+                "estado": str(r.get("ESTADO","")).strip(),
+                "vendedor": str(r.get("VENDEDOR","")).strip(),
             })
     except Exception as e:
         st.warning(f"Hoja 'MERC CONSIGNADO BAYER DEP55': {e}")
@@ -314,22 +286,22 @@ def parsear_entregas_excel(archivo):
         df["DIA RECIBIDO"] = pd.to_datetime(df["DIA RECIBIDO"], errors="coerce")
         for _, r in df.iterrows():
             prod = str(r.get("PRODUCTO","")).strip()
-            if not prod or prod.lower() in ["nan", ""]: continue
+            if not prod or prod.lower()=="nan": continue
             dep_raw = str(r.get("DEPOSITO","")).strip()
             deposito = f"BAYER DEP {dep_raw}" if dep_raw and dep_raw.lower()!="nan" else "BAYER DIRECTO"
             registros.append({
                 "hoja": "BAYER DIRECTA",
-                "rto": str(r.get("RTO BAYER","")).strip().replace("nan",""),
+                "rto": str(r.get("RTO BAYER","")).strip().replace("nan", "").replace("NaN", ""),
                 "dia_recibido": r["DIA RECIBIDO"].strftime("%d/%m/%Y") if pd.notna(r["DIA RECIBIDO"]) else "",
-                "cliente": str(r.get("CLIENTE","")).strip().replace("nan",""),
+                "cliente": str(r.get("CLIENTE","")).strip(),
                 "deposito": deposito,
-                "cantidad_comprada": safe_float(r.get("CANTIDAD COMPRADA", 0)),
+                "cantidad_comprada": float(pd.to_numeric(r.get("CANTIDAD COMPRADA", 0), errors="coerce") or 0),
                 "producto": prod,
-                "lote": str(r.get("NRO LOTE","")).strip().replace("nan",""),
-                "cant_entregada": safe_float(r.get("CANT. ENTREGADA", 0)),
-                "pendiente": safe_float(r.get("PENDIENTE", 0)),
-                "estado": str(r.get("ESTADO","")).strip().replace("nan",""),
-                "vendedor": str(r.get("VENDEDOR","")).strip().replace("nan",""),
+                "lote": str(r.get("NRO LOTE","")).strip().replace("nan", "").replace("NaN", ""),
+                "cant_entregada": float(pd.to_numeric(r.get("CANT. ENTREGADA", 0), errors="coerce") or 0),
+                "pendiente": float(pd.to_numeric(r.get("PENDIENTE", 0), errors="coerce") or 0),
+                "estado": str(r.get("ESTADO","")).strip(),
+                "vendedor": str(r.get("VENDEDOR","")).strip(),
             })
     except Exception as e:
         st.warning(f"Hoja 'MERC. FACT DIRECTA BAYER 43-60': {e}")
@@ -541,41 +513,36 @@ def mostrar_tab_entregas(hoja_nombre, color_estado, titulo):
                         st.error("No se pudieron leer las hojas del archivo.")
                     else:
                         conn = conectar_db()
+                        
+                        # Guardamos de forma segura sobreescribiendo la estructura anterior para evitar errores de columnas faltantes
+                        df_unif.to_sql('entregas', con=conn, if_exists='replace', index=False)
+                        
                         cursor = conn.cursor()
-                        cursor.execute("DELETE FROM entregas")
-                        filas_ok = 0
+                        filas_ok = len(df_unif)
                         filas_salida = 0
                         no_match = []
 
-                        for _, r in df_unif.iterrows():
-                            cursor.execute("""
-                                INSERT INTO entregas (hoja,rto,dia_recibido,cliente,deposito,
-                                cantidad_comprada,producto,lote,cant_entregada,pendiente,estado,vendedor)
-                                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-                            """, (r["hoja"], r["rto"], r["dia_recibido"], r["cliente"], r["deposito"],
-                                  r["cantidad_comprada"], r["producto"], r["lote"],
-                                  r["cant_entregada"], r["pendiente"], r["estado"], r["vendedor"]))
-                            filas_ok += 1
-
-                            if descontar and r["cant_entregada"] > 0:
-                                cursor.execute("SELECT id_producto FROM productos WHERE nombre=?", (r["producto"],))
-                                match = cursor.fetchone()
-                                if match:
-                                    cursor.execute("""
-                                        INSERT INTO movimientos (fecha_hora,tipo_movimiento,id_producto,cantidad,lote,referencia,deposito,origen)
-                                        VALUES (?,?,?,?,?,?,?,?)
-                                    """, (r["dia_recibido"] or datetime.now().strftime("%d/%m/%Y"),
-                                          "Salida", match[0], r["cant_entregada"],
-                                          r["lote"] or "S/L", f"Entrega a {r['cliente']}", dep_sal, "entrega"))
-                                    filas_salida += 1
-                                else:
-                                    if r["producto"] not in no_match:
-                                        no_match.append(r["producto"])
+                        if descontar:
+                            for _, r in df_unif.iterrows():
+                                if r["cant_entregada"] > 0:
+                                    cursor.execute("SELECT id_producto FROM productos WHERE nombre=?", (r["producto"],))
+                                    match = cursor.fetchone()
+                                    if match:
+                                        cursor.execute("""
+                                            INSERT INTO movimientos (fecha_hora,tipo_movimiento,id_producto,cantidad,lote,referencia,deposito,origen)
+                                            VALUES (?,?,?,?,?,?,?,?)
+                                        """, (r["dia_recibido"] or datetime.now().strftime("%d/%m/%Y"),
+                                              "Salida", match[0], r["cant_entregada"],
+                                              r["lote"] or "S/L", f"Entrega a {r['cliente']}", dep_sal, "entrega"))
+                                        filas_salida += 1
+                                    else:
+                                        if r["producto"] not in no_match:
+                                            no_match.append(r["producto"])
 
                         conn.commit()
                         conn.close()
                         guardar_metadata("ultima_importacion_entregas", datetime.now().strftime("%d/%m/%Y %H:%M"))
-                        msg = f"✅ {filas_ok} registros importados de las 4 hojas."
+                        msg = f"✅ {filas_ok} registros importados de las hojas procesadas."
                         if descontar: msg += f" {filas_salida} salidas registradas."
                         st.success(msg)
                         if no_match:
@@ -589,7 +556,6 @@ def mostrar_tab_entregas(hoja_nombre, color_estado, titulo):
         st.info("Sin datos. Importá el archivo de entregas en la pestaña 'LC / LCAGRO'.")
         return
 
-    # KPIs
     tc = df_h["cantidad_comprada"].sum()
     te = df_h["cant_entregada"].sum()
     tp = df_h["pendiente"].sum()
@@ -603,7 +569,6 @@ def mostrar_tab_entregas(hoja_nombre, color_estado, titulo):
 
     st.markdown("---")
 
-    # Filtros
     cf1, cf2, cf3, cf4 = st.columns(4)
     with cf1:
         estados_disp = ["Todos"] + sorted(df_h["estado"].dropna().unique().tolist())
@@ -676,66 +641,115 @@ def mostrar_tab_entregas(hoja_nombre, color_estado, titulo):
             Entregado=("cant_entregada","sum")
         ).reset_index().melt(id_vars="producto", var_name="Tipo", value_name="Cantidad")
         fig_cmp = px.bar(cmp_chart, x="producto", y="Cantidad", color="Tipo", barmode="group",
-                         color_discrete_sequence=color_estado)
+                         color_discrete_map={"Comprado":"#6c757d","Entregado":"#28a745"},
+                         labels={"producto":"Producto","Cantidad":"Cantidad"})
         st.plotly_chart(fig_cmp, use_container_width=True)
 
-# Asignación correcta de pestañas de entregas
+# Lógica de llamadas a pestañas de entregas
 with tab2:
-    mostrar_tab_entregas("LA CLEMENTINA S.A", ["#4CAF50", "#FFC107"], "📦 Entregas - La Clementina S.A.")
+    mostrar_tab_entregas("LA CLEMENTINA S.A", "Blues", "📋 Entregas - La Clementina S.A. / LCAGRO S.A")
 with tab3:
-    mostrar_tab_entregas("BAYER DEP55", ["#2196F3", "#FF9800"], "🌿 Entregas - Bayer Depósito 55")
+    mostrar_tab_entregas("BAYER DEP55", "Greens", "🌿 Entregas - Mercadería Consignada Bayer Depósito 55")
 with tab4:
-    mostrar_tab_entregas("BAYER DIRECTA", ["#9C27B0", "#E91E63"], "🚚 Entregas - Bayer Venta Directa")
+    mostrar_tab_entregas("BAYER DIRECTA", "Oranges", "🚚 Entregas - Facturación Directa Bayer")
 
-# ===================== TAB 5: PLANILLA STOCK =====================
+# ===================== TAB 5: PLANILLA INVENTARIO =====================
 with tab5:
-    st.subheader("📋 Planilla de Inventario para Conteo Físico")
-    st.write("Generá hojas listas para imprimir o enviar al personal de campo para auditoría física.")
-    st_full = obtener_stock_con_lote()
-    if st_full.empty:
-        st.info("No hay datos de stock para generar planillas.")
+    st.subheader("📋 Generar Planilla para Conteo de Stock Físico")
+    st.info("Descargá el listado actual estructurado listo para imprimir o relevar a mano en los depósitos.")
+    st_full = obtener_stock_full()
+    if not st_full.empty:
+        planilla_bin = descargar_planilla_inventario(st_full)
+        st.download_button("📥 Descargar Planilla de Toma de Stock (.xlsx)", data=planilla_bin, file_name="Planilla_Toma_Stock.xlsx")
+        st.dataframe(st_full, use_container_width=True, hide_index=True)
     else:
-        depositos_lista = ["Todos"] + sorted(st_full["Deposito"].unique().tolist())
-        dep_planilla = st.selectbox("Seleccionar depósito para planilla", depositos_lista, key="sb_dep_planilla")
-        
-        df_p_f = st_full.copy()
-        if dep_planilla != "Todos":
-            df_p_f = df_p_f[df_p_f["Deposito"] == dep_planilla]
-            
-        planilla_bin = descargar_planilla_inventario(df_p_f)
-        st.download_button("📥 Descargar Planilla de Toma de Stock", data=planilla_bin, file_name=f"Planilla_Stock_{dep_planilla}.xlsx")
-        st.dataframe(df_p_f, use_container_width=True, hide_index=True)
+        st.warning("No hay datos de productos en stock disponibles.")
 
 # ===================== TAB 6: HISTORIAL =====================
 with tab6:
-    st.subheader("📜 Historial Total de Movimientos")
-    hist_df = obtener_historial_movimientos()
-    if hist_df.empty:
-        st.info("No se han registrado movimientos todavía.")
+    st.subheader("📜 Historial de Movimientos Registrados")
+    df_hist = obtener_historial_movimientos()
+    if df_hist.empty:
+        st.info("No se registran movimientos en el sistema.")
     else:
-        st.dataframe(hist_df, use_container_width=True, hide_index=True)
+        st.dataframe(df_hist, use_container_width=True, hide_index=True)
 
 # ===================== TAB 7: CONFIGURACIÓN =====================
 with tab7:
-    st.subheader("⚙️ Configuración General")
+    st.subheader("⚙️ Configuración del Sistema e Importación de Stock")
     
-    st.session_state.umbral_alerta = st.number_input("🚨 Umbral crítico de Alerta Stock Mínimo", min_value=1, value=int(st.session_state.umbral_alerta))
-    st.session_state.wa_numero = st.text_input("💬 WhatsApp para reportes automáticos", value=st.session_state.wa_numero)
-    
+    st.session_state.umbral_alerta = st.number_input("🚨 Umbral para Stock Crítico / Alerta", min_value=1, value=st.session_state.umbral_alerta)
+    st.session_state.wa_numero = st.text_input("💬 Número de WhatsApp de destino (Código de país + área sin 0 ni 15)", value=st.session_state.wa_numero)
+
     st.markdown("---")
-    st.subheader("💾 Gestión del Repositorio de Datos")
+    st.subheader("📂 Importación Masiva de Stock de Agroquímicos (MacroGest)")
+    file_stock = st.file_uploader("Subí el reporte de Stock en formato Excel (.xlsx)", type=["xlsx"], key="uploader_stock_mg")
     
-    with st.expander("⚠️ ACCIONES CRÍTICAS DE BORRADO", expanded=False):
-        st.warning("Estas opciones eliminan permanentemente los datos actuales de la Base de Datos interna.")
-        if st.button("🗑️ Borrar SOLO registros vinculados a Importación", type="secondary"):
-            borrar_solo_importacion()
-            st.success("Limpieza parcial completada.")
-            st.rerun()
-        if st.button("🔥 BORRAR BASE DE DATOS COMPLETA", type="primary"):
-            borrar_datos_totales()
-            st.success("Base de datos completamente formateada.")
-            st.rerun()
+    if file_stock and st.button("🚀 PROCESAR E IMPORTAR REPORTE STOCK", type="primary"):
+        try:
+            df_in = pd.read_excel(file_stock)
+            df_in.columns = [str(c).strip().upper() for c in df_in.columns]
             
+            # Buscador inteligente de columnas para evitar fallos de mayúsculas/acentos
+            col_prod = next((c for c in df_in.columns if "PRODUCTO" in c or "ARTICULO" in c or "NOMBRE" in c), None)
+            col_cant = next((c for c in df_in.columns if "CANT" in c or "STOCK" in c or "ACTUAL" in c), None)
+            col_uni = next((c for c in df_in.columns if "UNID" in c or "MEDIDA" in c), None)
+            col_cod = next((c for c in df_in.columns if "COD" in c or "ID" in c), None)
+            col_dep = next((c for c in df_in.columns if "DEP" in c or "SUC" in c or "UBIC" in c), None)
+            col_lote = next((c for c in df_in.columns if "LOTE" in c or "PARTIDA" in c), None)
+
+            if not col_prod or not col_cant:
+                st.error("❌ El archivo no posee columnas identificables como 'Producto' y 'Cantidad'.")
+            else:
+                borrar_solo_importacion()
+                conn = conectar_db()
+                cursor = conn.cursor()
+                
+                cont_p, cont_m = 0, 0
+                for _, row in df_in.iterrows():
+                    nom = str(row[col_prod]).strip()
+                    if not nom or nom.lower() == "nan" or nom.startswith("---"): continue
+                    
+                    unid = str(row[col_uni]).strip() if col_uni else "U"
+                    if not unid or unid.lower() == "nan": unid = "U"
+                    cod = str(row[col_cod]).strip() if col_cod else ""
+                    
+                    cursor.execute("INSERT OR IGNORE INTO productos (nombre, unidad, codigo) VALUES (?,?,?)", (nom, unid, cod))
+                    if cursor.rowcount > 0: cont_p += 1
+                    
+                    cursor.execute("SELECT id_producto FROM productos WHERE nombre=?", (nom,))
+                    id_p = cursor.fetchone()[0]
+                    
+                    cant = float(pd.to_numeric(row[col_cant], errors="coerce") or 0)
+                    dep = str(row[col_dep]).strip() if col_dep else "GENERAL"
+                    lt = str(row[col_lote]).strip() if col_lote else "S/L"
+                    if lt.lower() == "nan" or not lt: lt = "S/L"
+                    if dep.lower() == "nan" or not dep: dep = "GENERAL"
+                    
+                    tipo = "Entrada" if cant >= 0 else "Salida"
+                    cant_abs = abs(cant)
+                    
+                    if cant_abs > 0:
+                        cursor.execute("""
+                            INSERT INTO movimientos (fecha_hora, tipo_movimiento, id_producto, cantidad, lote, referencia, deposito, origen)
+                            VALUES (?,?,?,?,?,?,?,?)
+                        """, (datetime.now().strftime("%d/%m/%Y %H:%M"), tipo, id_p, cant_abs, lt, "Carga Inicial MG", dep, "excel"))
+                        cont_m += 1
+                
+                conn.commit()
+                conn.close()
+                guardar_metadata("ultima_importacion", datetime.now().strftime("%d/%m/%Y %H:%M"))
+                st.success(f"📦 Importación de Inventario Exitosa: {cont_p} nuevos productos creados y {cont_m} lotes de stock posicionados.")
+                st.rerun()
+        except Exception as e:
+            st.error(f"Error procesando reporte de stock: {e}")
+
     st.markdown("---")
-    st.caption("✨ Desarrollado de manera robusta para control administrativo.")
-    st.caption("Creado por **Ignacio Diaz**.")
+    st.subheader("🚨 Acciones de Emergencia")
+    if st.button("🗑️ RESETEAR / BORRAR TODA LA BASE DE DATOS", type="secondary"):
+        borrar_datos_totales()
+        st.success("Base de datos purgada por completo de manera exitosa.")
+        st.rerun()
+
+    st.markdown("---")
+    st.caption("👨‍💻 Creado por Ignacio Diaz")
