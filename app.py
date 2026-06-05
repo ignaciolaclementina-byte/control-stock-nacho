@@ -1,13 +1,46 @@
 import streamlit as st
 import pandas as pd
 import sqlite3
-from datetime import datetime
+from datetime import datetime, date, timedelta
 import plotly.express as px
+import plotly.graph_objects as go
 import numpy as np
 import cv2
 import io
+import os
+import shutil
 from PIL import Image
 import urllib.parse
+import streamlit_authenticator as stauth
+import yaml
+from yaml.loader import SafeLoader
+
+# ============================================================
+# MEJORA 1: LOGIN CON USUARIOS Y CONTRASEÑA
+# ============================================================
+# Credenciales embebidas (podés cambiar las contraseñas hasheadas)
+# Para generar hash: stauth.Hasher(['tupassword']).generate()
+CREDENTIALS = {
+    "usernames": {
+        "admin": {
+            "name": "Administrador",
+            "password": "$2b$12$TIWfVe3ZKF8iHZNFh5MwBO6sFkM4oMfxMxjRAMQJ5bLFTvHVcO9gm",  # admin123
+            "role": "admin"
+        },
+        "visor": {
+            "name": "Visor",
+            "password": "$2b$12$6VjM4WxP3hKnJpZIxlHoFO6p2QHkVLnEj7LqxnRhIV/Rf5E3nS5Gy",  # visor123
+            "role": "visor"
+        }
+    }
+}
+
+authenticator = stauth.Authenticate(
+    CREDENTIALS,
+    "stock_agroquimicos",
+    "auth_key_secreto_2024",
+    cookie_expiry_days=7
+)
 
 # --- 1. CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="Gestión de Agroquímicos", layout="wide")
@@ -29,9 +62,30 @@ st.markdown("""
     .stock-unit { font-size: 0.8rem; color: #6c757d; font-weight: 400; }
     .stock-info { margin-top: 10px; padding-top: 8px; border-top: 1px solid #f0f2f6; font-size: 0.8rem; color: #495057; }
     .label-blue { background-color: #e7f3ff; color: #007bff; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
+    .label-dep { background-color: #f0fff4; color: #28a745; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
     .neg-badge { display: inline-block; background-color: #dc3545; color: white; font-size: 0.65rem; padding: 1px 6px; border-radius: 8px; font-weight: bold; margin-left: 4px; vertical-align: middle; }
+    .vence-badge { display: inline-block; background-color: #fd7e14; color: white; font-size: 0.65rem; padding: 1px 6px; border-radius: 8px; font-weight: bold; margin-left: 4px; vertical-align: middle; }
+    .alerta-banner { background: #fff3cd; border: 1px solid #ffc107; border-radius: 10px; padding: 12px 16px; margin-bottom: 16px; }
+    .role-badge-admin { background: #007bff; color: white; padding: 2px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: bold; }
+    .role-badge-visor { background: #6c757d; color: white; padding: 2px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: bold; }
     </style>
     """, unsafe_allow_html=True)
+
+# ============================================================
+# LOGIN WALL
+# ============================================================
+name, authentication_status, username = authenticator.login(location="main")
+
+if authentication_status is False:
+    st.error("❌ Usuario o contraseña incorrectos.")
+    st.stop()
+elif authentication_status is None:
+    st.warning("Por favor ingresá tus credenciales.")
+    st.stop()
+
+# Usuario autenticado — obtener rol
+user_role = CREDENTIALS["usernames"].get(username, {}).get("role", "visor")
+es_admin = (user_role == "admin")
 
 # --- 2. BASE DE DATOS ---
 def conectar_db():
@@ -59,10 +113,10 @@ def inicializar_db():
             referencia TEXT,
             deposito TEXT,
             origen TEXT,
+            fecha_vencimiento TEXT,
             FOREIGN KEY (id_producto) REFERENCES productos(id_producto)
         )
     """)
-    # Tabla unificada de entregas con todas las hojas
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS entregas (
             id_entrega INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -86,10 +140,17 @@ def inicializar_db():
             valor TEXT
         )
     """)
+    # MEJORA 8: tabla de nombres de depósitos
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS depositos_nombres (
+            codigo TEXT PRIMARY KEY,
+            nombre_legible TEXT NOT NULL
+        )
+    """)
     migraciones = [
         "ALTER TABLE productos ADD COLUMN codigo TEXT",
         "ALTER TABLE movimientos ADD COLUMN origen TEXT",
-        # Migración para DBs existentes que no tienen columna hoja en entregas
+        "ALTER TABLE movimientos ADD COLUMN fecha_vencimiento TEXT",
         "ALTER TABLE entregas ADD COLUMN hoja TEXT",
         "ALTER TABLE entregas ADD COLUMN lote TEXT",
         "ALTER TABLE entregas ADD COLUMN deposito TEXT",
@@ -132,12 +193,27 @@ def obtener_metadata(clave):
     conn.close()
     return row[0] if row else None
 
+# MEJORA 8: nombres legibles de depósitos
+def obtener_nombres_depositos():
+    conn = conectar_db()
+    try:
+        df = pd.read_sql_query("SELECT codigo, nombre_legible FROM depositos_nombres", conn)
+        return dict(zip(df["codigo"], df["nombre_legible"]))
+    except:
+        return {}
+    finally:
+        conn.close()
+
+def nombre_deposito(codigo, mapa):
+    return mapa.get(str(codigo), str(codigo))
+
 def obtener_stock_con_lote():
     conn = conectar_db()
     query = """
         SELECT p.nombre as Producto, p.codigo as Código, p.unidad as Unidad,
                m.lote as Lote, m.deposito as Deposito,
-               m.tipo_movimiento, m.cantidad
+               m.tipo_movimiento, m.cantidad,
+               m.fecha_vencimiento as FechaVencimiento
         FROM movimientos m JOIN productos p ON m.id_producto = p.id_producto
     """
     try: df = pd.read_sql_query(query, conn)
@@ -145,7 +221,7 @@ def obtener_stock_con_lote():
     conn.close()
     if df.empty: return pd.DataFrame()
     df["neta"] = df.apply(lambda r: r["cantidad"] if r["tipo_movimiento"] == "Entrada" else -r["cantidad"], axis=1)
-    res = df.groupby(["Producto","Código","Unidad","Lote","Deposito"])["neta"].sum().reset_index()
+    res = df.groupby(["Producto","Código","Unidad","Lote","Deposito","FechaVencimiento"])["neta"].sum().reset_index()
     return res.rename(columns={"neta": "Stock Actual"})
 
 def obtener_stock_full():
@@ -159,7 +235,8 @@ def obtener_historial_movimientos():
         SELECT m.id_movimiento as ID, m.fecha_hora as Fecha, m.tipo_movimiento as Tipo,
                p.nombre as Producto, p.codigo as Código, m.cantidad as Cantidad,
                p.unidad as Unidad, m.lote as Lote, m.deposito as Depósito,
-               m.referencia as Referencia, COALESCE(m.origen,'excel') as Origen
+               m.referencia as Referencia, COALESCE(m.origen,'excel') as Origen,
+               m.fecha_vencimiento as Vencimiento
         FROM movimientos m JOIN productos p ON m.id_producto = p.id_producto
         ORDER BY m.id_movimiento DESC
     """
@@ -214,17 +291,15 @@ def descargar_planilla_inventario(df):
     return output.getvalue()
 
 def safe_float(val, default=0.0):
-    """Convierte a float de forma segura, manejando NaT, NaN y None."""
     try:
         if val is None or (hasattr(val, '__class__') and val.__class__.__name__ == 'NaTType'):
             return default
         f = float(val)
-        return f if not (f != f) else default  # NaN check
+        return f if not (f != f) else default
     except:
         return default
 
 def safe_str(val, default=""):
-    """Convierte a string de forma segura."""
     try:
         if val is None or (hasattr(val, '__class__') and val.__class__.__name__ == 'NaTType'):
             return default
@@ -234,7 +309,6 @@ def safe_str(val, default=""):
         return default
 
 def safe_fecha(val):
-    """Convierte timestamp a string de fecha segura."""
     try:
         if pd.isna(val):
             return ""
@@ -243,14 +317,7 @@ def safe_fecha(val):
         return ""
 
 def parsear_entregas_excel(archivo):
-    """
-    Lee todas las hojas del Excel de entregas y devuelve un DataFrame unificado.
-    Cada hoja tiene estructura distinta — se normaliza a columnas comunes.
-    Maneja NaT en fechas y NaN en cantidades de forma segura.
-    """
     registros = []
-
-    # --- Hoja 1: LA CLEMENTINA S.A ---
     try:
         df = pd.read_excel(archivo, sheet_name='LA CLEMENTINA S.A', header=1)
         df.columns = [str(c).strip() for c in df.columns]
@@ -261,24 +328,9 @@ def parsear_entregas_excel(archivo):
             pend = safe_float(r.get("PENDIENTE", 0))
             if "Unnamed: 7" in df.columns:
                 pend += safe_float(r.get("Unnamed: 7", 0))
-            registros.append({
-                "hoja": "LA CLEMENTINA S.A",
-                "rto": safe_str(r.get("RTO MONSANTO","")),
-                "dia_recibido": safe_fecha(r["DIA RECIBIDO"]),
-                "cliente": safe_str(r.get("CLIENTE","")),
-                "deposito": "LA CLEMENTINA",
-                "cantidad_comprada": safe_float(r.get("CANTIDAD COMPRADA", 0)),
-                "producto": prod,
-                "lote": "",
-                "cant_entregada": safe_float(r.get("CANT. ENTREGADA", 0)),
-                "pendiente": pend,
-                "estado": safe_str(r.get("ESTADO","")),
-                "vendedor": safe_str(r.get("VENDEDOR","")),
-            })
+            registros.append({"hoja": "LA CLEMENTINA S.A","rto": safe_str(r.get("RTO MONSANTO","")),"dia_recibido": safe_fecha(r["DIA RECIBIDO"]),"cliente": safe_str(r.get("CLIENTE","")),"deposito": "LA CLEMENTINA","cantidad_comprada": safe_float(r.get("CANTIDAD COMPRADA", 0)),"producto": prod,"lote": "","cant_entregada": safe_float(r.get("CANT. ENTREGADA", 0)),"pendiente": pend,"estado": safe_str(r.get("ESTADO","")),"vendedor": safe_str(r.get("VENDEDOR","")),})
     except Exception as e:
         st.warning(f"Hoja 'LA CLEMENTINA S.A': {e}")
-
-    # --- Hoja 2: LCAGRO S.A ---
     try:
         df = pd.read_excel(archivo, sheet_name='LCAGRO S.A', header=1)
         df.columns = [str(c).strip() for c in df.columns]
@@ -286,24 +338,9 @@ def parsear_entregas_excel(archivo):
         for _, r in df.iterrows():
             prod = safe_str(r.get("PRODUCTO",""))
             if not prod: continue
-            registros.append({
-                "hoja": "LCAGRO S.A",
-                "rto": safe_str(r.get("RTO MONSANTO","")),
-                "dia_recibido": safe_fecha(r["DIA RECIBIDO"]),
-                "cliente": safe_str(r.get("CLIENTE","")),
-                "deposito": "LCAGRO",
-                "cantidad_comprada": safe_float(r.get("CANTIDAD COMPRADA", 0)),
-                "producto": prod,
-                "lote": "",
-                "cant_entregada": safe_float(r.get("CANT. ENTREGADA", 0)),
-                "pendiente": safe_float(r.get("PENDIENTE", 0)),
-                "estado": safe_str(r.get("ESTADO","")),
-                "vendedor": safe_str(r.get("VENDEDOR","")),
-            })
+            registros.append({"hoja": "LCAGRO S.A","rto": safe_str(r.get("RTO MONSANTO","")),"dia_recibido": safe_fecha(r["DIA RECIBIDO"]),"cliente": safe_str(r.get("CLIENTE","")),"deposito": "LCAGRO","cantidad_comprada": safe_float(r.get("CANTIDAD COMPRADA", 0)),"producto": prod,"lote": "","cant_entregada": safe_float(r.get("CANT. ENTREGADA", 0)),"pendiente": safe_float(r.get("PENDIENTE", 0)),"estado": safe_str(r.get("ESTADO","")),"vendedor": safe_str(r.get("VENDEDOR","")),})
     except Exception as e:
         st.warning(f"Hoja 'LCAGRO S.A': {e}")
-
-    # --- Hoja 3: MERC CONSIGNADO BAYER DEP55 ---
     try:
         df = pd.read_excel(archivo, sheet_name='MERC CONSIGNADO BAYER DEP55', header=2)
         df.columns = [str(c).strip() for c in df.columns]
@@ -311,24 +348,9 @@ def parsear_entregas_excel(archivo):
         for _, r in df.iterrows():
             prod = safe_str(r.get("PRODUCTO",""))
             if not prod: continue
-            registros.append({
-                "hoja": "BAYER DEP55",
-                "rto": "",
-                "dia_recibido": safe_fecha(r["DIA"]),
-                "cliente": safe_str(r.get("PRODUCTOR","")),
-                "deposito": "DEP 55",
-                "cantidad_comprada": safe_float(r.get("CANTIDAD", 0)),
-                "producto": prod,
-                "lote": safe_str(r.get("LOTE","")),
-                "cant_entregada": safe_float(r.get("CANTIDAD ENT", 0)),
-                "pendiente": safe_float(r.get("CANTIDAD PEND", 0)),
-                "estado": safe_str(r.get("ESTADO","")),
-                "vendedor": safe_str(r.get("VENDEDOR","")),
-            })
+            registros.append({"hoja": "BAYER DEP55","rto": "","dia_recibido": safe_fecha(r["DIA"]),"cliente": safe_str(r.get("PRODUCTOR","")),"deposito": "DEP 55","cantidad_comprada": safe_float(r.get("CANTIDAD", 0)),"producto": prod,"lote": safe_str(r.get("LOTE","")),"cant_entregada": safe_float(r.get("CANTIDAD ENT", 0)),"pendiente": safe_float(r.get("CANTIDAD PEND", 0)),"estado": safe_str(r.get("ESTADO","")),"vendedor": safe_str(r.get("VENDEDOR","")),})
     except Exception as e:
         st.warning(f"Hoja 'MERC CONSIGNADO BAYER DEP55': {e}")
-
-    # --- Hoja 4: MERC. FACT DIRECTA BAYER 43-60 ---
     try:
         df = pd.read_excel(archivo, sheet_name='MERC. FACT DIRECTA BAYER 43-60', header=1)
         df.columns = [str(c).strip() for c in df.columns]
@@ -338,24 +360,60 @@ def parsear_entregas_excel(archivo):
             if not prod: continue
             dep_raw = safe_str(r.get("DEPOSITO",""))
             deposito = f"BAYER DEP {dep_raw}" if dep_raw else "BAYER DIRECTO"
-            registros.append({
-                "hoja": "BAYER DIRECTA",
-                "rto": safe_str(r.get("RTO BAYER","")),
-                "dia_recibido": safe_fecha(r["DIA RECIBIDO"]),
-                "cliente": safe_str(r.get("CLIENTE","")),
-                "deposito": deposito,
-                "cantidad_comprada": safe_float(r.get("CANTIDAD COMPRADA", 0)),
-                "producto": prod,
-                "lote": safe_str(r.get("NRO LOTE","")),
-                "cant_entregada": safe_float(r.get("CANT. ENTREGADA", 0)),
-                "pendiente": safe_float(r.get("PENDIENTE", 0)),
-                "estado": safe_str(r.get("ESTADO","")),
-                "vendedor": safe_str(r.get("VENDEDOR","")),
-            })
+            registros.append({"hoja": "BAYER DIRECTA","rto": safe_str(r.get("RTO BAYER","")),"dia_recibido": safe_fecha(r["DIA RECIBIDO"]),"cliente": safe_str(r.get("CLIENTE","")),"deposito": deposito,"cantidad_comprada": safe_float(r.get("CANTIDAD COMPRADA", 0)),"producto": prod,"lote": safe_str(r.get("NRO LOTE","")),"cant_entregada": safe_float(r.get("CANT. ENTREGADA", 0)),"pendiente": safe_float(r.get("PENDIENTE", 0)),"estado": safe_str(r.get("ESTADO","")),"vendedor": safe_str(r.get("VENDEDOR","")),})
     except Exception as e:
         st.warning(f"Hoja 'MERC. FACT DIRECTA BAYER 43-60': {e}")
-
     return pd.DataFrame(registros) if registros else pd.DataFrame()
+
+# MEJORA 3: Lotes por vencer
+def obtener_lotes_por_vencer(dias=60):
+    """Devuelve lotes con fecha_vencimiento en los próximos `dias` días."""
+    conn = conectar_db()
+    query = """
+        SELECT p.nombre as Producto, m.lote as Lote, m.deposito as Deposito,
+               m.fecha_vencimiento as Vencimiento, m.tipo_movimiento, m.cantidad
+        FROM movimientos m JOIN productos p ON m.id_producto = p.id_producto
+        WHERE m.fecha_vencimiento IS NOT NULL AND m.fecha_vencimiento != ''
+    """
+    try: df = pd.read_sql_query(query, conn)
+    except: df = pd.DataFrame()
+    conn.close()
+    if df.empty: return pd.DataFrame()
+    df["neta"] = df.apply(lambda r: r["cantidad"] if r["tipo_movimiento"]=="Entrada" else -r["cantidad"], axis=1)
+    df = df.groupby(["Producto","Lote","Deposito","Vencimiento"])["neta"].sum().reset_index()
+    df = df[df["neta"] > 0]
+    hoy = date.today()
+    limite = hoy + timedelta(days=dias)
+    resultado = []
+    for _, r in df.iterrows():
+        try:
+            fv = datetime.strptime(r["Vencimiento"], "%Y-%m-%d").date()
+            dias_restantes = (fv - hoy).days
+            if dias_restantes <= dias:
+                resultado.append({**r.to_dict(), "Dias Restantes": dias_restantes, "Vence": fv.strftime("%d/%m/%Y")})
+        except:
+            pass
+    return pd.DataFrame(resultado) if resultado else pd.DataFrame()
+
+# MEJORA 5: Evolución de stock en el tiempo
+def obtener_evolucion_stock(producto, deposito=None):
+    conn = conectar_db()
+    query = """
+        SELECT m.fecha_hora, m.tipo_movimiento, m.cantidad, m.deposito
+        FROM movimientos m JOIN productos p ON m.id_producto = p.id_producto
+        WHERE p.nombre = ?
+        ORDER BY m.id_movimiento ASC
+    """
+    try: df = pd.read_sql_query(query, conn, params=(producto,))
+    except: df = pd.DataFrame()
+    conn.close()
+    if df.empty: return pd.DataFrame()
+    if deposito and deposito != "Todos":
+        df = df[df["deposito"] == deposito]
+    df["neta"] = df.apply(lambda r: r["cantidad"] if r["tipo_movimiento"]=="Entrada" else -r["cantidad"], axis=1)
+    df["stock_acum"] = df["neta"].cumsum()
+    df["fecha_hora"] = pd.to_datetime(df["fecha_hora"], format="%d/%m/%Y %H:%M", errors="coerce")
+    return df[["fecha_hora","stock_acum","deposito"]].dropna()
 
 inicializar_db()
 
@@ -369,16 +427,57 @@ if 'umbral_alerta' not in st.session_state:
 if 'mov_pendiente' not in st.session_state:
     st.session_state.mov_pendiente = None
 
-# --- 4. INTERFAZ ---
-st.title("🧪 Control de Depósito Inteligente")
+# --- 4. HEADER CON USUARIO ---
+col_title, col_user = st.columns([5,1])
+with col_title:
+    st.title("🧪 Control de Depósito Inteligente")
+with col_user:
+    st.markdown(f"<br><span class='role-badge-{'admin' if es_admin else 'visor'}'>{'👑 Admin' if es_admin else '👁 Visor'}</span> {name}", unsafe_allow_html=True)
+    authenticator.logout("Salir", location="main")
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+# Mapa de nombres de depósitos
+dep_mapa = obtener_nombres_depositos()
+
+# MEJORA 6: Banner de alertas automático al entrar
+def mostrar_banner_alertas():
+    stock_df_b = obtener_stock_full()
+    alertas = []
+    if not stock_df_b.empty:
+        U = st.session_state.umbral_alerta
+        bajos = stock_df_b[stock_df_b["Stock Actual"] < U]
+        if not bajos.empty:
+            alertas.append(f"⚠️ **{len(bajos)} productos** con stock bajo el umbral ({U})")
+        negativos = stock_df_b[stock_df_b["Stock Actual"] < 0]
+        if not negativos.empty:
+            alertas.append(f"❌ **{len(negativos)} productos** con stock negativo")
+    lotes_venc = obtener_lotes_por_vencer(60)
+    if not lotes_venc.empty:
+        criticos = lotes_venc[lotes_venc["Dias Restantes"] <= 30]
+        proximos = lotes_venc[lotes_venc["Dias Restantes"] > 30]
+        if not criticos.empty:
+            alertas.append(f"🔴 **{len(criticos)} lotes** vencen en menos de 30 días")
+        if not proximos.empty:
+            alertas.append(f"🟡 **{len(proximos)} lotes** vencen en los próximos 60 días")
+    entregas_b = obtener_entregas()
+    if not entregas_b.empty:
+        pend = entregas_b[entregas_b["pendiente"] > 0]
+        if not pend.empty:
+            alertas.append(f"📦 **{pend['pendiente'].sum():,.0f}** unidades pendientes de entrega")
+    if alertas:
+        html = "<div class='alerta-banner'><b>🔔 Alertas del sistema</b><br>" + " &nbsp;|&nbsp; ".join(alertas) + "</div>"
+        st.markdown(html, unsafe_allow_html=True)
+
+mostrar_banner_alertas()
+
+# --- TABS ---
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "⚡ Panel de Control",
     "📦 LC / LCAGRO",
     "🌿 Bayer DEP55",
     "🚚 Bayer Directa",
     "📋 Planilla Stock",
     "📜 Historial",
+    "📊 Análisis",
     "⚙️ Configuración"
 ])
 
@@ -389,16 +488,19 @@ with tab1:
         st.warning("⚠️ No hay datos cargados. Por favor, subí el archivo en la pestaña 'Configuración'.")
     else:
         U = st.session_state.umbral_alerta
-        ultima_act = obtener_metadata("ultima_importacion")
-        if ultima_act:
-            st.caption(f"🕐 Última importación stock: **{ultima_act}**")
-        ultima_ent = obtener_metadata("ultima_importacion_entregas")
-        if ultima_ent:
-            st.caption(f"📦 Última importación entregas: **{ultima_ent}**")
+        c_cap1, c_cap2 = st.columns(2)
+        with c_cap1:
+            ultima_act = obtener_metadata("ultima_importacion")
+            if ultima_act: st.caption(f"🕐 Última importación stock: **{ultima_act}**")
+        with c_cap2:
+            ultima_ent = obtener_metadata("ultima_importacion_entregas")
+            if ultima_ent: st.caption(f"📦 Última importación entregas: **{ultima_ent}**")
 
         df_kpi = stock_df.copy()
         negativos_n = len(df_kpi[df_kpi["Stock Actual"] < 0])
-        c_kpi1, c_kpi2, c_kpi3, c_kpi4, c_kpi5 = st.columns(5)
+        lotes_venc_kpi = obtener_lotes_por_vencer(30)
+
+        c_kpi1, c_kpi2, c_kpi3, c_kpi4, c_kpi5, c_kpi6 = st.columns(6)
         with c_kpi1: st.metric("Total Productos", len(df_kpi["Producto"].unique()))
         with c_kpi2: st.metric("Volumen Total", f"{df_kpi['Stock Actual'].sum():,.0f}")
         with c_kpi3:
@@ -407,13 +509,9 @@ with tab1:
         with c_kpi4:
             st.metric("Stock Negativo ⚠️", negativos_n, delta=-negativos_n, delta_color="inverse")
         with c_kpi5: st.metric("Depósitos", df_kpi["Deposito"].nunique())
-
-        # Cruce rápido pendiente vs stock
-        entregas_panel = obtener_entregas()
-        if not entregas_panel.empty:
-            pend_tot = entregas_panel[entregas_panel["pendiente"] > 0]["pendiente"].sum()
-            if pend_tot > 0:
-                st.info(f"📋 Pendiente total de entregas: **{pend_tot:,.0f}** unidades")
+        with c_kpi6:
+            # MEJORA 3: KPI lotes por vencer
+            st.metric("Lotes vencen <30d", len(lotes_venc_kpi), delta=-len(lotes_venc_kpi) if len(lotes_venc_kpi) > 0 else 0, delta_color="inverse")
 
         st.markdown("---")
         st.subheader("🔍 Filtros Dinámicos")
@@ -449,8 +547,11 @@ with tab1:
             f_prod = st.selectbox("Producto", lista_productos, index=idx_inicio)
             st.session_state.qr_detectado = f_prod
         with c2:
-            lista_depos = ["Todos"] + sorted(stock_df["Deposito"].unique().tolist())
-            f_depo = st.selectbox("Filtrar por Depósito", lista_depos)
+            lista_depos_raw = sorted(stock_df["Deposito"].unique().tolist())
+            lista_depos_display = ["Todos"] + [f"{nombre_deposito(d, dep_mapa)}" for d in lista_depos_raw]
+            f_depo_idx = st.selectbox("Filtrar por Depósito", range(len(lista_depos_display)),
+                                       format_func=lambda i: lista_depos_display[i])
+            f_depo = "Todos" if f_depo_idx == 0 else lista_depos_raw[f_depo_idx - 1]
         with c3:
             st.write("Ver:")
             hide_neg = st.toggle("Solo con stock positivo", value=True)
@@ -476,6 +577,14 @@ with tab1:
         if not df_f.empty:
             excel_bin = descargar_excel_agrupado_sin_lote(df_f)
             st.download_button(label="📥 Descargar Comparativa Total", data=excel_bin, file_name='stock_agrupado.xlsx')
+
+            # MEJORA 3: set de lotes por vencer para marcar cards
+            lotes_venc_set = set()
+            lv_df = obtener_lotes_por_vencer(60)
+            if not lv_df.empty:
+                for _, lv in lv_df.iterrows():
+                    lotes_venc_set.add(lv["Producto"])
+
             items = df_f.to_dict('records')
             cols_grid = st.columns(4)
             for i, item in enumerate(items):
@@ -483,140 +592,138 @@ with tab1:
                     stk_val = item['Stock Actual']
                     clase = "card-warning" if stk_val <= 0 else ("card-low" if stk_val < U else "card-normal")
                     badge_neg = '<span class="neg-badge">NEGATIVO</span>' if stk_val < 0 else ""
+                    badge_venc = '<span class="vence-badge">VENCE PRONTO</span>' if item["Producto"] in lotes_venc_set else ""
+                    dep_display = nombre_deposito(item['Deposito'], dep_mapa)
                     st.markdown(f"""
                         <div class="stock-card {clase}">
-                            <div class="stock-title">{item['Producto']}{badge_neg}</div>
+                            <div class="stock-title">{item['Producto']}{badge_neg}{badge_venc}</div>
                             <span class="stock-value">{stk_val:,.1f} <small class="stock-unit">{item['Unidad']}</small></span>
-                            <div class="stock-info"><b>🆔 Cód:</b> {item['Código']}<br><b>📍 Dep:</b> <span class="label-blue">{item['Deposito']}</span></div>
+                            <div class="stock-info"><b>🆔 Cód:</b> {item['Código']}<br><b>📍 Dep:</b> <span class="label-dep">{dep_display}</span></div>
                         </div>
                     """, unsafe_allow_html=True)
 
-        st.markdown("---")
-        with st.expander("➕ Registrar movimiento manual"):
-            c_m1, c_m2 = st.columns(2)
-            with c_m1:
-                prod_sel = st.selectbox("Producto", sorted(stock_df["Producto"].unique()), key="mov_prod")
-                tipo_mov = st.radio("Tipo", ["Entrada", "Salida"], horizontal=True, key="mov_tipo")
-            with c_m2:
-                cantidad_mov = st.number_input("Cantidad", min_value=0.01, step=0.5, key="mov_cant")
-                deposito_mov = st.selectbox("Depósito", sorted(stock_df["Deposito"].unique()), key="mov_dep")
-            lote_mov = st.text_input("Lote (opcional)", value="S/L", key="mov_lote")
-            ref_mov = st.text_input("Referencia (opcional)", value="", key="mov_ref")
+        # MEJORA 3: Tabla de lotes por vencer
+        if not lotes_venc_kpi.empty:
+            st.markdown("---")
+            st.subheader("🔴 Lotes que vencen en menos de 30 días")
+            st.dataframe(lotes_venc_kpi[["Producto","Lote","Deposito","Vence","Dias Restantes","neta"]].rename(columns={"neta":"Stock"}), use_container_width=True, hide_index=True)
 
-            if st.session_state.mov_pendiente is None:
-                if st.button("📋 Preparar movimiento"):
-                    st.session_state.mov_pendiente = {
-                        "producto": prod_sel, "tipo": tipo_mov,
-                        "cantidad": cantidad_mov, "deposito": deposito_mov,
-                        "lote": lote_mov, "referencia": ref_mov
-                    }
-                    st.rerun()
-            else:
-                p = st.session_state.mov_pendiente
-                st.warning(f"""**¿Confirmar movimiento?**
-- **{p['tipo']}** | **{p['producto']}** | {p['cantidad']:,.2f} | Dep: {p['deposito']}""")
-                col_conf1, col_conf2 = st.columns(2)
-                with col_conf1:
-                    if st.button("✅ Confirmar y registrar", type="primary"):
-                        conn = conectar_db()
-                        cursor = conn.cursor()
-                        cursor.execute("SELECT id_producto FROM productos WHERE nombre=?", (p["producto"],))
-                        id_p = cursor.fetchone()
-                        if id_p:
-                            cursor.execute("""
-                                INSERT INTO movimientos (fecha_hora,tipo_movimiento,id_producto,cantidad,lote,referencia,deposito,origen)
-                                VALUES (?,?,?,?,?,?,?,?)
-                            """, (datetime.now().strftime("%d/%m/%Y %H:%M"), p["tipo"],
-                                  id_p[0], p["cantidad"], p["lote"], p["referencia"], p["deposito"], "manual"))
-                            conn.commit()
-                            st.success("✅ Registrado.")
-                        conn.close()
-                        st.session_state.mov_pendiente = None
+        st.markdown("---")
+        # Solo admin puede registrar movimientos
+        if es_admin:
+            with st.expander("➕ Registrar movimiento manual"):
+                c_m1, c_m2 = st.columns(2)
+                with c_m1:
+                    prod_sel = st.selectbox("Producto", sorted(stock_df["Producto"].unique()), key="mov_prod")
+                    tipo_mov = st.radio("Tipo", ["Entrada", "Salida"], horizontal=True, key="mov_tipo")
+                with c_m2:
+                    cantidad_mov = st.number_input("Cantidad", min_value=0.01, step=0.5, key="mov_cant")
+                    deposito_mov = st.selectbox("Depósito", sorted(stock_df["Deposito"].unique()), key="mov_dep")
+                lote_mov = st.text_input("Lote (opcional)", value="S/L", key="mov_lote")
+                ref_mov = st.text_input("Referencia (opcional)", value="", key="mov_ref")
+                # MEJORA 3: fecha de vencimiento en movimiento manual
+                fecha_venc_mov = st.date_input("Fecha de vencimiento (opcional)", value=None, key="mov_venc")
+
+                if st.session_state.mov_pendiente is None:
+                    if st.button("📋 Preparar movimiento"):
+                        st.session_state.mov_pendiente = {
+                            "producto": prod_sel, "tipo": tipo_mov,
+                            "cantidad": cantidad_mov, "deposito": deposito_mov,
+                            "lote": lote_mov, "referencia": ref_mov,
+                            "vencimiento": str(fecha_venc_mov) if fecha_venc_mov else ""
+                        }
                         st.rerun()
-                with col_conf2:
-                    if st.button("❌ Cancelar"):
-                        st.session_state.mov_pendiente = None
-                        st.rerun()
+                else:
+                    p = st.session_state.mov_pendiente
+                    venc_txt = f" | Vence: {p.get('vencimiento','')}" if p.get('vencimiento') else ""
+                    st.warning(f"""**¿Confirmar movimiento?**
+- **{p['tipo']}** | **{p['producto']}** | {p['cantidad']:,.2f} | Dep: {p['deposito']}{venc_txt}""")
+                    col_conf1, col_conf2 = st.columns(2)
+                    with col_conf1:
+                        if st.button("✅ Confirmar y registrar", type="primary"):
+                            conn = conectar_db()
+                            cursor = conn.cursor()
+                            cursor.execute("SELECT id_producto FROM productos WHERE nombre=?", (p["producto"],))
+                            id_p = cursor.fetchone()
+                            if id_p:
+                                cursor.execute("""
+                                    INSERT INTO movimientos (fecha_hora,tipo_movimiento,id_producto,cantidad,lote,referencia,deposito,origen,fecha_vencimiento)
+                                    VALUES (?,?,?,?,?,?,?,?,?)
+                                """, (datetime.now().strftime("%d/%m/%Y %H:%M"), p["tipo"],
+                                      id_p[0], p["cantidad"], p["lote"], p["referencia"],
+                                      p["deposito"], "manual", p.get("vencimiento","")))
+                                conn.commit()
+                                st.success("✅ Registrado.")
+                            conn.close()
+                            st.session_state.mov_pendiente = None
+                            st.rerun()
+                    with col_conf2:
+                        if st.button("❌ Cancelar"):
+                            st.session_state.mov_pendiente = None
+                            st.rerun()
+        else:
+            st.info("👁 Modo visor — los movimientos manuales solo los puede registrar un administrador.")
 
 # ===================== FUNCIÓN REUTILIZABLE PARA MOSTRAR ENTREGAS =====================
 def mostrar_tab_entregas(hoja_nombre, color_estado, titulo):
-    """Muestra una pestaña de entregas para una hoja específica."""
     st.subheader(titulo)
-
-    # Importador — solo se muestra en la primera pestaña de entregas para no repetir
     if hoja_nombre == "LA CLEMENTINA S.A":
         with st.expander("📂 Importar / Actualizar TODAS las hojas de entregas", expanded=obtener_entregas().empty):
             st.info("Subí el archivo completo de entregas Monsanto/Bayer. Se importan las 4 hojas automáticamente.")
-            arch = st.file_uploader("Archivo de entregas (.xlsx)", type=["xlsx","xls"], key="uploader_entregas_global")
-
-            col_op1, col_op2 = st.columns(2)
-            with col_op1:
-                descontar = st.toggle("🔄 Registrar como Salidas de stock", value=False, key="toggle_descontar")
-            with col_op2:
-                sf = obtener_stock_full()
-                dep_opts = sf["Deposito"].unique().tolist() if not sf.empty else ["0"]
-                dep_sal = st.selectbox("Depósito origen", dep_opts, key="dep_sal_global") if descontar else None
-
-            if arch and st.button("🚀 IMPORTAR TODAS LAS HOJAS", type="primary"):
-                try:
-                    df_unif = parsear_entregas_excel(arch)
-                    if df_unif.empty:
-                        st.error("No se pudieron leer las hojas del archivo.")
-                    else:
-                        conn = conectar_db()
-                        cursor = conn.cursor()
-                        cursor.execute("DELETE FROM entregas")
-                        filas_ok = 0
-                        filas_salida = 0
-                        no_match = []
-
-                        for _, r in df_unif.iterrows():
-                            cursor.execute("""
-                                INSERT INTO entregas (hoja,rto,dia_recibido,cliente,deposito,
-                                cantidad_comprada,producto,lote,cant_entregada,pendiente,estado,vendedor)
-                                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-                            """, (r["hoja"], r["rto"], r["dia_recibido"], r["cliente"], r["deposito"],
-                                  r["cantidad_comprada"], r["producto"], r["lote"],
-                                  r["cant_entregada"], r["pendiente"], r["estado"], r["vendedor"]))
-                            filas_ok += 1
-
-                            if descontar and r["cant_entregada"] > 0:
-                                cursor.execute("SELECT id_producto FROM productos WHERE nombre=?", (r["producto"],))
-                                match = cursor.fetchone()
-                                if match:
-                                    cursor.execute("""
-                                        INSERT INTO movimientos (fecha_hora,tipo_movimiento,id_producto,cantidad,lote,referencia,deposito,origen)
-                                        VALUES (?,?,?,?,?,?,?,?)
-                                    """, (r["dia_recibido"] or datetime.now().strftime("%d/%m/%Y"),
-                                          "Salida", match[0], r["cant_entregada"],
-                                          r["lote"] or "S/L", f"Entrega a {r['cliente']}", dep_sal, "entrega"))
-                                    filas_salida += 1
-                                else:
-                                    if r["producto"] not in no_match:
-                                        no_match.append(r["producto"])
-
-                        conn.commit()
-                        conn.close()
-                        guardar_metadata("ultima_importacion_entregas", datetime.now().strftime("%d/%m/%Y %H:%M"))
-                        msg = f"✅ {filas_ok} registros importados de las 4 hojas."
-                        if descontar: msg += f" {filas_salida} salidas registradas."
-                        st.success(msg)
-                        if no_match:
-                            st.warning(f"⚠️ Sin coincidencia en stock: {', '.join(no_match)}")
-                        st.rerun()
-                except Exception as ex:
-                    st.error(f"❌ Error: {ex}")
+            if not es_admin:
+                st.warning("⛔ Solo administradores pueden importar datos.")
+            else:
+                arch = st.file_uploader("Archivo de entregas (.xlsx)", type=["xlsx","xls"], key="uploader_entregas_global")
+                col_op1, col_op2 = st.columns(2)
+                with col_op1:
+                    descontar = st.toggle("🔄 Registrar como Salidas de stock", value=False, key="toggle_descontar")
+                with col_op2:
+                    sf = obtener_stock_full()
+                    dep_opts = sf["Deposito"].unique().tolist() if not sf.empty else ["0"]
+                    dep_sal = st.selectbox("Depósito origen", dep_opts, key="dep_sal_global") if descontar else None
+                if arch and st.button("🚀 IMPORTAR TODAS LAS HOJAS", type="primary"):
+                    try:
+                        df_unif = parsear_entregas_excel(arch)
+                        if df_unif.empty:
+                            st.error("No se pudieron leer las hojas del archivo.")
+                        else:
+                            conn = conectar_db(); cursor = conn.cursor()
+                            cursor.execute("DELETE FROM entregas")
+                            filas_ok = 0; filas_salida = 0; no_match = []
+                            for _, r in df_unif.iterrows():
+                                cursor.execute("""
+                                    INSERT INTO entregas (hoja,rto,dia_recibido,cliente,deposito,cantidad_comprada,producto,lote,cant_entregada,pendiente,estado,vendedor)
+                                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+                                """, (r["hoja"],r["rto"],r["dia_recibido"],r["cliente"],r["deposito"],r["cantidad_comprada"],r["producto"],r["lote"],r["cant_entregada"],r["pendiente"],r["estado"],r["vendedor"]))
+                                filas_ok += 1
+                                if descontar and r["cant_entregada"] > 0:
+                                    cursor.execute("SELECT id_producto FROM productos WHERE nombre=?", (r["producto"],))
+                                    match = cursor.fetchone()
+                                    if match:
+                                        cursor.execute("""
+                                            INSERT INTO movimientos (fecha_hora,tipo_movimiento,id_producto,cantidad,lote,referencia,deposito,origen)
+                                            VALUES (?,?,?,?,?,?,?,?)
+                                        """, (r["dia_recibido"] or datetime.now().strftime("%d/%m/%Y"),"Salida",match[0],r["cant_entregada"],r["lote"] or "S/L",f"Entrega a {r['cliente']}",dep_sal,"entrega"))
+                                        filas_salida += 1
+                                    else:
+                                        if r["producto"] not in no_match: no_match.append(r["producto"])
+                            conn.commit(); conn.close()
+                            guardar_metadata("ultima_importacion_entregas", datetime.now().strftime("%d/%m/%Y %H:%M"))
+                            msg = f"✅ {filas_ok} registros importados de las 4 hojas."
+                            if descontar: msg += f" {filas_salida} salidas registradas."
+                            st.success(msg)
+                            if no_match: st.warning(f"⚠️ Sin coincidencia en stock: {', '.join(no_match)}")
+                            st.rerun()
+                    except Exception as ex:
+                        st.error(f"❌ Error: {ex}")
 
     df_h = obtener_entregas(hoja_nombre)
     if df_h.empty:
         st.info("Sin datos. Importá el archivo de entregas en la pestaña 'LC / LCAGRO'.")
         return
 
-    # KPIs
-    tc = df_h["cantidad_comprada"].sum()
-    te = df_h["cant_entregada"].sum()
-    tp = df_h["pendiente"].sum()
-    pct = (te / tc * 100) if tc > 0 else 0
+    tc = df_h["cantidad_comprada"].sum(); te = df_h["cant_entregada"].sum()
+    tp = df_h["pendiente"].sum(); pct = (te / tc * 100) if tc > 0 else 0
     k1, k2, k3, k4, k5 = st.columns(5)
     with k1: st.metric("Registros", len(df_h))
     with k2: st.metric("Clientes", df_h["cliente"].nunique())
@@ -625,18 +732,13 @@ def mostrar_tab_entregas(hoja_nombre, color_estado, titulo):
     with k5: st.metric("Pendiente", f"{tp:,.0f}", delta=f"-{tp:,.0f}" if tp > 0 else "0", delta_color="inverse")
 
     st.markdown("---")
-
-    # Filtros
     cf1, cf2, cf3, cf4 = st.columns(4)
     with cf1:
-        estados_disp = ["Todos"] + sorted(df_h["estado"].dropna().unique().tolist())
-        f_est = st.selectbox("Estado", estados_disp, key=f"fest_{hoja_nombre}")
+        f_est = st.selectbox("Estado", ["Todos"] + sorted(df_h["estado"].dropna().unique().tolist()), key=f"fest_{hoja_nombre}")
     with cf2:
-        prods_disp = ["Todos"] + sorted(df_h["producto"].dropna().unique().tolist())
-        f_pr = st.selectbox("Producto", prods_disp, key=f"fprod_{hoja_nombre}")
+        f_pr = st.selectbox("Producto", ["Todos"] + sorted(df_h["producto"].dropna().unique().tolist()), key=f"fprod_{hoja_nombre}")
     with cf3:
-        vend_disp = ["Todos"] + sorted(df_h["vendedor"].dropna().replace("","S/V").unique().tolist())
-        f_vd = st.selectbox("Vendedor", vend_disp, key=f"fvend_{hoja_nombre}")
+        f_vd = st.selectbox("Vendedor", ["Todos"] + sorted(df_h["vendedor"].dropna().replace("","S/V").unique().tolist()), key=f"fvend_{hoja_nombre}")
     with cf4:
         f_cli = st.text_input("🔍 Cliente", placeholder="Buscar...", key=f"fcli_{hoja_nombre}")
 
@@ -646,87 +748,56 @@ def mostrar_tab_entregas(hoja_nombre, color_estado, titulo):
     if f_vd != "Todos": df_f2 = df_f2[df_f2["vendedor"].replace("","S/V") == f_vd]
     if f_cli: df_f2 = df_f2[df_f2["cliente"].str.contains(f_cli, case=False, na=False)]
 
-    # Solo mostrar lote si la hoja lo tiene
     tiene_lote = df_f2["lote"].replace("","").notna() & (df_f2["lote"].replace("","") != "")
     mostrar_lote = tiene_lote.any()
-
     st.markdown(f"**{len(df_f2)} registros encontrados**")
 
     if not df_f2.empty:
-        # Subtotales por producto
-        sub = df_f2.groupby("producto").agg(
-            Comprado=("cantidad_comprada","sum"),
-            Entregado=("cant_entregada","sum"),
-            Pendiente=("pendiente","sum"),
-            Clientes=("cliente","nunique")
-        ).reset_index().rename(columns={"producto":"Producto"})
+        sub = df_f2.groupby("producto").agg(Comprado=("cantidad_comprada","sum"),Entregado=("cant_entregada","sum"),Pendiente=("pendiente","sum"),Clientes=("cliente","nunique")).reset_index().rename(columns={"producto":"Producto"})
         sub["% Entregado"] = (sub["Entregado"] / sub["Comprado"].replace(0,1) * 100).round(1).astype(str) + "%"
         st.dataframe(sub, use_container_width=True, hide_index=True)
         st.markdown("---")
 
-        # Tabla detalle
         cols_base = ["dia_recibido","cliente","producto","cantidad_comprada","cant_entregada","pendiente","estado","vendedor"]
         if mostrar_lote: cols_base.insert(3, "lote")
-        if "deposito" in df_f2.columns and df_f2["deposito"].nunique() > 1:
-            cols_base.insert(1, "deposito")
-        if "rto" in df_f2.columns:
-            cols_base.insert(0, "rto")
+        if "deposito" in df_f2.columns and df_f2["deposito"].nunique() > 1: cols_base.insert(1, "deposito")
+        if "rto" in df_f2.columns: cols_base.insert(0, "rto")
         cols_base = [c for c in cols_base if c in df_f2.columns]
         df_tabla = df_f2[cols_base].copy()
-        nombres = {"dia_recibido":"Fecha","cliente":"Cliente","producto":"Producto",
-                   "cantidad_comprada":"Comprado","cant_entregada":"Entregado",
-                   "pendiente":"Pendiente","estado":"Estado","vendedor":"Vendedor",
-                   "lote":"Lote","deposito":"Depósito","rto":"RTO"}
+        nombres = {"dia_recibido":"Fecha","cliente":"Cliente","producto":"Producto","cantidad_comprada":"Comprado","cant_entregada":"Entregado","pendiente":"Pendiente","estado":"Estado","vendedor":"Vendedor","lote":"Lote","deposito":"Depósito","rto":"RTO"}
         df_tabla.rename(columns=nombres, inplace=True)
         st.dataframe(df_tabla, use_container_width=True, hide_index=True)
 
-        # Exportar
         output_e = io.BytesIO()
         with pd.ExcelWriter(output_e, engine='openpyxl') as writer:
             df_tabla.to_excel(writer, index=False, sheet_name='Entregas')
-        st.download_button(f"📥 Exportar vista", data=output_e.getvalue(),
-                           file_name=f"entregas_{hoja_nombre.replace(' ','_')}.xlsx",
-                           key=f"dl_{hoja_nombre}")
+        st.download_button(f"📥 Exportar vista", data=output_e.getvalue(), file_name=f"entregas_{hoja_nombre.replace(' ','_')}.xlsx", key=f"dl_{hoja_nombre}")
 
-        # Gráfico pendiente
         if df_f2["pendiente"].sum() > 0:
             st.markdown("---")
             st.subheader("📊 Pendiente por producto")
             pend_chart = df_f2[df_f2["pendiente"] > 0].groupby("producto")["pendiente"].sum().reset_index()
-            fig_p = px.bar(pend_chart, x="producto", y="pendiente",
-                           color="pendiente", color_continuous_scale="Reds",
-                           labels={"producto":"Producto","pendiente":"Pendiente"})
+            fig_p = px.bar(pend_chart, x="producto", y="pendiente", color="pendiente", color_continuous_scale="Reds", labels={"producto":"Producto","pendiente":"Pendiente"})
             st.plotly_chart(fig_p, use_container_width=True)
 
-        # Gráfico entregado vs comprado por producto
         st.subheader("📊 Entregado vs Comprado")
-        cmp_chart = df_f2.groupby("producto").agg(
-            Comprado=("cantidad_comprada","sum"),
-            Entregado=("cant_entregada","sum")
-        ).reset_index().melt(id_vars="producto", var_name="Tipo", value_name="Cantidad")
-        fig_cmp = px.bar(cmp_chart, x="producto", y="Cantidad", color="Tipo", barmode="group",
-                         color_discrete_map={"Comprado":"#6c757d","Entregado":"#28a745"},
-                         labels={"producto":"Producto"})
+        cmp_chart = df_f2.groupby("producto").agg(Comprado=("cantidad_comprada","sum"),Entregado=("cant_entregada","sum")).reset_index().melt(id_vars="producto", var_name="Tipo", value_name="Cantidad")
+        fig_cmp = px.bar(cmp_chart, x="producto", y="Cantidad", color="Tipo", barmode="group", color_discrete_map={"Comprado":"#6c757d","Entregado":"#28a745"}, labels={"producto":"Producto"})
         st.plotly_chart(fig_cmp, use_container_width=True)
 
-# ===================== TAB 2: LC / LCAGRO =====================
 with tab2:
-    # Tabs internas para las 2 hojas de Monsanto
     subtab_lc, subtab_lcagro = st.tabs(["🏢 LA CLEMENTINA S.A", "🏢 LCAGRO S.A"])
     with subtab_lc:
         mostrar_tab_entregas("LA CLEMENTINA S.A", "#007bff", "📦 Entregas Monsanto — LA CLEMENTINA S.A")
     with subtab_lcagro:
         mostrar_tab_entregas("LCAGRO S.A", "#6f42c1", "📦 Entregas Monsanto — LCAGRO S.A")
 
-# ===================== TAB 3: BAYER DEP55 =====================
 with tab3:
     mostrar_tab_entregas("BAYER DEP55", "#fd7e14", "🌿 Mercadería Consignada Bayer — DEP 55")
 
-# ===================== TAB 4: BAYER DIRECTA =====================
 with tab4:
     mostrar_tab_entregas("BAYER DIRECTA", "#20c997", "🚚 Mercadería Factura Directa Bayer — DEP 43/60")
 
-# ===================== TAB 5: PLANILLA =====================
 with tab5:
     st.subheader("📋 Planilla para Inventario Físico (CON LOTES)")
     stock_lotes = obtener_stock_con_lote()
@@ -739,7 +810,6 @@ with tab5:
     else:
         st.info("Sin datos cargados.")
 
-# ===================== TAB 6: HISTORIAL =====================
 with tab6:
     st.subheader("📜 Historial de Movimientos")
     hist_df = obtener_historial_movimientos()
@@ -749,19 +819,16 @@ with tab6:
         with c_hf2: f_prod_h = st.selectbox("Producto", ["Todos"] + sorted(hist_df["Producto"].unique().tolist()), key="h_prod")
         with c_hf3: f_dep_h = st.selectbox("Depósito", ["Todos"] + sorted(hist_df["Depósito"].unique().tolist()), key="h_dep")
         with c_hf4: f_origen_h = st.selectbox("Origen", ["Todos","manual","excel","entrega"], key="h_origen")
-
         df_h = hist_df.copy()
         if f_tipo_h != "Todos": df_h = df_h[df_h["Tipo"] == f_tipo_h]
         if f_prod_h != "Todos": df_h = df_h[df_h["Producto"] == f_prod_h]
         if f_dep_h != "Todos": df_h = df_h[df_h["Depósito"] == f_dep_h]
         if f_origen_h != "Todos": df_h = df_h[df_h["Origen"] == f_origen_h]
-
         c_hkpi1, c_hkpi2, c_hkpi3, c_hkpi4 = st.columns(4)
         with c_hkpi1: st.metric("Movimientos", len(df_h))
         with c_hkpi2: st.metric("Entradas", len(df_h[df_h["Tipo"] == "Entrada"]))
         with c_hkpi3: st.metric("Salidas", len(df_h[df_h["Tipo"] == "Salida"]))
         with c_hkpi4: st.metric("Manuales", len(df_h[df_h["Origen"] == "manual"]))
-
         st.dataframe(df_h.drop(columns=["ID"]), use_container_width=True, hide_index=True)
         output_hist = io.BytesIO()
         with pd.ExcelWriter(output_hist, engine='openpyxl') as writer:
@@ -770,25 +837,148 @@ with tab6:
     else:
         st.info("Sin movimientos registrados.")
 
-# ===================== TAB 7: CONFIGURACIÓN =====================
+# ===================== TAB 7: ANÁLISIS (NUEVO) =====================
 with tab7:
+    st.subheader("📊 Análisis")
+    stock_df_an = obtener_stock_full()
+    if not stock_df_an.empty:
+        col_an1, col_an2 = st.columns(2)
+        with col_an1:
+            st.markdown("##### Top 10 productos por stock")
+            df_pareto = stock_df_an.groupby("Producto")["Stock Actual"].sum().sort_values(ascending=False).head(10).reset_index()
+            fig_pareto = px.bar(df_pareto, x='Stock Actual', y='Producto', orientation='h', color='Stock Actual', color_continuous_scale='Greens')
+            st.plotly_chart(fig_pareto, use_container_width=True)
+        with col_an2:
+            st.markdown("##### Distribución por depósito")
+            df_dep = stock_df_an.groupby("Deposito")["Stock Actual"].sum().reset_index()
+            df_dep["Deposito"] = df_dep["Deposito"].apply(lambda d: nombre_deposito(d, dep_mapa))
+            fig_dep = px.pie(df_dep, names="Deposito", values="Stock Actual", color_discrete_sequence=px.colors.qualitative.Set2)
+            fig_dep.update_traces(textposition='inside', textinfo='percent+label')
+            st.plotly_chart(fig_dep, use_container_width=True)
+
+        # MEJORA 4: Cruce por depósito
+        st.markdown("---")
+        st.subheader("🔗 Cruce Stock vs Entregas Pendientes por Depósito")
+        entregas_an = obtener_entregas()
+        if not entregas_an.empty:
+            pend_dep = entregas_an[entregas_an["pendiente"] > 0].groupby(["producto","deposito"])["pendiente"].sum().reset_index()
+            stock_dep = stock_df_an.groupby(["Producto","Deposito"])["Stock Actual"].sum().reset_index()
+            cruce = stock_dep.merge(pend_dep, left_on=["Producto","Deposito"], right_on=["producto","deposito"], how="left")
+            cruce["Pendiente Entregas"] = cruce["pendiente"].fillna(0)
+            cruce["Diferencia"] = cruce["Stock Actual"] - cruce["Pendiente Entregas"]
+            cruce["Estado"] = cruce["Diferencia"].apply(lambda x: "✅ Alcanza" if x >= 0 else "❌ Falta stock")
+            cruce["Deposito"] = cruce["Deposito"].apply(lambda d: nombre_deposito(d, dep_mapa))
+            cruce = cruce[["Producto","Deposito","Stock Actual","Pendiente Entregas","Diferencia","Estado"]]
+            cruce = cruce[cruce["Pendiente Entregas"] > 0].sort_values("Diferencia")
+            if not cruce.empty:
+                st.dataframe(cruce, use_container_width=True, hide_index=True)
+            else:
+                st.success("✅ No hay pendientes de entrega con stock insuficiente.")
+        else:
+            st.info("Cargá el archivo de entregas para ver el cruce.")
+
+        # MEJORA 5: Evolución de stock en el tiempo
+        st.markdown("---")
+        st.subheader("📈 Evolución de Stock en el Tiempo")
+        prod_evol = st.selectbox("Seleccionar producto", sorted(stock_df_an["Producto"].unique().tolist()), key="prod_evol")
+        dep_evol = st.selectbox("Depósito", ["Todos"] + sorted(stock_df_an["Deposito"].unique().tolist()), key="dep_evol")
+        df_evol = obtener_evolucion_stock(prod_evol, dep_evol)
+        if not df_evol.empty:
+            fig_evol = px.line(df_evol, x="fecha_hora", y="stock_acum",
+                               title=f"Stock acumulado: {prod_evol}",
+                               labels={"fecha_hora":"Fecha","stock_acum":"Stock"},
+                               markers=True, color_discrete_sequence=["#007bff"])
+            fig_evol.add_hline(y=st.session_state.umbral_alerta, line_dash="dash",
+                               line_color="red", annotation_text="Umbral mínimo")
+            st.plotly_chart(fig_evol, use_container_width=True)
+        else:
+            st.info("Sin movimientos registrados para este producto.")
+
+        # MEJORA 3: lotes por vencer en análisis
+        st.markdown("---")
+        st.subheader("⏰ Lotes por Vencer (próximos 60 días)")
+        lv_full = obtener_lotes_por_vencer(60)
+        if not lv_full.empty:
+            lv_full["Deposito"] = lv_full["Deposito"].apply(lambda d: nombre_deposito(d, dep_mapa))
+            st.dataframe(lv_full[["Producto","Lote","Deposito","Vence","Dias Restantes","neta"]].rename(columns={"neta":"Stock"}), use_container_width=True, hide_index=True)
+        else:
+            st.success("✅ No hay lotes próximos a vencer.")
+
+# ===================== TAB 8: CONFIGURACIÓN =====================
+with tab8:
     st.subheader("⚙️ Configuración")
 
-    st.markdown("#### 📱 WhatsApp para alertas")
-    col_wa1, col_wa2 = st.columns([3,1])
-    with col_wa1:
-        nuevo_num = st.text_input("Número WhatsApp (con código de país, sin +)",
-                                   value=st.session_state.wa_numero, placeholder="Ej: 5493406123456")
-    with col_wa2:
-        st.write(""); st.write("")
-        if st.button("💾 Guardar"):
-            st.session_state.wa_numero = nuevo_num.strip()
-            st.success("✅ Guardado.")
+    if not es_admin:
+        st.warning("⛔ Solo administradores pueden modificar la configuración.")
+        st.stop()
+
+    # MEJORA 2: Backup de la base de datos
+    st.markdown("#### 💾 Backup de base de datos")
+    st.info("Descargá una copia de seguridad de todos tus datos. Guardala en un lugar seguro — Streamlit Cloud puede resetear el servidor.")
+    col_bk1, col_bk2 = st.columns(2)
+    with col_bk1:
+        if st.button("📥 Descargar backup completo"):
+            try:
+                db_path = "stock_agroquimicos.db"
+                if os.path.exists(db_path):
+                    with open(db_path, "rb") as f:
+                        db_bytes = f.read()
+                    fecha_bk = datetime.now().strftime("%Y%m%d_%H%M")
+                    st.download_button(
+                        label="⬇️ Guardar archivo .db",
+                        data=db_bytes,
+                        file_name=f"backup_stock_{fecha_bk}.db",
+                        mime="application/octet-stream",
+                        key="dl_backup"
+                    )
+                else:
+                    st.error("No se encontró el archivo de base de datos.")
+            except Exception as e:
+                st.error(f"Error al generar backup: {e}")
+    with col_bk2:
+        st.markdown("**Restaurar desde backup:**")
+        backup_file = st.file_uploader("Subí un archivo .db de backup", type=["db"], key="restore_db")
+        if backup_file and st.button("🔄 Restaurar backup", type="primary"):
+            confirmar_restore = st.checkbox("Confirmo que quiero reemplazar la base de datos actual")
+            if confirmar_restore:
+                try:
+                    with open("stock_agroquimicos.db", "wb") as f:
+                        f.write(backup_file.read())
+                    st.success("✅ Base de datos restaurada correctamente.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error al restaurar: {e}")
 
     st.markdown("---")
-    st.markdown("#### 🚨 Umbral de stock crítico")
-    nuevo_umbral = st.slider("Stock mínimo antes de alertar", min_value=1, max_value=500,
-                              value=st.session_state.umbral_alerta)
+
+    # MEJORA 8: Nombres de depósitos
+    st.markdown("#### 🏭 Nombres de Depósitos")
+    st.caption("Asigná nombres legibles a los códigos de depósito que vienen del Excel.")
+    stock_dep_config = obtener_stock_full()
+    if not stock_dep_config.empty:
+        dep_codigos = sorted(stock_dep_config["Deposito"].unique().tolist())
+        dep_nombres_actuales = obtener_nombres_depositos()
+        dep_data = pd.DataFrame({
+            "Código": dep_codigos,
+            "Nombre Legible": [dep_nombres_actuales.get(str(d), str(d)) for d in dep_codigos]
+        })
+        dep_editado = st.data_editor(dep_data, use_container_width=True, hide_index=True,
+                                      column_config={"Código": st.column_config.TextColumn(disabled=True),
+                                                     "Nombre Legible": st.column_config.TextColumn()},
+                                      key="editor_depositos")
+        if st.button("💾 Guardar nombres de depósitos"):
+            conn = conectar_db()
+            cursor = conn.cursor()
+            for _, row in dep_editado.iterrows():
+                cursor.execute("INSERT OR REPLACE INTO depositos_nombres (codigo, nombre_legible) VALUES (?,?)",
+                               (str(row["Código"]), str(row["Nombre Legible"]).strip()))
+            conn.commit(); conn.close()
+            st.success("✅ Nombres actualizados.")
+            st.rerun()
+
+    st.markdown("---")
+    st.markdown("#### 🚨 Umbral de stock crítico global")
+    nuevo_umbral = st.slider("Stock mínimo antes de alertar", min_value=1, max_value=500, value=st.session_state.umbral_alerta)
     if nuevo_umbral != st.session_state.umbral_alerta:
         st.session_state.umbral_alerta = nuevo_umbral
         st.rerun()
@@ -797,7 +987,6 @@ with tab7:
     st.markdown("#### 📂 Importar datos de stock")
     st.info("💡 La importación **conserva tus movimientos manuales**. Solo reemplaza los datos del Excel anterior.")
     archivo = st.file_uploader("Subí el archivo 'export 3.xlsx' o 'export 3.csv'", type=["xlsx","csv","xls"])
-
     if archivo and st.button("🚀 PROCESAR E IMPORTAR"):
         try:
             if archivo.name.endswith('.csv'):
@@ -808,7 +997,6 @@ with tab7:
             col_nombre = None
             if 'articulo' in df_import.columns: col_nombre = 'articulo'
             elif 'descripcion_1' in df_import.columns: col_nombre = 'descripcion_1'
-
             if col_nombre and 'stock_actual' in df_import.columns:
                 borrar_solo_importacion()
                 conn = conectar_db(); cursor = conn.cursor(); filas_ok = 0
