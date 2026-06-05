@@ -172,7 +172,7 @@ def obtener_historial_movimientos():
     query = """
         SELECT m.id_movimiento as ID, m.fecha_hora as Fecha, m.tipo_movimiento as Tipo,
                p.nombre as Producto, p.codigo as Código, m.cantidad as Cantidad,
-               p.unidad as Unidad, m.lote as Lote, m.depósito as Depósito,
+               p.unidad as Unidad, m.lote as Lote, m.deposito as Depósito,
                m.referencia as Referencia, COALESCE(m.origen,'excel') as Origen
         FROM movimientos m JOIN productos p ON m.id_producto = p.id_producto
         ORDER BY m.id_movimiento DESC
@@ -200,11 +200,24 @@ def decodificar_qr_reforzado(foto_input):
             img_pil = Image.open(foto_input)
             img_np = np.array(img_pil.convert('RGB'))
             img_cv = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
+            
+            # MEJORA INTEGRADA: Borde blanco perimetral para evitar fallos por recortes al ras
+            img_cv = cv2.copyMakeBorder(img_cv, 20, 20, 20, 20, borderType=cv2.BORDER_CONSTANT, value=[255, 255, 255])
+            
             detector = cv2.QRCodeDetector()
             valor, _, _ = detector.detectAndDecode(img_cv)
-            if valor: return valor.strip()
+            if valor: 
+                return valor.strip()
+                
+            # Segundo intento convirtiendo a escala de grises
+            gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
+            valor, _, _ = detector.detectAndDecode(gray)
+            if valor: 
+                return valor.strip()
+                
             return None
-        except: return None
+        except: 
+            return None
     return None
 
 def descargar_excel_agrupado_sin_lote(df):
@@ -373,6 +386,8 @@ if 'umbral_alerta' not in st.session_state:
     st.session_state.umbral_alerta = 20
 if 'mov_pendiente' not in st.session_state:
     st.session_state.mov_pendiente = None
+if 'ultimo_qr_procesado' not in st.session_state:
+    st.session_state.ultimo_qr_procesado = None
 
 # --- 4. INTERFAZ ---
 st.title("🧪 Control de Depósito Inteligente")
@@ -430,19 +445,26 @@ with tab1:
             with col_file:
                 foto_archivo = st.file_uploader("O subí imagen", type=["png","jpg","jpeg"], key="qr_file")
             foto_qr = foto_camara or foto_archivo
+            
             if foto_qr:
                 resultado_qr = decodificar_qr_reforzado(foto_qr)
                 if resultado_qr:
-                    st.success(f"✅ QR detectado: **{resultado_qr}**")
-                    match_qr = stock_df[
-                        stock_df["Producto"].str.contains(resultado_qr, case=False, na=False) |
-                        stock_df["Código"].astype(str).str.contains(resultado_qr, case=False, na=False)
-                    ]
-                    if not match_qr.empty:
-                        st.session_state.qr_detectado = match_qr.iloc[0]["Producto"]
-                        st.rerun()
-                    else:
-                        st.info(f"QR leído ({resultado_qr}) pero no coincide con ningún producto.")
+                    codigo_limpio = str(resultado_qr).strip().replace("\n", "").replace("\r", "")
+                    st.success(f"✅ Código Detectado: {codigo_limpio}")
+                    
+                    # MEJORA INTEGRADA: Evitamos loops infinitos controlando con state
+                    if st.session_state.ultimo_qr_procesado != codigo_limpio:
+                        st.session_state.ultimo_qr_procesado = codigo_limpio
+                        
+                        match_qr = stock_df[
+                            stock_df["Producto"].str.contains(codigo_limpio, case=False, na=False) |
+                            stock_df["Código"].astype(str).str.contains(codigo_limpio, case=False, na=False)
+                        ]
+                        if not match_qr.empty:
+                            st.session_state.qr_detectado = match_qr.iloc[0]["Producto"]
+                            st.rerun()
+                        else:
+                            st.info(f"QR leído ({codigo_limpio}) pero no coincide con ningún producto.")
                 else:
                     st.warning("No se detectó ningún QR.")
 
@@ -692,205 +714,125 @@ with tab5:
     df_planilla_raw = obtener_stock_con_lote()
     
     if df_planilla_raw.empty:
-        st.info("No hay stock disponible para auditar.")
+        st.info("No hay datos de stock disponibles para generar planillas.")
     else:
-        # --- NUEVA SECCIÓN: CONTEO FÍSICO POR QR ---
-        st.markdown("### 📷 Captura Rápida de Stock (Escanear Código QR)")
-        col_inv_cam, col_inv_manual = st.columns([1, 1])
+        st.markdown("Generá planillas de inventario en blanco o registrá las auditorías físicas.")
+        btn_planilla = descargar_planilla_inventario(df_planilla_raw)
+        st.download_button("📥 Descargar Planilla de Conteo Vacía (.xlsx)", data=btn_planilla, file_name="Planilla_Toma_Stock.xlsx")
         
-        producto_encontrado = None
-        codigo_encontrado = None
-        deposito_encontrado = None
-        stock_sistema_encontrado = 0.0
-        
-        with col_inv_cam:
-            foto_inv = st.camera_input("Enfocá el QR del Producto en el Galpón", key="inv_camara_qr")
-            if foto_inv:
-                qr_leido = decodificar_qr_reforzado(foto_inv)
-                if qr_leido:
-                    # Buscamos en el DataFrame de stock si coincide con el código numérico o parte del nombre
-                    match_inv = df_planilla_raw[
-                        (df_planilla_raw["Código"].astype(str) == str(qr_leido)) | 
-                        (df_planilla_raw["Producto"].str.contains(str(qr_leido), case=False, na=False))
-                    ]
-                    if not match_inv.empty:
-                        producto_encontrado = match_inv.iloc[0]["Producto"]
-                        codigo_encontrado = match_inv.iloc[0]["Código"]
-                        deposito_encontrado = match_inv.iloc[0]["Deposito"]
-                        stock_sistema_encontrado = match_inv.iloc[0]["Stock Actual"]
-                        st.success(f"🎯 Producto Identificado: **{producto_encontrado}** (Cód: {codigo_encontrado})")
-                    else:
-                        st.error(f"❌ El QR ({qr_leido}) no coincide con ningún producto importado en la base de datos.")
-                else:
-                    st.warning("⚠️ No se pudo leer bien el QR. Intentá centrarlo mejor o con más luz.")
-                    
-        with col_inv_manual:
-            if producto_encontrado:
-                st.markdown(f"**📍 Depósito:** {deposito_encontrado}")
-                st.markdown(f"**💻 Stock Teórico en Sistema:** `{stock_sistema_encontrado:,.2f}`")
-                
-                conteo_input = st.number_input("📥 Cantidad Física Real Encontrada", min_value=0.0, step=1.0, value=float(stock_sistema_encontrado), key="cant_fisica_qr")
-                obs_input = st.text_input("📝 Notas / Observaciones", placeholder="Ej: Faltan 2 bidones rotos...", key="obs_fisica_qr")
-                
-                dif_calculada = conteo_input - stock_sistema_encontrado
-                if dif_calculada == 0:
-                    st.caption("✅ El conteo coincide perfectamente con el sistema.")
-                elif dif_calculada > 0:
-                    st.caption(f"🟢 Sobran `+{dif_calculada:,.2f}` unidades.")
-                else:
-                    st.caption(f"🔴 Faltan `{dif_calculada:,.2f}` unidades.")
-                    
-                if st.button("💾 Guardar Conteo en Auditoría", type="primary"):
-                    conn = conectar_db()
-                    cursor = conn.cursor()
-                    cursor.execute("""
-                        INSERT INTO inventario_fisico (fecha_conteo, codigo, producto, deposito, stock_sistema, conteo_fisico, diferencia, observaciones)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (datetime.now().strftime("%d/%m/%Y %H:%M"), str(codigo_encontrado), producto_encontrado, deposito_encontrado, stock_sistema_encontrado, conteo_input, dif_calculada, obs_input))
-                    conn.commit()
-                    conn.close()
-                    st.success("✅ Conteo guardado con éxito en el registro histórico.")
-                    st.rerun()
-            else:
-                st.info("💡 Escaneá un código QR con la cámara de tu celular o computadora para cargar su stock físico al instante.")
-
         st.markdown("---")
-        st.markdown("### 📋 Planilla General para Inventario en Papel / Excel")
+        st.subheader("📝 Registrar Auditoría Directa")
         
-        col_p1, col_p2 = st.columns(2)
-        with col_p1:
-            f_dep_p = st.selectbox("Filtrar Depósito para la planilla", ["Todos"] + sorted(df_planilla_raw["Deposito"].unique().tolist()), key="f_dep_planilla")
-        with col_p2:
-            st.write("")
-            st.write("")
-            df_descarga = df_planilla_raw.copy()
-            if f_dep_p != "Todos":
-                df_descarga = df_descarga[df_descarga["Deposito"] == f_dep_p]
-            bin_planilla = descargar_planilla_inventario(df_descarga)
-            st.download_button("📥 Descargar Planilla de Toma de Stock (.xlsx)", data=bin_planilla, file_name=f"Planilla_Toma_Stock_{f_dep_p}.xlsx")
-            
-        df_mostrar_p = df_planilla_raw.copy()
-        if f_dep_p != "Todos":
-            df_mostrar_p = df_mostrar_p[df_mostrar_p["Deposito"] == f_dep_p]
-            
-        st.dataframe(df_mostrar_p, use_container_width=True, hide_index=True)
-        
-        # --- NUEVA SECCIÓN: HISTÓRICO DE AUDITORÍAS REALIZADAS ---
-        with st.expander("📊 Ver Historial de Conteos Físicos Guardados", expanded=False):
-            conn = conectar_db()
-            try:
-                df_auditorias = pd.read_sql_query("SELECT fecha_conteo as [Fecha/Hora], codigo as [Cód], producto as [Producto], deposito as [Depósito], stock_sistema as [Stock Sistema], conteo_fisico as [Conteo Físico], diferencia as [Diferencia], observaciones as [Observaciones] FROM inventario_fisico ORDER BY id_inventario DESC", conn)
-            except:
-                df_auditorias = pd.DataFrame()
-            conn.close()
-            
-            if not df_auditorias.empty:
-                st.dataframe(df_auditorias, use_container_width=True, hide_index=True)
+        with st.form("form_inventario"):
+            col_inv1, col_inv2 = st.columns(2)
+            with col_inv1:
+                p_inv = st.selectbox("Producto a auditar", sorted(df_planilla_raw["Producto"].unique()))
+                d_inv = st.selectbox("Depósito", sorted(df_planilla_raw["Deposito"].unique()))
+            with col_inv2:
+                # Buscamos el stock que figura en el sistema actual
+                match_sis = df_planilla_raw[(df_planilla_raw["Producto"] == p_inv) & (df_planilla_raw["Deposito"] == d_inv)]
+                stock_sis_val = match_sis["Stock Actual"].sum() if not match_sis.empty else 0.0
                 
-                output_auditoria = io.BytesIO()
-                with pd.ExcelWriter(output_auditoria, engine='openpyxl') as writer:
-                    df_auditorias.to_excel(writer, index=False, sheet_name='Conteos_Fisicos')
-                st.download_button("📥 Exportar Historial de Diferencias (.xlsx)", data=output_auditoria.getvalue(), file_name="Historial_Ajustes_Inventario.xlsx")
-            else:
-                st.caption("Todavía no se registraron conteos físicos mediante código QR.")
+                st.write(f"**Stock actual en Sistema:** {stock_sis_val:,.1f}")
+                conteo_val = st.number_input("Cantidad Física Detectada", min_value=0.0, step=1.0)
+            
+            obs_inv = st.text_input("Observaciones de la auditoría")
+            guardar_auditoria = st.form_submit_button("💾 Guardar Ajuste / Conteo")
+            
+            if guardar_auditoria:
+                diff = conteo_val - stock_sis_val
+                conn = conectar_db()
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO inventario_fisico (fecha_conteo, codigo, producto, deposito, stock_sistema, conteo_fisico, diferencia, observaciones)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (datetime.now().strftime("%d/%m/%Y %H:%M"), "AUDIT", p_inv, d_inv, stock_sis_val, conteo_val, diff, obs_inv))
+                conn.commit()
+                conn.close()
+                st.success(f"✅ Auditoría guardada. Diferencia de: {diff:,.1f}")
+                st.rerun()
 
 # ===================== TAB 6: HISTORIAL =====================
 with tab6:
-    st.subheader("📜 Historial General de Movimientos")
-    df_m = obtener_historial_movimientos()
-    if df_m.empty:
-        st.info("No hay movimientos registrados en el sistema.")
+    st.subheader("📜 Historial de Movimientos Registrados")
+    df_hist = obtener_historial_movimientos()
+    if df_hist.empty:
+        st.info("No se registran movimientos en el historial.")
     else:
-        ch1, ch2, ch3 = st.columns(3)
-        with ch1:
-            f_tm = st.selectbox("Tipo Movimiento", ["Todos", "Entrada", "Salida"])
-        with ch2:
-            f_or = st.selectbox("Origen", ["Todos", "excel", "manual", "entrega"])
-        with ch3:
-            f_txt = st.text_input("🔍 Buscar en Historial (Filtro rápido)", placeholder="Palabra clave...")
-
-        df_mf = df_m.copy()
-        if f_tm != "Todos": df_mf = df_mf[df_mf["Tipo"] == f_tm]
-        if f_or != "Todos": df_mf = df_mf[df_mf["Origen"] == f_or]
-        if f_txt:
-            df_mf = df_mf[df_mf["Producto"].str.contains(f_txt, case=False, na=False) |
-                          df_mf["Código"].astype(str).str.contains(f_txt, case=False, na=False) |
-                          df_mf["Referencia"].str.contains(f_txt, case=False, na=False)]
-
-        st.markdown(f"**{len(df_mf)} filas encontradas**")
-        st.dataframe(df_mf, use_container_width=True, hide_index=True)
-
-        if st.button("🗑️ Eliminar fila seleccionada"):
-            st.info("Para eliminar un movimiento manual erróneo, por favor contactar al administrador del sistema con el ID del registro.")
+        st.dataframe(df_hist, use_container_width=True, hide_index=True)
+        
+        # Historial de inventarios físicos
+        conn = conectar_db()
+        try: df_inv_hist = pd.read_sql_query("SELECT * FROM inventario_fisico ORDER BY id_inventario DESC", conn)
+        except: df_inv_hist = pd.DataFrame()
+        conn.close()
+        
+        if not df_inv_hist.empty:
+            st.markdown("---")
+            st.subheader("📋 Historial de Ajustes de Inventario Físico")
+            st.dataframe(df_inv_hist, use_container_width=True, hide_index=True)
 
 # ===================== TAB 7: CONFIGURACIÓN =====================
 with tab7:
-    st.subheader("⚙️ Parámetros globales y carga de datos macro")
+    st.subheader("⚙️ Configuración del Sistema e Importación de Stock")
     
-    with st.expander("📊 Umbral de Alertas y Enlaces"):
-        st.session_state.umbral_alerta = st.number_input("Mínimo crítico para alerta de Stock Bajo:", min_value=1, value=st.session_state.umbral_alerta)
-        st.session_state.wa_numero = st.text_input("Número de WhatsApp de destino:", value=st.session_state.wa_numero)
-
-    with st.expander("📂 Importar Stock Base desde MacroGest / Excel", expanded=obtener_stock_full().empty):
-        st.info("Cargá la planilla base de stock exportada de MacroGest para actualizar la lista base de productos.")
-        archivo_stock = st.file_uploader("Planilla de Stock (.xlsx)", type=["xlsx","xls"], key="uploader_stock_base")
+    with st.expander("📂 Importación de Archivo de Stock Principal (MacroGest)"):
+        st.info("Subí el reporte de stock en formato Excel para inicializar los datos base del sistema.")
+        arch_stock = st.file_uploader("Archivo de Stock (.xlsx)", type=["xlsx","xls"], key="uploader_stock_main")
         
-        if archivo_stock and st.button("🚀 PROCESAR E IMPORTAR STOCK BASE"):
+        if arch_stock and st.button("🚀 Procesar e Importar Stock Base", type="primary"):
             try:
-                df_excel = pd.read_excel(archivo_stock)
-                df_excel.columns = [str(c).strip() for c in df_excel.columns]
+                df_s = pd.read_excel(arch_stock)
+                df_s.columns = [str(c).strip() for c in df_s.columns]
                 
-                col_prod = next((c for c in df_excel.columns if 'producto' in c.lower() or 'articulo' in c.lower() or 'nombre' in c.lower()), None)
-                col_cod = next((c for c in df_excel.columns if 'cod' in c.lower() or 'id' in c.lower() or 'clv' in c.lower() or 'código' in c.lower()), None)
-                col_cant = next((c for c in df_excel.columns if 'cant' in c.lower() or 'stock' in c.lower() or 'actual' in c.lower() or 'físico' in c.lower()), None)
-                col_uni = next((c for c in df_excel.columns if 'uni' in c.lower() or 'medida' in c.lower()), None)
-                col_dep = next((c for c in df_excel.columns if 'dep' in c.lower() or 'suc' in c.lower() or 'ubica' in c.lower()), None)
-                col_lot = next((c for c in df_excel.columns if 'lote' in c.lower() or 'partida' in c.lower()), None)
-
-                if not col_prod or not col_cant:
-                    st.error(f"No se encontraron las columnas requeridas en el Excel. Detectadas: {list(df_excel.columns)}")
-                else:
-                    borrar_solo_importacion()
-                    conn = conectar_db()
-                    cursor = conn.cursor()
+                conn = conectar_db()
+                cursor = conn.cursor()
+                
+                # Limpieza previa de importaciones automáticas para no duplicar
+                cursor.execute("DELETE FROM movimientos WHERE origen = 'excel' OR origen IS NULL")
+                
+                for _, row in df_s.iterrows():
+                    p_name = safe_str(row.get("Producto", row.get("PRODUCTO", "")))
+                    p_cod = safe_str(row.get("Código", row.get("CODIGO", "S/C")))
+                    p_uni = safe_str(row.get("Unidad", row.get("UNIDAD", "U")))
+                    p_cant = safe_float(row.get("Stock Actual", row.get("STOCK ACTUAL", 0.0)))
+                    p_dep = safe_str(row.get("Deposito", row.get("DEPOSITO", "GENERAL")))
+                    p_lote = safe_str(row.get("Lote", row.get("LOTE", "S/L")))
                     
-                    p_cargados = 0
-                    m_cargados = 0
+                    if not p_name: continue
                     
-                    for _, fila in df_excel.iterrows():
-                        nom = safe_str(fila[col_prod])
-                        if not nom: continue
-                        
-                        cod = safe_str(fila[col_cod]) if col_cod else "S/C"
-                        uni = safe_str(fila[col_uni]) if col_uni else "U"
-                        cant = safe_float(fila[col_cant])
-                        dep = safe_str(fila[col_dep]) if col_dep else "CENTRAL"
-                        lot = safe_str(fila[col_lot]) if col_lot else "S/L"
-                        
-                        cursor.execute("INSERT OR IGNORE INTO productos (nombre, unidad, codigo) VALUES (?,?,?)", (nom, uni, cod))
-                        cursor.execute("UPDATE productos SET codigo=?, unidad=? WHERE nombre=?", (cod, uni, nom))
-                        
-                        cursor.execute("SELECT id_producto FROM productos WHERE nombre=?", (nom,))
-                        id_p = cursor.fetchone()[0]
-                        
-                        cursor.execute("""
-                            INSERT INTO movimientos (fecha_hora, tipo_movimiento, id_producto, cantidad, lote, referencia, deposito, origen)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                        """, (datetime.now().strftime("%d/%m/%Y %H:%M"), "Entrada", id_p, cant, lot, "Importación Inicial Excel", dep, "excel"))
-                        
-                        m_cargados += 1
-                        
-                    conn.commit()
-                    conn.close()
-                    guardar_metadata("ultima_importacion", datetime.now().strftime("%d/%m/%Y %H:%M"))
-                    st.success(f"✨ ¡Importación Exitosa! Se procesaron {m_cargados} líneas de stock base de MacroGest.")
-                    st.rerun()
-            except Exception as ex:
-                st.error(f"Ocurrió un error en la lectura del archivo: {ex}")
+                    cursor.execute("INSERT OR IGNORE INTO productos (nombre, unidad, codigo) VALUES (?, ?, ?)", (p_name, p_uni, p_cod))
+                    cursor.execute("SELECT id_producto FROM productos WHERE nombre=?", (p_name,))
+                    id_p = cursor.fetchone()[0]
+                    
+                    cursor.execute("""
+                        INSERT INTO movimientos (fecha_hora, tipo_movimiento, id_producto, cantidad, lote, referencia, deposito, origen)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (datetime.now().strftime("%d/%m/%Y %H:%M"), "Entrada", id_p, p_cant, p_lote, "Carga Base Excel", p_dep, "excel"))
+                
+                conn.commit()
+                conn.close()
+                guardar_metadata("ultima_importacion", datetime.now().strftime("%d/%m/%Y %H:%M"))
+                st.success("✅ Archivo de Stock base importado correctamente.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error al procesar el archivo: {e}")
+                
+    st.markdown("---")
+    st.subheader("🚨 Umbrales de Alertas y Parámetros")
+    st.session_state.umbral_alerta = st.number_input("Umbral mínimo para alertas de stock bajo", min_value=1, value=st.session_state.umbral_alerta)
+    st.session_state.wa_numero = st.text_input("Número de WhatsApp para Notificaciones (ej: 5493406123456)", value=st.session_state.wa_numero)
 
-    with st.expander("🚨 Zona de peligro / Reseteo de Base de Datos"):
-        st.warning("Estas acciones borrarán de forma irreversible los datos del almacenamiento interno de la app.")
-        if st.button("🗑️ Borrar base de datos completa (Productos y Movimientos)"):
+    st.markdown("---")
+    st.subheader("⚠️ Mantenimiento Crítico")
+    col_b1, col_b2 = st.columns(2)
+    with col_b1:
+        if st.button("🗑️ Borrar SOLO Datos de Importaciones Excel", type="secondary"):
+            borrar_solo_importacion()
+            st.warning("Se eliminaron los datos importados por Excel. Los registros manuales se mantienen.")
+            st.rerun()
+    with col_b2:
+        if st.button("🔥 BORRAR TODA LA BASE DE DATOS", type="primary"):
             borrar_datos_totales()
-            st.success("Base de datos completamente vaciada.")
+            st.error("Se vaciaron todas las tablas del sistema por completo.")
             st.rerun()
