@@ -168,6 +168,57 @@ def inicializar_db():
         usuario     TEXT
     )""")
 
+    cursor.execute("""CREATE TABLE IF NOT EXISTS metas_campana (
+        id_meta      INTEGER PRIMARY KEY AUTOINCREMENT,
+        campana      TEXT NOT NULL DEFAULT '2026-2027',
+        vendedor     TEXT NOT NULL,
+        producto     TEXT NOT NULL,
+        unidad       TEXT DEFAULT 'Tn',
+        meta_volumen REAL DEFAULT 0,
+        meta_facturacion REAL DEFAULT 0,
+        moneda_meta  TEXT DEFAULT 'ARS',
+        UNIQUE(campana, vendedor, producto)
+    )""")
+
+    cursor.execute("""CREATE TABLE IF NOT EXISTS cartera_clientes (
+        id_cliente       INTEGER PRIMARY KEY AUTOINCREMENT,
+        vendedor         TEXT NOT NULL,
+        cliente          TEXT NOT NULL,
+        tipo             TEXT DEFAULT 'activo',
+        superficie_ha    REAL DEFAULT 0,
+        potencial_facturacion REAL DEFAULT 0,
+        field_view       INTEGER DEFAULT 0,
+        ultima_compra    TEXT,
+        estado           TEXT DEFAULT 'activo',
+        observaciones    TEXT,
+        campana          TEXT DEFAULT '2026-2027',
+        UNIQUE(vendedor, cliente, campana)
+    )""")
+
+    cursor.execute("""CREATE TABLE IF NOT EXISTS reportes_semanales (
+        id_reporte      INTEGER PRIMARY KEY AUTOINCREMENT,
+        vendedor        TEXT NOT NULL,
+        fecha_semana    TEXT NOT NULL,
+        facturacion     REAL DEFAULT 0,
+        nuevos_clientes INTEGER DEFAULT 0,
+        visitas         INTEGER DEFAULT 0,
+        avances         TEXT,
+        obstaculos      TEXT,
+        oportunidades   TEXT,
+        plan_accion     TEXT,
+        campana         TEXT DEFAULT '2026-2027'
+    )""")
+
+    cursor.execute("""CREATE TABLE IF NOT EXISTS productos_foco (
+        id_foco    INTEGER PRIMARY KEY AUTOINCREMENT,
+        campana    TEXT NOT NULL DEFAULT '2026-2027',
+        producto   TEXT NOT NULL,
+        unidad     TEXT DEFAULT 'Tn',
+        meta_total REAL DEFAULT 0,
+        prioridad  INTEGER DEFAULT 1,
+        UNIQUE(campana, producto)
+    )""")
+
     # Migraciones para instalaciones previas
     migraciones = [
         "ALTER TABLE productos ADD COLUMN codigo TEXT",
@@ -729,6 +780,125 @@ def parsear_entregas_excel(archivo):
     return pd.DataFrame(registros) if registros else pd.DataFrame()
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 10b. QUERIES PLAN COMERCIAL
+# ─────────────────────────────────────────────────────────────────────────────
+CAMPANA_ACTUAL = "2026-2027"
+
+PRODUCTOS_FOCO_DEFAULT = [
+    ("Semilla Maíz (Híbridos Bayer)", "Bolsas"),
+    ("Semilla Soja (Autógamas)",       "Bolsas"),
+    ("Round Up / Glifosato",           "Litros"),
+    ("Fungicidas Línea Bayer",         "Litros"),
+    ("Adengo (Herbicida Maíz)",        "Litros"),
+    ("Seegrown (Estimulante)",         "Litros"),
+]
+
+DISTRIBUCION_OBJETIVO = {
+    "Semillas autógamas": 30,
+    "Agroquímicos":        30,
+    "Fertilizantes":       30,
+    "Otros / Servicios":   10,
+}
+
+@st.cache_data(ttl=30)
+def obtener_metas_campana(campana=CAMPANA_ACTUAL):
+    conn = conectar_db()
+    try:    df = pd.read_sql_query("SELECT * FROM metas_campana WHERE campana=?", conn, params=(campana,))
+    except: df = pd.DataFrame()
+    conn.close()
+    return df
+
+@st.cache_data(ttl=30)
+def obtener_cartera(vendedor=None, campana=CAMPANA_ACTUAL):
+    conn = conectar_db()
+    try:
+        if vendedor:
+            df = pd.read_sql_query(
+                "SELECT * FROM cartera_clientes WHERE vendedor=? AND campana=? ORDER BY tipo, cliente",
+                conn, params=(vendedor, campana))
+        else:
+            df = pd.read_sql_query(
+                "SELECT * FROM cartera_clientes WHERE campana=? ORDER BY vendedor, tipo, cliente",
+                conn, params=(campana,))
+    except: df = pd.DataFrame()
+    conn.close()
+    return df
+
+@st.cache_data(ttl=30)
+def obtener_reportes(vendedor=None, campana=CAMPANA_ACTUAL):
+    conn = conectar_db()
+    try:
+        if vendedor:
+            df = pd.read_sql_query(
+                "SELECT * FROM reportes_semanales WHERE vendedor=? AND campana=? ORDER BY fecha_semana DESC",
+                conn, params=(vendedor, campana))
+        else:
+            df = pd.read_sql_query(
+                "SELECT * FROM reportes_semanales WHERE campana=? ORDER BY fecha_semana DESC",
+                conn, params=(campana,))
+    except: df = pd.DataFrame()
+    conn.close()
+    return df
+
+@st.cache_data(ttl=30)
+def obtener_productos_foco(campana=CAMPANA_ACTUAL):
+    conn = conectar_db()
+    try:    df = pd.read_sql_query("SELECT * FROM productos_foco WHERE campana=? ORDER BY prioridad", conn, params=(campana,))
+    except: df = pd.DataFrame()
+    conn.close()
+    if df.empty:
+        # Inicializar con defaults si está vacío
+        conn2 = conectar_db()
+        for i, (prod, uni) in enumerate(PRODUCTOS_FOCO_DEFAULT, 1):
+            try:
+                conn2.execute("INSERT OR IGNORE INTO productos_foco (campana,producto,unidad,meta_total,prioridad) VALUES (?,?,?,?,?)",
+                              (campana, prod, uni, 0, i))
+            except: pass
+        conn2.commit(); conn2.close()
+        conn3 = conectar_db()
+        try:    df = pd.read_sql_query("SELECT * FROM productos_foco WHERE campana=? ORDER BY prioridad", conn3, params=(campana,))
+        except: df = pd.DataFrame()
+        conn3.close()
+    return df
+
+def ventas_reales_por_vendedor(campana=CAMPANA_ACTUAL):
+    """Cruza entregas con vendedor para medir performance real."""
+    ent = obtener_entregas()
+    if ent.empty: return pd.DataFrame()
+    r = (ent.groupby("vendedor")
+         .agg(Facturado_Total=("cantidad_comprada","sum"),
+              Entregado_Total=("cant_entregada","sum"),
+              Pendiente_Total=("pendiente","sum"),
+              Clientes_Activos=("cliente","nunique"))
+         .reset_index())
+    r["% Cumplimiento"] = (r["Entregado_Total"] / r["Facturado_Total"].replace(0,1) * 100).round(1)
+    return r
+
+def gauge_kpi(valor, meta, titulo, unidad=""):
+    """Plotly gauge chart para un KPI individual."""
+    pct = min((valor / meta * 100) if meta > 0 else 0, 150)
+    color = "#28a745" if pct >= 90 else ("#ffc107" if pct >= 60 else "#dc3545")
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number+delta",
+        value=valor,
+        delta={"reference": meta, "valueformat": ",.0f"},
+        title={"text": titulo, "font": {"size": 13}},
+        number={"suffix": f" {unidad}", "valueformat": ",.1f"},
+        gauge={
+            "axis": {"range": [0, max(meta * 1.3, valor * 1.1, 1)]},
+            "bar":  {"color": color},
+            "steps": [
+                {"range": [0, meta * 0.6],  "color": "#fff0f0"},
+                {"range": [meta * 0.6, meta * 0.9],  "color": "#fffbf0"},
+                {"range": [meta * 0.9, meta * 1.3],  "color": "#f0fff4"},
+            ],
+            "threshold": {"line": {"color": "black", "width": 3}, "value": meta},
+        }
+    ))
+    fig.update_layout(height=220, margin=dict(l=10, r=10, t=40, b=10))
+    return fig
+
+# ─────────────────────────────────────────────────────────────────────────────
 # 11. INIT
 # ─────────────────────────────────────────────────────────────────────────────
 inicializar_db()
@@ -780,7 +950,7 @@ if auth_enabled and st.session_state.get("authenticated"):
 # ─────────────────────────────────────────────────────────────────────────────
 st.title("🧪 Control de Depósito Inteligente")
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
     "⚡ Panel",
     "📦 LC / LCAGRO",
     "🌿 Bayer DEP55",
@@ -790,6 +960,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
     "💲 Valorización",
     "📈 Reportes",
     "⚙️ Configuración",
+    "📊 Plan Comercial",
 ])
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1919,3 +2090,510 @@ with tab9:
     st.markdown("---")
     st.caption(f"La Clementina S.A. — v2.0 PRO — "
                f"{'PDF ✅' if PDF_AVAILABLE else 'PDF ❌ (pip install reportlab)'}")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TAB 10 — PLAN COMERCIAL 2026-2027
+# ═══════════════════════════════════════════════════════════════════════════════
+with tab10:
+    st.markdown("""
+    <div style="background:linear-gradient(135deg,#1a5276,#2e86c1);
+                color:white;padding:24px 28px;border-radius:12px;margin-bottom:20px">
+        <h2 style="margin:0;font-size:1.5rem">📊 Plan Comercial — Campaña 2026-2027</h2>
+        <p style="margin:6px 0 0;opacity:.85">La Clementina S.A. · Dirección Comercial · San Jorge, Santa Fe</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    pc1, pc2, pc3, pc4, pc5 = st.tabs([
+        "📋 El Plan",
+        "🎯 Metas & Productos",
+        "📈 KPI Dashboard",
+        "👥 Cartera de Clientes",
+        "📝 Reportes Semanales",
+    ])
+
+    # ── SUBTAB 1: DOCUMENTO DEL PLAN ─────────────────────────────────────────
+    with pc1:
+        st.markdown("""
+## 1. PROPÓSITO DEL PLAN
+
+El presente Plan Comercial establece los lineamientos estratégicos y operativos que orientarán la gestión de ventas durante la **Campaña 2026-2027**. Su propósito es proveer a cada integrante del equipo comercial un marco claro de objetivos, métricas de seguimiento y metodología de trabajo.
+
+Este documento es de **cumplimiento obligatorio**. Cada vendedor deberá presentar su propio plan de acción antes del **15 de julio de 2026**, el cual será evaluado semanalmente y reportado a Dirección de forma mensual.
+
+---
+
+## 2. OBJETIVOS GENERALES
+
+### 2.1 Crecimiento de Facturación
+| Canal | Objetivo |
+|---|---|
+| La Clementina + Bayer | **+30 %** sobre la campaña anterior (en línea con ajuste de precios) |
+| Volumen físico estratégico | **+20 %** en Maíz, Round Up y Semillas Autógamas |
+
+> ⚠️ Toda desviación superior al **10 % negativo** sobre la meta mensual debe ser informada y fundamentada dentro de las **48 horas** al responsable comercial.
+
+### 2.2 Distribución Objetivo de Facturación (La Clementina)
+| Rubro | Participación |
+|---|---|
+| Semillas autógamas | **30 %** |
+| Agroquímicos | **30 %** |
+| Fertilizantes | **30 %** |
+| Otros / Servicios | **10 %** |
+
+---
+
+## 3. SEGMENTACIÓN DE CARTERA
+
+### 3.1 Clientes Premium (Regla 80/20)
+- El segmento Premium representa el **80 % de la facturación** en **no menos del 20 %** de los clientes activos.
+- Con una cartera de 50 clientes: mínimo 10 cuentas Premium.
+- Una concentración inferior es un **riesgo estratégico** → acción de captación inmediata.
+
+### 3.2 Fidelización y Reactivación
+- **Clientes activos**: seguimiento, propuestas de valor, presencia en campo.
+- **Clientes inactivos**: propuesta de retorno focalizada en necesidades actuales.
+
+Cada vendedor presenta mensualmente el **estado de su cartera** con clientes en riesgo y acciones en curso.
+
+---
+
+## 4. FIELD VIEW — CLIENTES OBJETIVOS
+Cada vendedor debe:
+- Identificar **mínimo 5 clientes** para seguimiento productivo vía Field View.
+- Presentar el listado + cronograma antes del **31 de julio de 2026**.
+- Usar los datos de la plataforma como argumento comercial en visitas.
+
+---
+
+## 5. KPIs Y METODOLOGÍA DE SEGUIMIENTO
+
+| Indicador | Objetivo | Frecuencia |
+|---|---|---|
+| Facturación total (LC + Bayer) | Meta mensual / acumulado | Semanal y mensual |
+| Facturación por rubro | Mix 30/30/30 | Mensual |
+| Clientes Premium activos | ≥ 20 % del total | Mensual |
+| Nuevos clientes | Meta por zona | Mensual |
+| Volumen productos foco | Meta por producto / semestre | Mensual |
+| Clientes Field View activos | **Mínimo 5** por vendedor | Semestral |
+| Clientes reactivados | Sobre base inactivos previos | Mensual |
+
+### Ciclo de Reporte
+- **Reunión semanal**: avances, obstáculos y oportunidades.
+- **Reporte mensual escrito** a Dirección: KPIs, desvíos y plan correctivo.
+- **Revisión semestral**: evaluación integral y ajuste de metas.
+
+---
+
+## 6. COMPROMISOS DEL EQUIPO
+- ✅ Plan de acción individual antes del **15 de julio de 2026**.
+- ✅ Registro semanal en **MacroGest**: visitas, oportunidades, cartera.
+- ✅ Asistencia a reuniones con información actualizada.
+- ✅ Comunicación proactiva de situaciones de riesgo.
+
+---
+> *"El éxito comercial no es consecuencia del azar. Es el resultado de planificar, ejecutar y mejorar de forma consistente."*
+        """)
+
+    # ── SUBTAB 2: METAS & PRODUCTOS FOCO ─────────────────────────────────────
+    with pc2:
+        st.write("### 🎯 Productos Foco — Metas Generales de Campaña")
+
+        df_pf = obtener_productos_foco()
+        if not df_pf.empty:
+            pf_edit = st.data_editor(
+                df_pf[["producto","unidad","meta_total","prioridad"]].rename(columns={
+                    "producto":"Producto","unidad":"Unidad",
+                    "meta_total":"Meta Total Campaña","prioridad":"Prioridad"
+                }),
+                column_config={
+                    "Meta Total Campaña": st.column_config.NumberColumn(min_value=0, format="%.0f"),
+                    "Prioridad":          st.column_config.NumberColumn(min_value=1, max_value=10),
+                },
+                hide_index=True, use_container_width=True, key="edit_pf"
+            )
+            if st.button("💾 Guardar Productos Foco", key="save_pf"):
+                conn = conectar_db()
+                for i, r in pf_edit.iterrows():
+                    conn.execute("""UPDATE productos_foco
+                        SET meta_total=?, prioridad=?
+                        WHERE campana=? AND producto=?""",
+                        (float(r["Meta Total Campaña"]), int(r["Prioridad"]),
+                         CAMPANA_ACTUAL, r["Producto"]))
+                conn.commit(); conn.close()
+                st.cache_data.clear()
+                st.success("✅ Metas actualizadas.")
+                st.rerun()
+
+        st.markdown("---")
+        st.write("### 👤 Metas Individuales por Vendedor")
+
+        ent_vend = obtener_entregas()
+        vendedores_lista = sorted(ent_vend["vendedor"].dropna().replace("","S/V").unique().tolist()) \
+                           if not ent_vend.empty else []
+        if not vendedores_lista:
+            vendedores_lista = ["Vendedor 1","Vendedor 2","Vendedor 3"]
+
+        vend_sel_m = st.selectbox("Vendedor", vendedores_lista, key="vend_sel_metas")
+        df_metas   = obtener_metas_campana()
+        df_metas_v = df_metas[df_metas["vendedor"]==vend_sel_m] if not df_metas.empty else pd.DataFrame()
+
+        # Armar tabla editable combinando productos_foco con metas existentes
+        df_pf2 = obtener_productos_foco()
+        if not df_pf2.empty:
+            df_base = df_pf2[["producto","unidad"]].copy()
+            df_base.columns = ["Producto","Unidad"]
+            if not df_metas_v.empty:
+                df_base = df_base.merge(
+                    df_metas_v[["producto","meta_volumen","meta_facturacion","moneda_meta"]]
+                    .rename(columns={"producto":"Producto","meta_volumen":"Meta Volumen",
+                                     "meta_facturacion":"Meta Facturación","moneda_meta":"Moneda"}),
+                    on="Producto", how="left"
+                )
+            if "Meta Volumen" not in df_base.columns:
+                df_base["Meta Volumen"]      = 0.0
+            if "Meta Facturación" not in df_base.columns:
+                df_base["Meta Facturación"]  = 0.0
+            if "Moneda" not in df_base.columns:
+                df_base["Moneda"]            = "ARS"
+            df_base = df_base.fillna(0)
+
+            edited_m = st.data_editor(
+                df_base,
+                column_config={
+                    "Meta Volumen":      st.column_config.NumberColumn(min_value=0, format="%.1f"),
+                    "Meta Facturación":  st.column_config.NumberColumn(min_value=0, format="%.0f"),
+                    "Moneda":            st.column_config.SelectboxColumn(options=["ARS","USD"]),
+                },
+                hide_index=True, use_container_width=True, key="edit_metas_v"
+            )
+            if st.button(f"💾 Guardar metas de {vend_sel_m}", type="primary", key="save_metas_v"):
+                conn = conectar_db()
+                for _, r in edited_m.iterrows():
+                    conn.execute("""INSERT OR REPLACE INTO metas_campana
+                        (campana,vendedor,producto,unidad,meta_volumen,meta_facturacion,moneda_meta)
+                        VALUES (?,?,?,?,?,?,?)""",
+                        (CAMPANA_ACTUAL, vend_sel_m, r["Producto"], r["Unidad"],
+                         float(r["Meta Volumen"]), float(r["Meta Facturación"]), r["Moneda"]))
+                conn.commit(); conn.close()
+                st.cache_data.clear()
+                st.success(f"✅ Metas de {vend_sel_m} guardadas.")
+                st.rerun()
+
+    # ── SUBTAB 3: KPI DASHBOARD ───────────────────────────────────────────────
+    with pc3:
+        st.write("### 📈 KPI Dashboard — Campaña 2026-2027")
+
+        ventas_r = ventas_reales_por_vendedor()
+        df_metas_all = obtener_metas_campana()
+        df_cart  = obtener_cartera()
+        df_reps  = obtener_reportes()
+
+        # KPIs globales
+        total_entregado = ventas_r["Entregado_Total"].sum() if not ventas_r.empty else 0
+        total_clientes  = df_cart[df_cart["tipo"]=="premium"]["cliente"].nunique() if not df_cart.empty else 0
+        total_premium_pct = 0
+        total_activos   = df_cart["cliente"].nunique() if not df_cart.empty else 0
+        if total_activos > 0:
+            total_premium_pct = round(df_cart[df_cart["tipo"]=="premium"]["cliente"].nunique() / total_activos * 100, 1)
+        field_view_n  = int(df_cart["field_view"].sum()) if not df_cart.empty else 0
+        nuevos_n      = int(df_cart[df_cart["tipo"]=="prospecto"]["cliente"].nunique()) if not df_cart.empty else 0
+
+        kp1, kp2, kp3, kp4, kp5 = st.columns(5)
+        with kp1: st.metric("📦 Entregado Total",    f"{total_entregado:,.0f}")
+        with kp2: st.metric("⭐ Clientes Premium",   total_clientes)
+        with kp3: st.metric("% Premium / Total",     f"{total_premium_pct:.1f}%",
+                             delta="OK" if total_premium_pct >= 20 else "< 20% ⚠️",
+                             delta_color="normal" if total_premium_pct >= 20 else "inverse")
+        with kp4: st.metric("🌐 Field View activos", field_view_n,
+                             delta="OK" if field_view_n >= 5 else f"< 5 objetivo",
+                             delta_color="normal" if field_view_n >= 5 else "inverse")
+        with kp5: st.metric("🆕 Prospectos",         nuevos_n)
+
+        st.markdown("---")
+
+        # Gauges por vendedor (facturación real vs meta)
+        if not ventas_r.empty and not df_metas_all.empty:
+            st.write("#### Facturación Real vs Meta por Vendedor")
+            metas_vend = (df_metas_all.groupby("vendedor")["meta_facturacion"].sum().reset_index()
+                          .rename(columns={"meta_facturacion":"Meta"}))
+            merged_g = ventas_r.merge(metas_vend, left_on="vendedor", right_on="vendedor", how="outer").fillna(0)
+            cols_g = st.columns(min(len(merged_g), 4))
+            for i, (_, r) in enumerate(merged_g.iterrows()):
+                if i >= 4: break
+                with cols_g[i % 4]:
+                    fig_g = gauge_kpi(r["Entregado_Total"], r["Meta"],
+                                      r["vendedor"][:20], "u.")
+                    st.plotly_chart(fig_g, use_container_width=True)
+
+        st.markdown("---")
+        st.write("#### Performance por Vendedor")
+        if not ventas_r.empty:
+            st.dataframe(ventas_r.rename(columns={
+                "vendedor":"Vendedor","Facturado_Total":"Facturado",
+                "Entregado_Total":"Entregado","Pendiente_Total":"Pendiente",
+                "Clientes_Activos":"Clientes","% Cumplimiento":"% Cumplimiento"
+            }), use_container_width=True, hide_index=True)
+
+            fig_bar = px.bar(
+                ventas_r.sort_values("Entregado_Total", ascending=False),
+                x="vendedor", y=["Entregado_Total","Pendiente_Total"],
+                barmode="stack", title="Entregado vs Pendiente por Vendedor",
+                color_discrete_sequence=["#28a745","#ffc107"],
+                labels={"vendedor":"Vendedor","value":"Unidades","variable":""}
+            )
+            fig_bar.update_layout(height=350, margin=dict(l=0,r=0,t=40,b=0))
+            st.plotly_chart(fig_bar, use_container_width=True)
+
+        st.markdown("---")
+        st.write("#### Distribución de Facturación por Rubro (objetivo: 30/30/30/10)")
+        st.info("Cargá los montos reales por rubro para comparar contra la distribución objetivo.")
+        rubros = list(DISTRIBUCION_OBJETIVO.keys())
+        vals_reales = []
+        col_r = st.columns(4)
+        for i, rubro in enumerate(rubros):
+            with col_r[i]:
+                v = st.number_input(rubro, min_value=0.0, step=1000.0, key=f"rubro_{i}")
+                vals_reales.append(v)
+        total_rubros = sum(vals_reales)
+        if total_rubros > 0:
+            pcts_reales = [v/total_rubros*100 for v in vals_reales]
+            df_dist = pd.DataFrame({
+                "Rubro": rubros,
+                "% Real": [round(p,1) for p in pcts_reales],
+                "% Objetivo": list(DISTRIBUCION_OBJETIVO.values())
+            })
+            fig_dist = px.bar(df_dist, x="Rubro", y=["% Real","% Objetivo"],
+                              barmode="group", title="Mix Real vs Objetivo",
+                              color_discrete_sequence=["#007bff","#dee2e6"])
+            fig_dist.update_layout(height=320, margin=dict(l=0,r=0,t=40,b=0))
+            st.plotly_chart(fig_dist, use_container_width=True)
+
+        # Evolución semanal de reportes
+        if not df_reps.empty:
+            st.markdown("---")
+            st.write("#### Evolución de Facturación Semanal Reportada")
+            df_evo = (df_reps.groupby("fecha_semana")["facturacion"].sum()
+                      .reset_index().sort_values("fecha_semana"))
+            df_evo["Acumulado"] = df_evo["facturacion"].cumsum()
+            fig_evo = px.area(df_evo, x="fecha_semana", y="Acumulado",
+                              title="Facturación Acumulada (según reportes)",
+                              color_discrete_sequence=["#007bff"])
+            fig_evo.update_layout(height=300, margin=dict(l=0,r=0,t=40,b=0))
+            st.plotly_chart(fig_evo, use_container_width=True)
+
+    # ── SUBTAB 4: CARTERA DE CLIENTES ─────────────────────────────────────────
+    with pc4:
+        st.write("### 👥 Gestión de Cartera de Clientes")
+
+        ent_v2 = obtener_entregas()
+        vendedores_c = sorted(ent_v2["vendedor"].dropna().replace("","S/V").unique().tolist()) \
+                       if not ent_v2.empty else ["Vendedor 1"]
+        vend_c = st.selectbox("Vendedor", ["Todos"] + vendedores_c, key="vend_cart")
+
+        df_c = obtener_cartera(None if vend_c=="Todos" else vend_c)
+
+        # KPIs cartera
+        if not df_c.empty:
+            n_prem  = len(df_c[df_c["tipo"]=="premium"])
+            n_act   = len(df_c[df_c["tipo"]=="activo"])
+            n_inact = len(df_c[df_c["tipo"]=="inactivo"])
+            n_prosp = len(df_c[df_c["tipo"]=="prospecto"])
+            n_fv    = int(df_c["field_view"].sum())
+            n_tot   = len(df_c)
+            pct_pr  = round(n_prem/n_tot*100,1) if n_tot>0 else 0
+
+            kc1,kc2,kc3,kc4,kc5,kc6 = st.columns(6)
+            with kc1: st.metric("⭐ Premium",     n_prem)
+            with kc2: st.metric("✅ Activos",     n_act)
+            with kc3: st.metric("😴 Inactivos",   n_inact)
+            with kc4: st.metric("🆕 Prospectos",  n_prosp)
+            with kc5: st.metric("🌐 Field View",  n_fv)
+            with kc6: st.metric("% Premium",      f"{pct_pr}%",
+                                 delta="OK ✅" if pct_pr>=20 else "< 20% ⚠️",
+                                 delta_color="normal" if pct_pr>=20 else "inverse")
+
+            # Gráfico torta tipos
+            cc1, cc2 = st.columns(2)
+            with cc1:
+                tipo_g = df_c.groupby("tipo").size().reset_index(name="N")
+                fig_tp = px.pie(tipo_g, names="tipo", values="N",
+                                title="Distribución por Tipo",
+                                color="tipo",
+                                color_discrete_map={"premium":"#ffd700","activo":"#28a745",
+                                                    "inactivo":"#6c757d","prospecto":"#007bff"},
+                                hole=0.4)
+                fig_tp.update_layout(height=280, margin=dict(l=0,r=0,t=40,b=0))
+                st.plotly_chart(fig_tp, use_container_width=True)
+            with cc2:
+                if not df_c[df_c["tipo"]=="premium"].empty:
+                    df_prem_g = df_c[df_c["tipo"]=="premium"].sort_values("potencial_facturacion",ascending=False).head(10)
+                    fig_pr = px.bar(df_prem_g, x="potencial_facturacion", y="cliente",
+                                    orientation="h", title="Top Premium por Potencial",
+                                    color_discrete_sequence=["#ffd700"])
+                    fig_pr.update_layout(height=280, margin=dict(l=0,r=0,t=40,b=0))
+                    st.plotly_chart(fig_pr, use_container_width=True)
+
+            st.markdown("---")
+            st.dataframe(
+                df_c[["vendedor","cliente","tipo","superficie_ha","potencial_facturacion","field_view","estado","ultima_compra","observaciones"]]
+                .rename(columns={"vendedor":"Vendedor","cliente":"Cliente","tipo":"Tipo",
+                                  "superficie_ha":"Ha","potencial_facturacion":"Potencial $",
+                                  "field_view":"FV","estado":"Estado",
+                                  "ultima_compra":"Últ. Compra","observaciones":"Obs."}),
+                use_container_width=True, hide_index=True
+            )
+
+        st.markdown("---")
+        st.write("#### ➕ Agregar / Actualizar Cliente")
+        if vend_c == "Todos":
+            vend_nuevo = st.selectbox("Vendedor", vendedores_c, key="vend_nc")
+        else:
+            vend_nuevo = vend_c
+
+        nc1, nc2, nc3 = st.columns(3)
+        with nc1:
+            cli_nom  = st.text_input("Nombre del cliente", key="nc_nom")
+            cli_tipo = st.selectbox("Tipo", ["activo","premium","inactivo","prospecto"], key="nc_tipo")
+        with nc2:
+            cli_ha   = st.number_input("Superficie (ha)", min_value=0.0, step=10.0, key="nc_ha")
+            cli_pot  = st.number_input("Potencial facturación $", min_value=0.0, step=1000.0, key="nc_pot")
+        with nc3:
+            cli_fv   = st.toggle("Field View activo", value=False, key="nc_fv")
+            cli_uc   = st.text_input("Última compra (dd/mm/aaaa)", key="nc_uc")
+        cli_obs = st.text_input("Observaciones", key="nc_obs")
+
+        if st.button("💾 Guardar Cliente", type="primary", key="save_nc"):
+            if cli_nom:
+                conn = conectar_db()
+                conn.execute("""INSERT OR REPLACE INTO cartera_clientes
+                    (vendedor,cliente,tipo,superficie_ha,potencial_facturacion,
+                     field_view,ultima_compra,estado,observaciones,campana)
+                    VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                    (vend_nuevo, cli_nom, cli_tipo, cli_ha, cli_pot,
+                     1 if cli_fv else 0, cli_uc, "activo", cli_obs, CAMPANA_ACTUAL))
+                conn.commit(); conn.close()
+                st.cache_data.clear()
+                st.success(f"✅ Cliente '{cli_nom}' guardado.")
+                st.rerun()
+            else:
+                st.error("El nombre del cliente es obligatorio.")
+
+        # Importar cartera desde Excel
+        st.markdown("---")
+        with st.expander("📥 Importar Cartera desde Excel"):
+            st.caption("El archivo debe tener columnas: `vendedor`, `cliente`, `tipo`, `superficie_ha`, `potencial_facturacion`, `field_view` (0/1), `ultima_compra`, `observaciones`")
+            arch_cart = st.file_uploader("Archivo cartera (.xlsx/.csv)", type=["xlsx","csv"], key="up_cart")
+            if arch_cart and st.button("🚀 Importar Cartera", key="imp_cart"):
+                try:
+                    df_ci = pd.read_csv(arch_cart) if arch_cart.name.endswith(".csv") else pd.read_excel(arch_cart)
+                    df_ci.columns = [c.strip().lower() for c in df_ci.columns]
+                    conn = conectar_db(); ok_ci = 0
+                    for _, r in df_ci.iterrows():
+                        cli_i = safe_str(r.get("cliente",""))
+                        if not cli_i: continue
+                        conn.execute("""INSERT OR REPLACE INTO cartera_clientes
+                            (vendedor,cliente,tipo,superficie_ha,potencial_facturacion,
+                             field_view,ultima_compra,estado,observaciones,campana)
+                            VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                            (safe_str(r.get("vendedor","")), cli_i,
+                             safe_str(r.get("tipo","activo")),
+                             safe_float(r.get("superficie_ha",0)),
+                             safe_float(r.get("potencial_facturacion",0)),
+                             int(safe_float(r.get("field_view",0))),
+                             safe_str(r.get("ultima_compra","")),
+                             "activo", safe_str(r.get("observaciones","")),
+                             CAMPANA_ACTUAL))
+                        ok_ci += 1
+                    conn.commit(); conn.close()
+                    st.cache_data.clear()
+                    st.success(f"✅ {ok_ci} clientes importados.")
+                    st.rerun()
+                except Exception as ex:
+                    st.error(f"Error: {ex}")
+
+    # ── SUBTAB 5: REPORTES SEMANALES ──────────────────────────────────────────
+    with pc5:
+        st.write("### 📝 Registro de Reportes Semanales")
+
+        ent_v3 = obtener_entregas()
+        vendedores_r = sorted(ent_v3["vendedor"].dropna().replace("","S/V").unique().tolist()) \
+                       if not ent_v3.empty else ["Vendedor 1"]
+
+        col_rp1, col_rp2 = st.columns([2,1])
+        with col_rp1:
+            vend_r  = st.selectbox("Vendedor", vendedores_r, key="vend_rep")
+        with col_rp2:
+            ver_todos = st.toggle("Ver todos los vendedores", value=False, key="rep_todos")
+
+        # Formulario nuevo reporte
+        with st.expander("➕ Cargar Reporte Semanal", expanded=True):
+            rp1, rp2, rp3 = st.columns(3)
+            with rp1:
+                fecha_rep = st.date_input("Semana del", value=datetime.now().date(), key="rep_fecha")
+                fact_rep  = st.number_input("Facturación de la semana $", min_value=0.0, step=1000.0, key="rep_fact")
+            with rp2:
+                nuev_rep   = st.number_input("Nuevos clientes", min_value=0, step=1, key="rep_nuev")
+                visit_rep  = st.number_input("Visitas realizadas", min_value=0, step=1, key="rep_visit")
+            with rp3:
+                st.write("Campo libre")
+            av_rep  = st.text_area("✅ Avances / logros de la semana", height=80, key="rep_av")
+            ob_rep  = st.text_area("⚠️ Obstáculos / dificultades",     height=80, key="rep_ob")
+            op_rep  = st.text_area("💡 Oportunidades detectadas",       height=80, key="rep_op")
+            pa_rep  = st.text_area("📋 Plan de acción semana siguiente", height=80, key="rep_pa")
+
+            if st.button("💾 Guardar Reporte", type="primary", key="save_rep"):
+                conn = conectar_db()
+                conn.execute("""INSERT INTO reportes_semanales
+                    (vendedor,fecha_semana,facturacion,nuevos_clientes,visitas,
+                     avances,obstaculos,oportunidades,plan_accion,campana)
+                    VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                    (vend_r, fecha_rep.strftime("%d/%m/%Y"),
+                     fact_rep, nuev_rep, visit_rep,
+                     av_rep, ob_rep, op_rep, pa_rep, CAMPANA_ACTUAL))
+                conn.commit(); conn.close()
+                st.cache_data.clear()
+                st.success(f"✅ Reporte de {vend_r} guardado.")
+                st.rerun()
+
+        st.markdown("---")
+        st.write("#### Historial de Reportes")
+        df_rep_h = obtener_reportes(None if ver_todos else vend_r)
+        if df_rep_h.empty:
+            st.info("Sin reportes cargados todavía.")
+        else:
+            # KPIs del vendedor
+            if not ver_todos:
+                kr1, kr2, kr3, kr4 = st.columns(4)
+                with kr1: st.metric("Reportes cargados",  len(df_rep_h))
+                with kr2: st.metric("Facturación total",  f"${df_rep_h['facturacion'].sum():,.0f}")
+                with kr3: st.metric("Nuevos clientes",    int(df_rep_h['nuevos_clientes'].sum()))
+                with kr4: st.metric("Total visitas",      int(df_rep_h['visitas'].sum()))
+
+                if len(df_rep_h) > 1:
+                    df_evo_r = df_rep_h.sort_values("fecha_semana")[["fecha_semana","facturacion"]].copy()
+                    df_evo_r["Acumulado"] = df_evo_r["facturacion"].cumsum()
+                    fig_er = px.bar(df_evo_r, x="fecha_semana", y="facturacion",
+                                    title=f"Facturación semanal — {vend_r}",
+                                    color_discrete_sequence=["#007bff"])
+                    fig_er.update_layout(height=280, margin=dict(l=0,r=0,t=40,b=0))
+                    st.plotly_chart(fig_er, use_container_width=True)
+
+            cols_rep = ["vendedor","fecha_semana","facturacion","nuevos_clientes","visitas",
+                        "avances","obstaculos","oportunidades","plan_accion"] \
+                        if ver_todos else \
+                       ["fecha_semana","facturacion","nuevos_clientes","visitas",
+                        "avances","obstaculos","oportunidades","plan_accion"]
+            cols_rep = [c for c in cols_rep if c in df_rep_h.columns]
+            st.dataframe(
+                df_rep_h[cols_rep].rename(columns={
+                    "vendedor":"Vendedor","fecha_semana":"Semana","facturacion":"Facturación $",
+                    "nuevos_clientes":"Nuevos","visitas":"Visitas",
+                    "avances":"Avances","obstaculos":"Obstáculos",
+                    "oportunidades":"Oportunidades","plan_accion":"Plan Próx."
+                }),
+                use_container_width=True, hide_index=True
+            )
+            st.download_button("📥 Exportar Reportes",
+                               data=to_excel_bytes(df_rep_h, "Reportes"),
+                               file_name=f"reportes_{vend_r.replace(' ','_')}.xlsx")
