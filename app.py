@@ -14,6 +14,8 @@ Dependencias adicionales (instalar si no están):
 import streamlit as st
 import pandas as pd
 import sqlite3
+import os
+import re as _re
 from datetime import datetime, timedelta
 import plotly.express as px
 import plotly.graph_objects as go
@@ -71,198 +73,330 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 2. CAPA DE DATOS (SQLite; para PostgreSQL setear DATABASE_URL en env)
+# 2. CAPA DE DATOS — SQLite (local/dev) o PostgreSQL/Supabase (producción)
+#    Configurar: st.secrets["DATABASE_URL"] = "postgresql://user:pass@host/db"
+#    o variable de entorno DATABASE_URL en Streamlit Cloud Settings → Secrets
 # ─────────────────────────────────────────────────────────────────────────────
-def conectar_db():
-    return sqlite3.connect("stock_agroquimicos.db", check_same_thread=False)
+
+def _get_db_url() -> str:
+    try:
+        return st.secrets.get("DATABASE_URL", "") or ""
+    except Exception:
+        return os.environ.get("DATABASE_URL", "")
+
+_DB_URL     = _get_db_url()
+IS_POSTGRES = bool(_DB_URL and "postgres" in _DB_URL.lower())
+
+# Reglas de conflicto para INSERT OR REPLACE / INSERT OR IGNORE → PostgreSQL
+_UPSERT_CONF = {
+    "metadata":         ["clave"],
+    "usuarios":         ["username"],
+    "metas_campana":    ["campana", "vendedor", "producto"],
+    "cartera_clientes": ["vendedor", "cliente", "campana"],
+    "productos_foco":   ["campana", "producto"],
+}
+_IGNORE_CONF = {
+    "productos":      ["nombre"],
+    "productos_foco": ["campana", "producto"],
+}
+_OR_REPLACE_RE = _re.compile(
+    r"INSERT\s+OR\s+REPLACE\s+INTO\s+(\w+)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)",
+    _re.IGNORECASE | _re.DOTALL,
+)
+_OR_IGNORE_RE = _re.compile(
+    r"INSERT\s+OR\s+IGNORE\s+INTO\s+(\w+)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)",
+    _re.IGNORECASE | _re.DOTALL,
+)
+
+def _adapt_pg(sql: str) -> str:
+    """Traduce SQL SQLite → PostgreSQL: placeholders y variantes INSERT."""
+    sql = sql.replace("?", "%s")
+    m = _OR_REPLACE_RE.match(sql.strip())
+    if m:
+        table = m.group(1).strip()
+        cols  = [c.strip() for c in m.group(2).split(",")]
+        ph    = m.group(3).strip()
+        conf  = _UPSERT_CONF.get(table)
+        if conf:
+            sets = ", ".join(f"{c}=EXCLUDED.{c}" for c in cols if c not in conf)
+            sql  = (f"INSERT INTO {table} ({', '.join(cols)}) VALUES ({ph}) "
+                    f"ON CONFLICT ({', '.join(conf)}) DO UPDATE SET {sets}")
+    m2 = _OR_IGNORE_RE.match(sql.strip())
+    if m2:
+        table = m2.group(1).strip()
+        cols  = [c.strip() for c in m2.group(2).split(",")]
+        ph    = m2.group(3).strip()
+        conf  = _IGNORE_CONF.get(table, [])
+        ct    = f"ON CONFLICT ({', '.join(conf)}) DO NOTHING" if conf else "ON CONFLICT DO NOTHING"
+        sql   = f"INSERT INTO {table} ({', '.join(cols)}) VALUES ({ph}) {ct}"
+    return sql
+
+
+class _Cur:
+    """Cursor normalizado que adapta SQL según el backend."""
+    __slots__ = ("_c", "_pg")
+
+    def __init__(self, raw_cursor, pg: bool):
+        self._c  = raw_cursor
+        self._pg = pg
+
+    def execute(self, sql: str, params=None):
+        sql = _adapt_pg(sql) if self._pg else sql
+        if params is not None:
+            self._c.execute(sql, list(params) if isinstance(params, tuple) else params)
+        else:
+            self._c.execute(sql)
+        return self
+
+    def executemany(self, sql: str, seq):
+        sql = _adapt_pg(sql) if self._pg else sql
+        self._c.executemany(sql, seq)
+
+    def fetchone(self):  return self._c.fetchone()
+    def fetchall(self):  return self._c.fetchall()
+    def __iter__(self):  return iter(self._c)
+
+    @property
+    def description(self): return self._c.description
+    @property
+    def rowcount(self):    return self._c.rowcount
+
+
+class _DB:
+    """Conexión unificada: sqlite3 o psycopg2 según DATABASE_URL."""
+
+    def __init__(self):
+        if IS_POSTGRES:
+            import psycopg2
+            url = _DB_URL.replace("postgres://", "postgresql://", 1)
+            self._raw = psycopg2.connect(url)
+            self._pg  = True
+        else:
+            self._raw = sqlite3.connect("stock_agroquimicos.db", check_same_thread=False)
+            self._pg  = False
+
+    def cursor(self) -> _Cur:
+        return _Cur(self._raw.cursor(), self._pg)
+
+    def execute(self, sql: str, params=()):
+        cur = self.cursor()
+        cur.execute(sql, params if params else None)
+        return cur
+
+    def commit(self): self._raw.commit()
+    def close(self):  self._raw.close()
+
+    def __enter__(self): return self
+    def __exit__(self, *_):
+        try:    self.commit()
+        except: pass
+        self.close()
+
+
+def conectar_db() -> _DB:
+    return _DB()
+
+
+def _rsql(sql: str, conn, params=None) -> pd.DataFrame:
+    """pd.read_sql_query con adaptación automática de placeholders."""
+    raw = conn._raw if isinstance(conn, _DB) else conn
+    if IS_POSTGRES and params:
+        sql = sql.replace("?", "%s")
+    try:
+        if params:
+            return pd.read_sql_query(sql, raw, params=list(params))
+        return pd.read_sql_query(sql, raw)
+    except Exception:
+        return pd.DataFrame()
+
+
+def _changes(conn, cur) -> int:
+    """Filas afectadas por último INSERT OR IGNORE."""
+    if IS_POSTGRES:
+        return cur.rowcount if cur else 0
+    row = conn._raw.execute("SELECT changes()").fetchone()
+    return row[0] if row else 0
+
 
 def inicializar_db():
-    conn   = conectar_db()
-    cursor = conn.cursor()
+    conn = conectar_db()
+    c    = conn.cursor()
+    _pk  = "SERIAL PRIMARY KEY" if IS_POSTGRES else "INTEGER PRIMARY KEY AUTOINCREMENT"
 
-    cursor.execute("""CREATE TABLE IF NOT EXISTS productos (
-        id_producto       INTEGER PRIMARY KEY AUTOINCREMENT,
-        nombre            TEXT NOT NULL UNIQUE,
-        unidad            TEXT NOT NULL,
-        codigo            TEXT,
-        fecha_vencimiento TEXT,
-        precio_unitario   REAL DEFAULT 0,
-        moneda_precio     TEXT DEFAULT 'USD',
-        proveedor         TEXT DEFAULT 'Bayer/Monsanto'
-    )""")
-
-    cursor.execute("""CREATE TABLE IF NOT EXISTS movimientos (
-        id_movimiento   INTEGER PRIMARY KEY AUTOINCREMENT,
-        fecha_hora      TEXT NOT NULL,
-        tipo_movimiento TEXT NOT NULL,
-        id_producto     INTEGER NOT NULL,
-        cantidad        REAL NOT NULL,
-        lote            TEXT,
-        referencia      TEXT,
-        deposito        TEXT,
-        origen          TEXT,
-        anulado         INTEGER DEFAULT 0,
-        usuario         TEXT DEFAULT '',
-        FOREIGN KEY (id_producto) REFERENCES productos(id_producto)
-    )""")
-
-    cursor.execute("""CREATE TABLE IF NOT EXISTS entregas (
-        id_entrega       INTEGER PRIMARY KEY AUTOINCREMENT,
-        hoja             TEXT,
-        rto              TEXT,
-        dia_recibido     TEXT,
-        cliente          TEXT,
-        deposito         TEXT,
-        cantidad_comprada REAL,
-        producto         TEXT,
-        lote             TEXT,
-        cant_entregada   REAL,
-        pendiente        REAL,
-        estado           TEXT,
-        vendedor         TEXT
-    )""")
-
-    cursor.execute("""CREATE TABLE IF NOT EXISTS metadata (
-        clave TEXT PRIMARY KEY,
-        valor TEXT
-    )""")
-
-    cursor.execute("""CREATE TABLE IF NOT EXISTS inventario_fisico (
-        id_inventario  INTEGER PRIMARY KEY AUTOINCREMENT,
-        fecha_conteo   TEXT NOT NULL,
-        codigo         TEXT NOT NULL,
-        producto       TEXT NOT NULL,
-        deposito       TEXT NOT NULL,
-        stock_sistema  REAL NOT NULL,
-        conteo_fisico  REAL NOT NULL,
-        diferencia     REAL NOT NULL,
-        observaciones  TEXT
-    )""")
-
-    cursor.execute("""CREATE TABLE IF NOT EXISTS transferencias (
-        id_transferencia  INTEGER PRIMARY KEY AUTOINCREMENT,
-        fecha_hora        TEXT NOT NULL,
-        id_producto       INTEGER NOT NULL,
-        cantidad          REAL NOT NULL,
-        lote              TEXT,
-        deposito_origen   TEXT NOT NULL,
-        deposito_destino  TEXT NOT NULL,
-        referencia        TEXT,
-        usuario           TEXT
-    )""")
-
-    cursor.execute("""CREATE TABLE IF NOT EXISTS usuarios (
-        username      TEXT PRIMARY KEY,
-        password_hash TEXT NOT NULL,
-        nombre        TEXT,
-        rol           TEXT DEFAULT 'operador',
-        sede          TEXT DEFAULT 'San Jorge'
-    )""")
-
-    cursor.execute("""CREATE TABLE IF NOT EXISTS precios_historicos (
-        id_precio   INTEGER PRIMARY KEY AUTOINCREMENT,
-        id_producto INTEGER NOT NULL,
-        fecha       TEXT NOT NULL,
-        precio      REAL NOT NULL,
-        moneda      TEXT DEFAULT 'USD',
-        usuario     TEXT
-    )""")
-
-    cursor.execute("""CREATE TABLE IF NOT EXISTS metas_campana (
-        id_meta      INTEGER PRIMARY KEY AUTOINCREMENT,
-        campana      TEXT NOT NULL DEFAULT '2026-2027',
-        vendedor     TEXT NOT NULL,
-        producto     TEXT NOT NULL,
-        unidad       TEXT DEFAULT 'Tn',
-        meta_volumen REAL DEFAULT 0,
-        meta_facturacion REAL DEFAULT 0,
-        moneda_meta  TEXT DEFAULT 'ARS',
-        UNIQUE(campana, vendedor, producto)
-    )""")
-
-    cursor.execute("""CREATE TABLE IF NOT EXISTS cartera_clientes (
-        id_cliente       INTEGER PRIMARY KEY AUTOINCREMENT,
-        vendedor         TEXT NOT NULL,
-        cliente          TEXT NOT NULL,
-        tipo             TEXT DEFAULT 'activo',
-        superficie_ha    REAL DEFAULT 0,
-        potencial_facturacion REAL DEFAULT 0,
-        field_view       INTEGER DEFAULT 0,
-        ultima_compra    TEXT,
-        estado           TEXT DEFAULT 'activo',
-        observaciones    TEXT,
-        campana          TEXT DEFAULT '2026-2027',
-        UNIQUE(vendedor, cliente, campana)
-    )""")
-
-    cursor.execute("""CREATE TABLE IF NOT EXISTS reportes_semanales (
-        id_reporte      INTEGER PRIMARY KEY AUTOINCREMENT,
-        vendedor        TEXT NOT NULL,
-        fecha_semana    TEXT NOT NULL,
-        facturacion     REAL DEFAULT 0,
-        nuevos_clientes INTEGER DEFAULT 0,
-        visitas         INTEGER DEFAULT 0,
-        avances         TEXT,
-        obstaculos      TEXT,
-        oportunidades   TEXT,
-        plan_accion     TEXT,
-        campana         TEXT DEFAULT '2026-2027'
-    )""")
-
-    cursor.execute("""CREATE TABLE IF NOT EXISTS productos_foco (
-        id_foco    INTEGER PRIMARY KEY AUTOINCREMENT,
-        campana    TEXT NOT NULL DEFAULT '2026-2027',
-        producto   TEXT NOT NULL,
-        unidad     TEXT DEFAULT 'Tn',
-        meta_total REAL DEFAULT 0,
-        prioridad  INTEGER DEFAULT 1,
-        UNIQUE(campana, producto)
-    )""")
-
-    cursor.execute("""CREATE TABLE IF NOT EXISTS ventas_detalle (
-        id_venta       INTEGER PRIMARY KEY AUTOINCREMENT,
-        campana        TEXT DEFAULT '2026-2027',
-        vendedor       TEXT NOT NULL,
-        cuenta         TEXT,
-        cliente        TEXT NOT NULL,
-        cuit           TEXT,
-        articulo       TEXT,
-        descripcion    TEXT,
-        precio         REAL DEFAULT 0,
-        cantidad       REAL DEFAULT 0,
-        entregada      REAL DEFAULT 0,
-        importe_total  REAL DEFAULT 0,
-        fecha          TEXT,
-        fecha_entrega  TEXT,
-        localidad      TEXT,
-        observaciones  TEXT,
-        numero_pedido  TEXT
-    )""")
-
-    # Migraciones para instalaciones previas
-    migraciones = [
-        "ALTER TABLE productos ADD COLUMN codigo TEXT",
-        "ALTER TABLE productos ADD COLUMN fecha_vencimiento TEXT",
-        "ALTER TABLE productos ADD COLUMN precio_unitario REAL DEFAULT 0",
-        "ALTER TABLE productos ADD COLUMN moneda_precio TEXT DEFAULT 'USD'",
-        "ALTER TABLE productos ADD COLUMN proveedor TEXT DEFAULT 'Bayer/Monsanto'",
-        "ALTER TABLE movimientos ADD COLUMN origen TEXT",
-        "ALTER TABLE movimientos ADD COLUMN anulado INTEGER DEFAULT 0",
-        "ALTER TABLE movimientos ADD COLUMN usuario TEXT DEFAULT ''",
-        "ALTER TABLE entregas ADD COLUMN hoja TEXT",
-        "ALTER TABLE entregas ADD COLUMN lote TEXT",
-        "ALTER TABLE entregas ADD COLUMN deposito TEXT",
-    ]
-    for m in migraciones:
+    for ddl in [
+        f"""CREATE TABLE IF NOT EXISTS productos (
+            id_producto       {_pk},
+            nombre            TEXT NOT NULL UNIQUE,
+            unidad            TEXT NOT NULL,
+            codigo            TEXT,
+            fecha_vencimiento TEXT,
+            precio_unitario   REAL DEFAULT 0,
+            moneda_precio     TEXT DEFAULT 'USD',
+            proveedor         TEXT DEFAULT 'Bayer/Monsanto'
+        )""",
+        f"""CREATE TABLE IF NOT EXISTS movimientos (
+            id_movimiento   {_pk},
+            fecha_hora      TEXT NOT NULL,
+            tipo_movimiento TEXT NOT NULL,
+            id_producto     INTEGER NOT NULL,
+            cantidad        REAL NOT NULL,
+            lote            TEXT,
+            referencia      TEXT,
+            deposito        TEXT,
+            origen          TEXT,
+            anulado         INTEGER DEFAULT 0,
+            usuario         TEXT DEFAULT ''
+        )""",
+        f"""CREATE TABLE IF NOT EXISTS entregas (
+            id_entrega        {_pk},
+            hoja              TEXT,
+            rto               TEXT,
+            dia_recibido      TEXT,
+            cliente           TEXT,
+            deposito          TEXT,
+            cantidad_comprada REAL,
+            producto          TEXT,
+            lote              TEXT,
+            cant_entregada    REAL,
+            pendiente         REAL,
+            estado            TEXT,
+            vendedor          TEXT
+        )""",
+        """CREATE TABLE IF NOT EXISTS metadata (
+            clave TEXT PRIMARY KEY,
+            valor TEXT
+        )""",
+        f"""CREATE TABLE IF NOT EXISTS inventario_fisico (
+            id_inventario  {_pk},
+            fecha_conteo   TEXT NOT NULL,
+            codigo         TEXT NOT NULL,
+            producto       TEXT NOT NULL,
+            deposito       TEXT NOT NULL,
+            stock_sistema  REAL NOT NULL,
+            conteo_fisico  REAL NOT NULL,
+            diferencia     REAL NOT NULL,
+            observaciones  TEXT
+        )""",
+        f"""CREATE TABLE IF NOT EXISTS transferencias (
+            id_transferencia  {_pk},
+            fecha_hora        TEXT NOT NULL,
+            id_producto       INTEGER NOT NULL,
+            cantidad          REAL NOT NULL,
+            lote              TEXT,
+            deposito_origen   TEXT NOT NULL,
+            deposito_destino  TEXT NOT NULL,
+            referencia        TEXT,
+            usuario           TEXT
+        )""",
+        """CREATE TABLE IF NOT EXISTS usuarios (
+            username      TEXT PRIMARY KEY,
+            password_hash TEXT NOT NULL,
+            nombre        TEXT,
+            rol           TEXT DEFAULT 'operador',
+            sede          TEXT DEFAULT 'San Jorge'
+        )""",
+        f"""CREATE TABLE IF NOT EXISTS precios_historicos (
+            id_precio   {_pk},
+            id_producto INTEGER NOT NULL,
+            fecha       TEXT NOT NULL,
+            precio      REAL NOT NULL,
+            moneda      TEXT DEFAULT 'USD',
+            usuario     TEXT
+        )""",
+        f"""CREATE TABLE IF NOT EXISTS metas_campana (
+            id_meta          {_pk},
+            campana          TEXT NOT NULL DEFAULT '2026-2027',
+            vendedor         TEXT NOT NULL,
+            producto         TEXT NOT NULL,
+            unidad           TEXT DEFAULT 'Tn',
+            meta_volumen     REAL DEFAULT 0,
+            meta_facturacion REAL DEFAULT 0,
+            moneda_meta      TEXT DEFAULT 'ARS',
+            UNIQUE(campana, vendedor, producto)
+        )""",
+        f"""CREATE TABLE IF NOT EXISTS cartera_clientes (
+            id_cliente            {_pk},
+            vendedor              TEXT NOT NULL,
+            cliente               TEXT NOT NULL,
+            tipo                  TEXT DEFAULT 'activo',
+            superficie_ha         REAL DEFAULT 0,
+            potencial_facturacion REAL DEFAULT 0,
+            field_view            INTEGER DEFAULT 0,
+            ultima_compra         TEXT,
+            estado                TEXT DEFAULT 'activo',
+            observaciones         TEXT,
+            campana               TEXT DEFAULT '2026-2027',
+            UNIQUE(vendedor, cliente, campana)
+        )""",
+        f"""CREATE TABLE IF NOT EXISTS reportes_semanales (
+            id_reporte      {_pk},
+            vendedor        TEXT NOT NULL,
+            fecha_semana    TEXT NOT NULL,
+            facturacion     REAL DEFAULT 0,
+            nuevos_clientes INTEGER DEFAULT 0,
+            visitas         INTEGER DEFAULT 0,
+            avances         TEXT,
+            obstaculos      TEXT,
+            oportunidades   TEXT,
+            plan_accion     TEXT,
+            campana         TEXT DEFAULT '2026-2027'
+        )""",
+        f"""CREATE TABLE IF NOT EXISTS productos_foco (
+            id_foco    {_pk},
+            campana    TEXT NOT NULL DEFAULT '2026-2027',
+            producto   TEXT NOT NULL,
+            unidad     TEXT DEFAULT 'Tn',
+            meta_total REAL DEFAULT 0,
+            prioridad  INTEGER DEFAULT 1,
+            UNIQUE(campana, producto)
+        )""",
+        f"""CREATE TABLE IF NOT EXISTS ventas_detalle (
+            id_venta      {_pk},
+            campana       TEXT DEFAULT '2026-2027',
+            vendedor      TEXT NOT NULL,
+            cuenta        TEXT,
+            cliente       TEXT NOT NULL,
+            cuit          TEXT,
+            articulo      TEXT,
+            descripcion   TEXT,
+            precio        REAL DEFAULT 0,
+            cantidad      REAL DEFAULT 0,
+            entregada     REAL DEFAULT 0,
+            importe_total REAL DEFAULT 0,
+            fecha         TEXT,
+            fecha_entrega TEXT,
+            localidad     TEXT,
+            observaciones TEXT,
+            numero_pedido TEXT
+        )""",
+    ]:
         try:
-            cursor.execute(m)
-        except:
+            c.execute(ddl)
+        except Exception:
             pass
 
-    # Usuario admin por defecto si no existe ninguno
-    cursor.execute("SELECT COUNT(*) FROM usuarios")
-    if cursor.fetchone()[0] == 0:
-        cursor.execute(
+    # Migraciones para instalaciones SQLite previas (se ignoran en Supabase)
+    if not IS_POSTGRES:
+        for m in [
+            "ALTER TABLE productos ADD COLUMN codigo TEXT",
+            "ALTER TABLE productos ADD COLUMN fecha_vencimiento TEXT",
+            "ALTER TABLE productos ADD COLUMN precio_unitario REAL DEFAULT 0",
+            "ALTER TABLE productos ADD COLUMN moneda_precio TEXT DEFAULT 'USD'",
+            "ALTER TABLE productos ADD COLUMN proveedor TEXT DEFAULT 'Bayer/Monsanto'",
+            "ALTER TABLE movimientos ADD COLUMN origen TEXT",
+            "ALTER TABLE movimientos ADD COLUMN anulado INTEGER DEFAULT 0",
+            "ALTER TABLE movimientos ADD COLUMN usuario TEXT DEFAULT ''",
+            "ALTER TABLE entregas ADD COLUMN hoja TEXT",
+            "ALTER TABLE entregas ADD COLUMN lote TEXT",
+            "ALTER TABLE entregas ADD COLUMN deposito TEXT",
+        ]:
+            try:  c.execute(m)
+            except: pass
+
+    # Usuario admin por defecto
+    row = c.execute("SELECT COUNT(*) FROM usuarios").fetchone()
+    if row[0] == 0:
+        c.execute(
             "INSERT INTO usuarios (username,password_hash,nombre,rol) VALUES (?,?,?,?)",
             ("admin", hashlib.sha256("admin123".encode()).hexdigest(), "Administrador", "admin")
         )
@@ -311,8 +445,7 @@ def obtener_stock_con_lote():
         FROM movimientos m JOIN productos p ON m.id_producto=p.id_producto
         WHERE COALESCE(m.anulado,0)=0
     """
-    try:    df = pd.read_sql_query(query, conn)
-    except: df = pd.DataFrame()
+    df = _rsql(query, conn)
     conn.close()
     if df.empty: return pd.DataFrame()
     df["neta"] = df.apply(
@@ -339,31 +472,24 @@ def obtener_historial_movimientos():
         FROM movimientos m JOIN productos p ON m.id_producto=p.id_producto
         ORDER BY m.id_movimiento DESC
     """
-    try:    df = pd.read_sql_query(query, conn)
-    except: df = pd.DataFrame()
+    df = _rsql(query, conn)
     conn.close()
     return df
 
 @st.cache_data(ttl=30)
 def obtener_entregas(hoja=None):
     conn = conectar_db()
-    try:
-        if hoja and hoja != "Todas":
-            df = pd.read_sql_query(
-                "SELECT * FROM entregas WHERE hoja=? ORDER BY dia_recibido DESC",
-                conn, params=(hoja,)
-            )
-        else:
-            df = pd.read_sql_query("SELECT * FROM entregas ORDER BY hoja, dia_recibido DESC", conn)
-    except: df = pd.DataFrame()
+    if hoja and hoja != "Todas":
+        df = _rsql("SELECT * FROM entregas WHERE hoja=? ORDER BY dia_recibido DESC", conn, params=(hoja,))
+    else:
+        df = _rsql("SELECT * FROM entregas ORDER BY hoja, dia_recibido DESC", conn)
     conn.close()
     return df
 
 @st.cache_data(ttl=30)
 def obtener_productos_completo():
     conn = conectar_db()
-    try:    df = pd.read_sql_query("SELECT * FROM productos ORDER BY nombre", conn)
-    except: df = pd.DataFrame()
+    df = _rsql("SELECT * FROM productos ORDER BY nombre", conn)
     conn.close()
     return df
 
@@ -378,8 +504,7 @@ def calcular_rotacion_stock(dias=90):
           AND m.fecha_hora >= ?
         GROUP BY p.nombre
     """
-    try:    df_s = pd.read_sql_query(query, conn, params=(fecha_corte,))
-    except: df_s = pd.DataFrame()
+    df_s = _rsql(query, conn, params=(fecha_corte,))
     conn.close()
 
     stock = obtener_stock_full()
@@ -823,51 +948,40 @@ DISTRIBUCION_OBJETIVO = {
 @st.cache_data(ttl=30)
 def obtener_metas_campana(campana=CAMPANA_ACTUAL):
     conn = conectar_db()
-    try:    df = pd.read_sql_query("SELECT * FROM metas_campana WHERE campana=?", conn, params=(campana,))
-    except: df = pd.DataFrame()
+    df = _rsql("SELECT * FROM metas_campana WHERE campana=?", conn, params=(campana,))
     conn.close()
     return df
 
 @st.cache_data(ttl=30)
 def obtener_cartera(vendedor=None, campana=CAMPANA_ACTUAL):
     conn = conectar_db()
-    try:
-        if vendedor:
-            df = pd.read_sql_query(
-                "SELECT * FROM cartera_clientes WHERE vendedor=? AND campana=? ORDER BY tipo, cliente",
-                conn, params=(vendedor, campana))
-        else:
-            df = pd.read_sql_query(
-                "SELECT * FROM cartera_clientes WHERE campana=? ORDER BY vendedor, tipo, cliente",
-                conn, params=(campana,))
-    except: df = pd.DataFrame()
+    if vendedor:
+        df = _rsql("SELECT * FROM cartera_clientes WHERE vendedor=? AND campana=? ORDER BY tipo, cliente",
+                   conn, params=(vendedor, campana))
+    else:
+        df = _rsql("SELECT * FROM cartera_clientes WHERE campana=? ORDER BY vendedor, tipo, cliente",
+                   conn, params=(campana,))
     conn.close()
     return df
 
 @st.cache_data(ttl=30)
 def obtener_reportes(vendedor=None, campana=CAMPANA_ACTUAL):
     conn = conectar_db()
-    try:
-        if vendedor:
-            df = pd.read_sql_query(
-                "SELECT * FROM reportes_semanales WHERE vendedor=? AND campana=? ORDER BY fecha_semana DESC",
-                conn, params=(vendedor, campana))
-        else:
-            df = pd.read_sql_query(
-                "SELECT * FROM reportes_semanales WHERE campana=? ORDER BY fecha_semana DESC",
-                conn, params=(campana,))
-    except: df = pd.DataFrame()
+    if vendedor:
+        df = _rsql("SELECT * FROM reportes_semanales WHERE vendedor=? AND campana=? ORDER BY fecha_semana DESC",
+                   conn, params=(vendedor, campana))
+    else:
+        df = _rsql("SELECT * FROM reportes_semanales WHERE campana=? ORDER BY fecha_semana DESC",
+                   conn, params=(campana,))
     conn.close()
     return df
 
 @st.cache_data(ttl=30)
 def obtener_productos_foco(campana=CAMPANA_ACTUAL):
     conn = conectar_db()
-    try:    df = pd.read_sql_query("SELECT * FROM productos_foco WHERE campana=? ORDER BY prioridad", conn, params=(campana,))
-    except: df = pd.DataFrame()
+    df = _rsql("SELECT * FROM productos_foco WHERE campana=? ORDER BY prioridad", conn, params=(campana,))
     conn.close()
     if df.empty:
-        # Inicializar con defaults si está vacío
         conn2 = conectar_db()
         for i, (prod, uni) in enumerate(PRODUCTOS_FOCO_DEFAULT, 1):
             try:
@@ -876,24 +990,19 @@ def obtener_productos_foco(campana=CAMPANA_ACTUAL):
             except: pass
         conn2.commit(); conn2.close()
         conn3 = conectar_db()
-        try:    df = pd.read_sql_query("SELECT * FROM productos_foco WHERE campana=? ORDER BY prioridad", conn3, params=(campana,))
-        except: df = pd.DataFrame()
+        df = _rsql("SELECT * FROM productos_foco WHERE campana=? ORDER BY prioridad", conn3, params=(campana,))
         conn3.close()
     return df
 
 @st.cache_data(ttl=30)
 def obtener_ventas_detalle(vendedor=None, campana=CAMPANA_ACTUAL):
     conn = conectar_db()
-    try:
-        if vendedor:
-            df = pd.read_sql_query(
-                "SELECT * FROM ventas_detalle WHERE vendedor=? AND campana=? ORDER BY fecha DESC",
-                conn, params=(vendedor, campana))
-        else:
-            df = pd.read_sql_query(
-                "SELECT * FROM ventas_detalle WHERE campana=? ORDER BY vendedor, fecha DESC",
-                conn, params=(campana,))
-    except: df = pd.DataFrame()
+    if vendedor:
+        df = _rsql("SELECT * FROM ventas_detalle WHERE vendedor=? AND campana=? ORDER BY fecha DESC",
+                   conn, params=(vendedor, campana))
+    else:
+        df = _rsql("SELECT * FROM ventas_detalle WHERE campana=? ORDER BY vendedor, fecha DESC",
+                   conn, params=(campana,))
     conn.close()
     return df
 
@@ -1689,19 +1798,14 @@ with tab6:
 
         # Historial de transferencias
         conn = conectar_db()
-        try:
-            df_tr = pd.read_sql_query("""
+        df_tr = _rsql("""
                 SELECT t.id_transferencia ID, t.fecha_hora Fecha, p.nombre Producto,
                        t.cantidad Cantidad, t.lote Lote,
                        t.deposito_origen Origen, t.deposito_destino Destino,
                        t.referencia Referencia, t.usuario Usuario
                 FROM transferencias t JOIN productos p ON t.id_producto=p.id_producto
                 ORDER BY t.id_transferencia DESC""", conn)
-        except: df_tr = pd.DataFrame()
-        try:
-            df_inv_h = pd.read_sql_query(
-                "SELECT * FROM inventario_fisico ORDER BY id_inventario DESC", conn)
-        except: df_inv_h = pd.DataFrame()
+        df_inv_h = _rsql("SELECT * FROM inventario_fisico ORDER BY id_inventario DESC", conn)
         conn.close()
 
         if not df_tr.empty:
@@ -1837,13 +1941,11 @@ with tab7:
         st.markdown("---")
         st.write("### 📈 Historial de Precios")
         conn = conectar_db()
-        try:
-            df_ph = pd.read_sql_query("""
+        df_ph = _rsql("""
                 SELECT ph.fecha Fecha, p.nombre Producto,
                        ph.precio Precio, ph.moneda Moneda, ph.usuario Usuario
                 FROM precios_historicos ph JOIN productos p ON ph.id_producto=p.id_producto
                 ORDER BY ph.id_precio DESC LIMIT 200""", conn)
-        except: df_ph = pd.DataFrame()
         conn.close()
         if not df_ph.empty:
             prod_hist = st.selectbox("Producto para ver evolución",
@@ -2059,9 +2161,9 @@ with tab9:
                         dep = safe_str(row.get("deposito","0"))
                         lot = safe_str(row.get("lote","S/L"))
                         stk = safe_float(row.get("stock_actual",0.0))
-                        conn.execute("INSERT OR IGNORE INTO productos (nombre,unidad,codigo) VALUES (?,?,?)",
-                                     (nom,uni,cod))
-                        if conn.execute("SELECT changes()").fetchone()[0] > 0: pa += 1
+                        cur_ins = conn.execute("INSERT OR IGNORE INTO productos (nombre,unidad,codigo) VALUES (?,?,?)",
+                                               (nom,uni,cod))
+                        if _changes(conn, cur_ins) > 0: pa += 1
                         id_p = conn.execute("SELECT id_producto FROM productos WHERE nombre=?", (nom,)).fetchone()[0]
                         conn.execute("""INSERT INTO movimientos
                             (fecha_hora,tipo_movimiento,id_producto,cantidad,lote,referencia,deposito,origen,usuario)
@@ -2177,7 +2279,7 @@ with tab9:
             st.write("### 👥 Gestión de Usuarios")
             conn = conectar_db()
             try:
-                df_u = pd.read_sql_query("SELECT username, nombre, rol, sede FROM usuarios", conn)
+                df_u = _rsql("SELECT username, nombre, rol, sede FROM usuarios", conn)
             except: df_u = pd.DataFrame()
             conn.close()
             st.dataframe(df_u, use_container_width=True, hide_index=True)
