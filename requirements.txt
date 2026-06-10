@@ -6,3 +6,4 @@ opencv-python-headless
 openpyxl
 matplotlib
 xlsxwriter
+pip install reportlab
