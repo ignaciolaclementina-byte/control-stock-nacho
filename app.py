@@ -1497,13 +1497,14 @@ with tab7:
             with cv_kpi1: st.metric("💵 Valor Total USD", f"USD {total_usd:,.2f}")
             with cv_kpi2: st.metric("💴 Valor Total ARS", f"ARS {total_ars:,.0f}")
 
-            df_show = stk_val[["Producto","Unidad","Stock Actual",
-                                "precio_unitario","moneda_precio","Valor_USD","Valor_ARS"]].rename(columns={
-                "precio_unitario":"Precio Unit.", "moneda_precio":"Moneda",
-                "Valor_USD":"Valor USD","Valor_ARS":"Valor ARS"
-            })
-            st.dataframe(df_show.sort_values("Valor_USD", ascending=False),
-                         use_container_width=True, hide_index=True)
+            df_show = (stk_val[["Producto","Unidad","Stock Actual",
+                                 "precio_unitario","moneda_precio","Valor_USD","Valor_ARS"]]
+                       .sort_values("Valor_USD", ascending=False)
+                       .rename(columns={
+                           "precio_unitario":"Precio Unit.", "moneda_precio":"Moneda",
+                           "Valor_USD":"Valor USD","Valor_ARS":"Valor ARS"
+                       }))
+            st.dataframe(df_show, use_container_width=True, hide_index=True)
             st.download_button("📥 Exportar Valorización",
                                data=to_excel_bytes(df_show, "Valorización"),
                                file_name="valorizacion_stock.xlsx")
