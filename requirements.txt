@@ -7,3 +7,4 @@ openpyxl
 matplotlib
 xlsxwriter
 reportlab
+psycopg2-binary
