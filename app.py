@@ -2825,18 +2825,24 @@ Cada vendedor debe:
             pa_rep  = st.text_area("📋 Plan de acción semana siguiente", height=80, key="rep_pa")
 
             if st.button("💾 Guardar Reporte", type="primary", key="save_rep"):
-                conn = conectar_db()
-                conn.execute("""INSERT INTO reportes_semanales
-                    (vendedor,fecha_semana,facturacion,nuevos_clientes,visitas,
-                     avances,obstaculos,oportunidades,plan_accion,campana)
-                    VALUES (?,?,?,?,?,?,?,?,?,?)""",
-                    (vend_r, fecha_rep.strftime("%d/%m/%Y"),
-                     fact_rep, nuev_rep, visit_rep,
-                     av_rep, ob_rep, op_rep, pa_rep, CAMPANA_ACTUAL))
-                conn.commit(); conn.close()
-                st.cache_data.clear()
-                st.success(f"✅ Reporte de {vend_r} guardado.")
-                st.rerun()
+                try:
+                    conn = conectar_db()
+                    conn.execute("""INSERT INTO reportes_semanales
+                        (vendedor,fecha_semana,facturacion,nuevos_clientes,visitas,
+                         avances,obstaculos,oportunidades,plan_accion,campana)
+                        VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                        (vend_r, fecha_rep.strftime("%d/%m/%Y"),
+                         fact_rep, nuev_rep, visit_rep,
+                         av_rep, ob_rep, op_rep, pa_rep, CAMPANA_ACTUAL))
+                    conn.commit(); conn.close()
+                    st.cache_data.clear()
+                    st.session_state["rep_ok"] = f"✅ Reporte de {vend_r} ({fecha_rep.strftime('%d/%m/%Y')}) guardado correctamente."
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Error al guardar: {e}")
+
+            if st.session_state.get("rep_ok"):
+                st.success(st.session_state.pop("rep_ok"))
 
         st.markdown("---")
         st.write("#### Historial de Reportes")
