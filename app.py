@@ -219,6 +219,26 @@ def inicializar_db():
         UNIQUE(campana, producto)
     )""")
 
+    cursor.execute("""CREATE TABLE IF NOT EXISTS ventas_detalle (
+        id_venta       INTEGER PRIMARY KEY AUTOINCREMENT,
+        campana        TEXT DEFAULT '2026-2027',
+        vendedor       TEXT NOT NULL,
+        cuenta         TEXT,
+        cliente        TEXT NOT NULL,
+        cuit           TEXT,
+        articulo       TEXT,
+        descripcion    TEXT,
+        precio         REAL DEFAULT 0,
+        cantidad       REAL DEFAULT 0,
+        entregada      REAL DEFAULT 0,
+        importe_total  REAL DEFAULT 0,
+        fecha          TEXT,
+        fecha_entrega  TEXT,
+        localidad      TEXT,
+        observaciones  TEXT,
+        numero_pedido  TEXT
+    )""")
+
     # Migraciones para instalaciones previas
     migraciones = [
         "ALTER TABLE productos ADD COLUMN codigo TEXT",
@@ -861,17 +881,139 @@ def obtener_productos_foco(campana=CAMPANA_ACTUAL):
         conn3.close()
     return df
 
+@st.cache_data(ttl=30)
+def obtener_ventas_detalle(vendedor=None, campana=CAMPANA_ACTUAL):
+    conn = conectar_db()
+    try:
+        if vendedor:
+            df = pd.read_sql_query(
+                "SELECT * FROM ventas_detalle WHERE vendedor=? AND campana=? ORDER BY fecha DESC",
+                conn, params=(vendedor, campana))
+        else:
+            df = pd.read_sql_query(
+                "SELECT * FROM ventas_detalle WHERE campana=? ORDER BY vendedor, fecha DESC",
+                conn, params=(campana,))
+    except: df = pd.DataFrame()
+    conn.close()
+    return df
+
+def parsear_macrogest_ventas(archivo, vendedor, campana=CAMPANA_ACTUAL):
+    """
+    Lee exportación MacroGest con columnas:
+    cuenta, deno_cuenta, cuit_cuenta, articulo, descripcion,
+    precio, cantidad, entregada, fecha, localidad, observaciones_gen, numero
+    Devuelve (df_cartera, df_ventas) listos para insertar.
+    """
+    try:
+        df = pd.read_excel(archivo)
+    except:
+        try:
+            df = pd.read_csv(archivo)
+        except:
+            return pd.DataFrame(), pd.DataFrame()
+
+    df.columns = [str(c).strip().lower().replace(" ","_") for c in df.columns]
+
+    def _f(col, default=""):
+        return safe_str(col) if col in df.columns else default
+
+    # Normalizar precio/cantidad (pueden venir con coma decimal)
+    def parse_num(v):
+        try:
+            return float(str(v).replace(",",".").replace(" ",""))
+        except: return 0.0
+
+    filas_ventas = []
+    for _, r in df.iterrows():
+        cliente = safe_str(r.get("deno_cuenta",""))
+        if not cliente: continue
+        precio   = parse_num(r.get("precio",  0))
+        cantidad = parse_num(r.get("cantidad", 0))
+        entregada= parse_num(r.get("entregada",0))
+        filas_ventas.append({
+            "campana":       campana,
+            "vendedor":      vendedor,
+            "cuenta":        safe_str(r.get("cuenta","")),
+            "cliente":       cliente,
+            "cuit":          safe_str(r.get("cuit_cuenta","")),
+            "articulo":      safe_str(r.get("articulo","")),
+            "descripcion":   safe_str(r.get("descripcion","")),
+            "precio":        precio,
+            "cantidad":      cantidad,
+            "entregada":     entregada,
+            "importe_total": precio * cantidad,
+            "fecha":         safe_str(r.get("fecha","")),
+            "fecha_entrega": safe_str(r.get("fecha_entrega","")),
+            "localidad":     safe_str(r.get("localidad","")),
+            "observaciones": safe_str(r.get("observaciones_gen","")),
+            "numero_pedido": safe_str(r.get("numero",""))
+        })
+
+    df_v = pd.DataFrame(filas_ventas)
+    if df_v.empty:
+        return pd.DataFrame(), pd.DataFrame()
+
+    # Construir cartera: un registro por cliente con totales
+    cart = (df_v.groupby(["cuenta","cliente","cuit"])
+            .agg(
+                importe_total=("importe_total","sum"),
+                localidad=("localidad","first"),
+                fecha=("fecha","max"),
+            ).reset_index())
+
+    # Clasificación automática Pareto 80/20
+    cart = cart.sort_values("importe_total", ascending=False).reset_index(drop=True)
+    total_imp = cart["importe_total"].sum()
+    cart["acum"] = cart["importe_total"].cumsum()
+    cart["pct_acum"] = cart["acum"] / total_imp if total_imp > 0 else 0
+    # Los que acumulan hasta el 80% = premium
+    umbral_idx = (cart["pct_acum"] <= 0.80).sum()
+    cart["tipo"] = "activo"
+    cart.loc[:umbral_idx, "tipo"] = "premium"
+
+    df_cartera = pd.DataFrame({
+        "vendedor":              vendedor,
+        "cliente":               cart["cliente"],
+        "tipo":                  cart["tipo"],
+        "superficie_ha":         0.0,
+        "potencial_facturacion": cart["importe_total"].round(2),
+        "field_view":            0,
+        "ultima_compra":         cart["fecha"].apply(lambda x: x[:10] if len(str(x))>=10 else ""),
+        "estado":                "activo",
+        "observaciones":         cart["localidad"],
+        "campana":               campana,
+    })
+    return df_cartera, df_v
+
 def ventas_reales_por_vendedor(campana=CAMPANA_ACTUAL):
-    """Cruza entregas con vendedor para medir performance real."""
+    """
+    Combina ventas_detalle (MacroGest) + entregas para medir performance real.
+    ventas_detalle tiene precedencia; entregas se usa como fallback.
+    """
+    df_mg = obtener_ventas_detalle(campana=campana)
+    if not df_mg.empty:
+        r = (df_mg.groupby("vendedor")
+             .agg(
+                 Importe_Total=("importe_total","sum"),
+                 Entregado_Total=("entregada","sum"),
+                 Cant_Total=("cantidad","sum"),
+                 Clientes_Activos=("cliente","nunique"),
+                 Productos_Distintos=("descripcion","nunique"),
+             ).reset_index())
+        r["% Entregado"] = (r["Entregado_Total"] / r["Cant_Total"].replace(0,1) * 100).round(1)
+        return r
+
+    # Fallback: datos de entregas
     ent = obtener_entregas()
     if ent.empty: return pd.DataFrame()
     r = (ent.groupby("vendedor")
-         .agg(Facturado_Total=("cantidad_comprada","sum"),
+         .agg(Importe_Total=("cantidad_comprada","sum"),
               Entregado_Total=("cant_entregada","sum"),
-              Pendiente_Total=("pendiente","sum"),
-              Clientes_Activos=("cliente","nunique"))
+              Cant_Total=("cantidad_comprada","sum"),
+              Clientes_Activos=("cliente","nunique"),
+              Productos_Distintos=("producto","nunique"))
          .reset_index())
-    r["% Cumplimiento"] = (r["Entregado_Total"] / r["Facturado_Total"].replace(0,1) * 100).round(1)
+    r["% Entregado"] = (r["Entregado_Total"] / r["Importe_Total"].replace(0,1) * 100).round(1)
     return r
 
 def gauge_kpi(valor, meta, titulo, unidad=""):
@@ -2330,20 +2472,82 @@ Cada vendedor debe:
         st.write("#### Performance por Vendedor")
         if not ventas_r.empty:
             st.dataframe(ventas_r.rename(columns={
-                "vendedor":"Vendedor","Facturado_Total":"Facturado",
-                "Entregado_Total":"Entregado","Pendiente_Total":"Pendiente",
-                "Clientes_Activos":"Clientes","% Cumplimiento":"% Cumplimiento"
+                "vendedor":"Vendedor",
+                "Importe_Total":"Importe Total $",
+                "Entregado_Total":"Cant. Entregada",
+                "Cant_Total":"Cant. Total",
+                "Clientes_Activos":"Clientes",
+                "Productos_Distintos":"Productos",
+                "% Entregado":"% Entregado"
             }), use_container_width=True, hide_index=True)
 
             fig_bar = px.bar(
-                ventas_r.sort_values("Entregado_Total", ascending=False),
-                x="vendedor", y=["Entregado_Total","Pendiente_Total"],
-                barmode="stack", title="Entregado vs Pendiente por Vendedor",
-                color_discrete_sequence=["#28a745","#ffc107"],
-                labels={"vendedor":"Vendedor","value":"Unidades","variable":""}
+                ventas_r.sort_values("Importe_Total", ascending=False),
+                x="vendedor", y="Importe_Total",
+                title="Importe Total por Vendedor",
+                color_discrete_sequence=["#007bff"],
+                labels={"vendedor":"Vendedor","Importe_Total":"Importe $"}
             )
-            fig_bar.update_layout(height=350, margin=dict(l=0,r=0,t=40,b=0))
+            fig_bar.update_layout(height=320, margin=dict(l=0,r=0,t=40,b=0))
             st.plotly_chart(fig_bar, use_container_width=True)
+
+        # Detalle ventas MacroGest por vendedor
+        df_mg_all = obtener_ventas_detalle()
+        if not df_mg_all.empty:
+            st.markdown("---")
+            st.write("#### 🔍 Análisis de Ventas MacroGest")
+            vend_kpi = st.selectbox("Vendedor",
+                                    ["Todos"] + sorted(df_mg_all["vendedor"].unique().tolist()),
+                                    key="vend_kpi_mg")
+            df_mg_f = df_mg_all if vend_kpi=="Todos" else df_mg_all[df_mg_all["vendedor"]==vend_kpi]
+
+            mk1, mk2, mk3, mk4 = st.columns(4)
+            with mk1: st.metric("Importe Total",    f"${df_mg_f['importe_total'].sum():,.0f}")
+            with mk2: st.metric("Clientes",          df_mg_f["cliente"].nunique())
+            with mk3: st.metric("Productos",         df_mg_f["descripcion"].nunique())
+            with mk4: st.metric("Líneas de pedido",  len(df_mg_f))
+
+            # Top clientes
+            mc1, mc2 = st.columns(2)
+            with mc1:
+                top_cli = (df_mg_f.groupby("cliente")["importe_total"].sum()
+                           .reset_index().sort_values("importe_total", ascending=False).head(10))
+                fig_cli = px.bar(top_cli.sort_values("importe_total"), x="importe_total", y="cliente",
+                                 orientation="h", title="Top 10 Clientes por Importe",
+                                 color_discrete_sequence=["#ffd700"])
+                fig_cli.update_layout(height=350, margin=dict(l=0,r=0,t=40,b=0))
+                st.plotly_chart(fig_cli, use_container_width=True)
+            with mc2:
+                top_prod2 = (df_mg_f.groupby("descripcion")["importe_total"].sum()
+                             .reset_index().sort_values("importe_total", ascending=False).head(10))
+                fig_pr2 = px.bar(top_prod2.sort_values("importe_total"), x="importe_total", y="descripcion",
+                                 orientation="h", title="Top 10 Productos por Importe",
+                                 color_discrete_sequence=["#28a745"])
+                fig_pr2.update_layout(height=350, margin=dict(l=0,r=0,t=40,b=0))
+                st.plotly_chart(fig_pr2, use_container_width=True)
+
+            # Tabla detalle filtrable
+            with st.expander("📋 Ver detalle de ventas"):
+                f_cli_k = st.text_input("Buscar cliente", key="bus_cli_k")
+                f_prod_k = st.text_input("Buscar producto", key="bus_prod_k")
+                df_det = df_mg_f.copy()
+                if f_cli_k:
+                    df_det = df_det[df_det["cliente"].str.contains(f_cli_k, case=False, na=False)]
+                if f_prod_k:
+                    df_det = df_det[df_det["descripcion"].str.contains(f_prod_k, case=False, na=False)]
+                st.dataframe(
+                    df_det[["vendedor","cliente","descripcion","cantidad","precio","importe_total",
+                             "entregada","fecha","localidad","observaciones"]].rename(columns={
+                        "vendedor":"Vendedor","cliente":"Cliente","descripcion":"Producto",
+                        "cantidad":"Cant.","precio":"Precio","importe_total":"Importe $",
+                        "entregada":"Entregado","fecha":"Fecha","localidad":"Localidad",
+                        "observaciones":"Obs."
+                    }),
+                    use_container_width=True, hide_index=True
+                )
+                st.download_button("📥 Exportar ventas",
+                                   data=to_excel_bytes(df_det, "Ventas"),
+                                   file_name=f"ventas_{vend_kpi}.xlsx")
 
         st.markdown("---")
         st.write("#### Distribución de Facturación por Rubro (objetivo: 30/30/30/10)")
@@ -2479,9 +2683,87 @@ Cada vendedor debe:
             else:
                 st.error("El nombre del cliente es obligatorio.")
 
-        # Importar cartera desde Excel
+        # ── Importar desde MacroGest (formato nativo) ──────────────────────
         st.markdown("---")
-        with st.expander("📥 Importar Cartera desde Excel"):
+        with st.expander("🚀 Importar desde MacroGest (formato exportación ventas)", expanded=True):
+            st.info(
+                "Subí la exportación directa de MacroGest con columnas: "
+                "`cuenta`, `deno_cuenta`, `cuit_cuenta`, `articulo`, `descripcion`, "
+                "`precio`, `cantidad`, `entregada`, `fecha`, `localidad`, `observaciones_gen`, `numero`. "
+                "La app clasifica automáticamente Premium / Activo por Pareto 80/20."
+            )
+            img_col, frm_col = st.columns([1,2])
+            with frm_col:
+                vend_mg   = st.text_input("Nombre del vendedor", value="Horacio", key="mg_vend")
+                reemplazar = st.toggle("Reemplazar datos previos del vendedor", value=True, key="mg_reempl")
+            arch_mg = st.file_uploader("Archivo MacroGest (.xlsx/.csv)", type=["xlsx","csv","xls"], key="up_mg")
+
+            if arch_mg:
+                df_car_prev, df_ven_prev = parsear_macrogest_ventas(arch_mg, vend_mg)
+                if df_car_prev.empty:
+                    st.error("No se pudo leer el archivo. Verificá que tenga las columnas correctas.")
+                else:
+                    # Preview
+                    st.write(f"**{len(df_car_prev)} clientes detectados** — distribución Pareto automática:")
+                    prev_cols = ["cliente","tipo","potencial_facturacion","ultima_compra","observaciones"]
+                    st.dataframe(
+                        df_car_prev[prev_cols].rename(columns={
+                            "cliente":"Cliente","tipo":"Tipo",
+                            "potencial_facturacion":"Importe Total $",
+                            "ultima_compra":"Últ. Compra","observaciones":"Localidad"
+                        }),
+                        use_container_width=True, hide_index=True
+                    )
+                    n_prem = (df_car_prev["tipo"]=="premium").sum()
+                    n_act  = (df_car_prev["tipo"]=="activo").sum()
+                    st.caption(f"⭐ {n_prem} Premium  |  ✅ {n_act} Activos  |  "
+                               f"📦 {len(df_ven_prev)} líneas de venta")
+
+                    # Top productos por importe
+                    if not df_ven_prev.empty:
+                        top_prod = (df_ven_prev.groupby("descripcion")["importe_total"].sum()
+                                    .reset_index().sort_values("importe_total", ascending=False).head(8))
+                        fig_tp2 = px.bar(top_prod, x="importe_total", y="descripcion",
+                                         orientation="h", title="Top Productos por Importe $",
+                                         color_discrete_sequence=["#007bff"])
+                        fig_tp2.update_layout(height=280, margin=dict(l=0,r=0,t=40,b=0))
+                        st.plotly_chart(fig_tp2, use_container_width=True)
+
+                    if st.button(f"✅ Confirmar importación de {vend_mg}", type="primary", key="confirm_mg"):
+                        conn = conectar_db()
+                        if reemplazar:
+                            conn.execute("DELETE FROM cartera_clientes WHERE vendedor=? AND campana=?",
+                                         (vend_mg, CAMPANA_ACTUAL))
+                            conn.execute("DELETE FROM ventas_detalle WHERE vendedor=? AND campana=?",
+                                         (vend_mg, CAMPANA_ACTUAL))
+                        # Insertar cartera
+                        for _, r in df_car_prev.iterrows():
+                            conn.execute("""INSERT OR REPLACE INTO cartera_clientes
+                                (vendedor,cliente,tipo,superficie_ha,potencial_facturacion,
+                                 field_view,ultima_compra,estado,observaciones,campana)
+                                VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                                (r["vendedor"],r["cliente"],r["tipo"],0,
+                                 r["potencial_facturacion"],0,r["ultima_compra"],
+                                 "activo",r["observaciones"],r["campana"]))
+                        # Insertar ventas detalle
+                        for _, r in df_ven_prev.iterrows():
+                            conn.execute("""INSERT INTO ventas_detalle
+                                (campana,vendedor,cuenta,cliente,cuit,articulo,descripcion,
+                                 precio,cantidad,entregada,importe_total,fecha,fecha_entrega,
+                                 localidad,observaciones,numero_pedido)
+                                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                                (r["campana"],r["vendedor"],r["cuenta"],r["cliente"],r["cuit"],
+                                 r["articulo"],r["descripcion"],r["precio"],r["cantidad"],
+                                 r["entregada"],r["importe_total"],r["fecha"],r["fecha_entrega"],
+                                 r["localidad"],r["observaciones"],r["numero_pedido"]))
+                        conn.commit(); conn.close()
+                        st.cache_data.clear()
+                        st.success(f"✅ {len(df_car_prev)} clientes y {len(df_ven_prev)} líneas de venta importadas para {vend_mg}.")
+                        st.rerun()
+
+        # ── Importar cartera genérica ───────────────────────────────────────
+        st.markdown("---")
+        with st.expander("📥 Importar Cartera desde Excel (formato propio)"):
             st.caption("El archivo debe tener columnas: `vendedor`, `cliente`, `tipo`, `superficie_ha`, `potencial_facturacion`, `field_view` (0/1), `ultima_compra`, `observaciones`")
             arch_cart = st.file_uploader("Archivo cartera (.xlsx/.csv)", type=["xlsx","csv"], key="up_cart")
             if arch_cart and st.button("🚀 Importar Cartera", key="imp_cart"):
