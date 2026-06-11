@@ -439,8 +439,8 @@ def borrar_solo_importacion():
 def obtener_stock_con_lote():
     conn  = conectar_db()
     query = """
-        SELECT p.nombre Producto, p.codigo Código, p.unidad Unidad,
-               m.lote Lote, m.deposito Deposito,
+        SELECT p.nombre "Producto", p.codigo "Código", p.unidad "Unidad",
+               m.lote "Lote", m.deposito "Deposito",
                m.tipo_movimiento, m.cantidad
         FROM movimientos m JOIN productos p ON m.id_producto=p.id_producto
         WHERE COALESCE(m.anulado,0)=0
@@ -464,11 +464,11 @@ def obtener_stock_full():
 def obtener_historial_movimientos():
     conn  = conectar_db()
     query = """
-        SELECT m.id_movimiento ID, m.fecha_hora Fecha, m.tipo_movimiento Tipo,
-               p.nombre Producto, p.codigo Código, m.cantidad Cantidad,
-               p.unidad Unidad, m.lote Lote, m.deposito Depósito,
-               m.referencia Referencia, COALESCE(m.origen,'excel') Origen,
-               COALESCE(m.anulado,0) Anulado, COALESCE(m.usuario,'') Usuario
+        SELECT m.id_movimiento "ID", m.fecha_hora "Fecha", m.tipo_movimiento "Tipo",
+               p.nombre "Producto", p.codigo "Código", m.cantidad "Cantidad",
+               p.unidad "Unidad", m.lote "Lote", m.deposito "Depósito",
+               m.referencia "Referencia", COALESCE(m.origen,'excel') "Origen",
+               COALESCE(m.anulado,0) "Anulado", COALESCE(m.usuario,'') "Usuario"
         FROM movimientos m JOIN productos p ON m.id_producto=p.id_producto
         ORDER BY m.id_movimiento DESC
     """
@@ -498,7 +498,7 @@ def calcular_rotacion_stock(dias=90):
     conn        = conectar_db()
     fecha_corte = (datetime.now() - timedelta(days=dias)).strftime("%d/%m/%Y")
     query = """
-        SELECT p.nombre Producto, SUM(m.cantidad) Total_Salidas
+        SELECT p.nombre "Producto", SUM(m.cantidad) "Total_Salidas"
         FROM movimientos m JOIN productos p ON m.id_producto=p.id_producto
         WHERE m.tipo_movimiento='Salida' AND COALESCE(m.anulado,0)=0
           AND m.fecha_hora >= ?
@@ -1799,10 +1799,10 @@ with tab6:
         # Historial de transferencias
         conn = conectar_db()
         df_tr = _rsql("""
-                SELECT t.id_transferencia ID, t.fecha_hora Fecha, p.nombre Producto,
-                       t.cantidad Cantidad, t.lote Lote,
-                       t.deposito_origen Origen, t.deposito_destino Destino,
-                       t.referencia Referencia, t.usuario Usuario
+                SELECT t.id_transferencia "ID", t.fecha_hora "Fecha", p.nombre "Producto",
+                       t.cantidad "Cantidad", t.lote "Lote",
+                       t.deposito_origen "Origen", t.deposito_destino "Destino",
+                       t.referencia "Referencia", t.usuario "Usuario"
                 FROM transferencias t JOIN productos p ON t.id_producto=p.id_producto
                 ORDER BY t.id_transferencia DESC""", conn)
         df_inv_h = _rsql("SELECT * FROM inventario_fisico ORDER BY id_inventario DESC", conn)
@@ -1942,8 +1942,8 @@ with tab7:
         st.write("### 📈 Historial de Precios")
         conn = conectar_db()
         df_ph = _rsql("""
-                SELECT ph.fecha Fecha, p.nombre Producto,
-                       ph.precio Precio, ph.moneda Moneda, ph.usuario Usuario
+                SELECT ph.fecha "Fecha", p.nombre "Producto",
+                       ph.precio "Precio", ph.moneda "Moneda", ph.usuario "Usuario"
                 FROM precios_historicos ph JOIN productos p ON ph.id_producto=p.id_producto
                 ORDER BY ph.id_precio DESC LIMIT 200""", conn)
         conn.close()
