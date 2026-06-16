@@ -2143,24 +2143,26 @@ with tab9:
     # ── Importación / Exportación ─────────────────────────────────────────────
     with cfg1:
         # Importación completa
-        with st.expander("📥 Importar Stock desde MacroGest (reemplaza todo)", expanded=obtener_stock_full().empty):
+        with st.expander("📥 Importar Stock desde MacroGest (reemplaza todo)", expanded=True):
             st.info("CSV/Excel con columnas: `codigo`, `descripcion_1`, `unidad_medida`, `deposito`, `lote`, `stock_actual`")
             arch_s = st.file_uploader("Archivo de stock", type=["csv","xlsx","xls"], key="up_stock")
             if arch_s:
-                # ── Preview de columnas para diagnóstico ─────────────────────
+                # ── Preview de columnas ───────────────────────────────────────
                 try:
                     _df_prev = pd.read_csv(arch_s) if arch_s.name.endswith(".csv") else pd.read_excel(arch_s)
                     arch_s.seek(0)
-                    st.caption(f"📋 Columnas detectadas: `{'`, `'.join(str(c) for c in _df_prev.columns)}`")
+                    st.caption(f"📋 Columnas detectadas: `{'`, `'.join(str(c) for c in _df_prev.columns)}`  |  {len(_df_prev)} filas")
                 except Exception:
                     pass
-            if arch_s and st.button("🚀 IMPORTAR STOCK COMPLETO", type="primary"):
+            if arch_s and st.button("🚀 IMPORTAR STOCK COMPLETO", type="primary", key="btn_imp_stock"):
+                import traceback as _tb
+                _prog = st.progress(0, "Leyendo archivo...")
                 try:
                     arch_s.seek(0)
                     df_s = pd.read_csv(arch_s) if arch_s.name.endswith(".csv") else pd.read_excel(arch_s)
-                    # Normalizar: minúsculas + espacios → guiones bajos
+                    _prog.progress(15, f"Archivo leído: {len(df_s)} filas")
+                    # Normalizar columnas
                     df_s.columns = [str(c).strip().lower().replace(" ","_").replace(".","") for c in df_s.columns]
-                    # Mapeo de nombres alternativos de MacroGest
                     _COL_MAP = {
                         "descripcion":      "descripcion_1",
                         "descripcion1":     "descripcion_1",
@@ -2173,44 +2175,85 @@ with tab9:
                         "stock":            "stock_actual",
                         "saldo":            "stock_actual",
                         "existencia":       "stock_actual",
-                        "cantidad":         "stock_actual",
                         "deposito_nombre":  "deposito",
                         "dep":              "deposito",
                         "almacen":          "deposito",
                     }
                     df_s.rename(columns={k: v for k, v in _COL_MAP.items() if k in df_s.columns}, inplace=True)
-                    # Verificar columna clave
                     if "descripcion_1" not in df_s.columns:
-                        st.error(f"❌ No se encontró la columna de producto. Columnas disponibles: {list(df_s.columns)}")
-                        st.stop()
+                        raise ValueError(f"Columna de producto no encontrada. Disponibles: {list(df_s.columns)}")
+                    # Filtrar filas válidas
+                    df_s["_nom"] = df_s["descripcion_1"].apply(safe_str)
+                    df_validas = df_s[df_s["_nom"] != ""].copy()
+                    _prog.progress(25, f"{len(df_validas)} filas válidas de {len(df_s)}")
+                    if df_validas.empty:
+                        raise ValueError("No hay filas con producto válido en el archivo.")
+                    _prog.progress(30, "Limpiando datos anteriores...")
                     borrar_solo_importacion()
                     conn = conectar_db()
                     pa = mo = 0
-                    for _, row in df_s.iterrows():
-                        nom = safe_str(row.get("descripcion_1",""))
-                        if not nom: continue
+                    _total = len(df_validas)
+                    _prog.progress(35, f"Insertando {_total} registros en base de datos...")
+                    for _i, (_, row) in enumerate(df_validas.iterrows()):
+                        nom = row["_nom"]
                         cod = safe_str(row.get("codigo",""))
-                        uni = safe_str(row.get("unidad_medida","U"))
-                        dep = safe_str(row.get("deposito","0"))
-                        lot = safe_str(row.get("lote","S/L"))
-                        stk = safe_float(row.get("stock_actual",0.0))
-                        cur_ins = conn.execute("INSERT OR IGNORE INTO productos (nombre,unidad,codigo) VALUES (?,?,?)",
-                                               (nom,uni,cod))
+                        uni = safe_str(row.get("unidad_medida","U")) or "U"
+                        dep = safe_str(row.get("deposito","0")) or "0"
+                        lot = safe_str(row.get("lote","S/L")) or "S/L"
+                        stk = safe_float(row.get("stock_actual", 0.0))
+                        cur_ins = conn.execute(
+                            "INSERT OR IGNORE INTO productos (nombre,unidad,codigo) VALUES (?,?,?)",
+                            (nom, uni, cod))
                         if _changes(conn, cur_ins) > 0: pa += 1
-                        id_p = conn.execute("SELECT id_producto FROM productos WHERE nombre=?", (nom,)).fetchone()[0]
-                        conn.execute("""INSERT INTO movimientos
-                            (fecha_hora,tipo_movimiento,id_producto,cantidad,lote,referencia,deposito,origen,usuario)
-                            VALUES (?,?,?,?,?,?,?,?,?)""",
-                            (datetime.now().strftime("%d/%m/%Y %H:%M"), "Entrada", id_p,
+                        row_id = conn.execute(
+                            "SELECT id_producto FROM productos WHERE nombre=?", (nom,)).fetchone()
+                        if not row_id:
+                            continue
+                        conn.execute(
+                            """INSERT INTO movimientos
+                               (fecha_hora,tipo_movimiento,id_producto,cantidad,lote,referencia,deposito,origen,usuario)
+                               VALUES (?,?,?,?,?,?,?,?,?)""",
+                            (datetime.now().strftime("%d/%m/%Y %H:%M"), "Entrada", row_id[0],
                              stk, lot, "Saldo Inicial", dep, "excel", usuario_actual()))
                         mo += 1
-                    conn.commit(); conn.close()
+                        if _i % 20 == 0:
+                            _pct = 35 + int(55 * _i / _total)
+                            _prog.progress(_pct, f"Procesando {_i+1}/{_total}...")
+                    conn.commit()
+                    conn.close()
+                    _prog.progress(100, "¡Listo!")
                     guardar_metadata("ultima_importacion", datetime.now().strftime("%d/%m/%Y %H:%M"))
                     st.cache_data.clear()
-                    st.success(f"✅ {pa} productos nuevos, {mo} líneas importadas.")
+                    st.session_state["stock_imp_ok"] = (
+                        f"✅ Stock importado: {pa} productos nuevos, {mo} líneas "
+                        f"(de {_total} filas válidas)."
+                    )
                     st.rerun()
                 except Exception as ex:
-                    st.error(f"Error: {ex}")
+                    _prog.empty()
+                    st.error(f"❌ Error durante la importación: {ex}")
+                    st.code(_tb.format_exc(), language="python")
+            # Mensaje persistente post-rerun
+            if st.session_state.get("stock_imp_ok"):
+                st.success(st.session_state.pop("stock_imp_ok"))
+            # ── Diagnóstico rápido DB ──────────────────────────────────────────
+            with st.expander("🔍 Diagnóstico base de datos", expanded=False):
+                if st.button("🔄 Verificar estado DB", key="btn_diag"):
+                    try:
+                        conn_d = conectar_db()
+                        n_prod = conn_d.execute("SELECT COUNT(*) FROM productos").fetchone()[0]
+                        n_mov  = conn_d.execute("SELECT COUNT(*) FROM movimientos").fetchone()[0]
+                        n_exc  = conn_d.execute("SELECT COUNT(*) FROM movimientos WHERE origen='excel'").fetchone()[0]
+                        n_ent  = conn_d.execute("SELECT COUNT(*) FROM entregas").fetchone()[0]
+                        conn_d.close()
+                        st.info(
+                            f"**Productos:** {n_prod}  |  "
+                            f"**Movimientos totales:** {n_mov}  |  "
+                            f"**Movimientos excel:** {n_exc}  |  "
+                            f"**Entregas:** {n_ent}"
+                        )
+                    except Exception as ex:
+                        st.error(f"Error al consultar DB: {ex}")
 
         # Importación incremental
         with st.expander("🔄 Importación Incremental (solo diferencias)"):
