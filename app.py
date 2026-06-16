@@ -2146,10 +2146,43 @@ with tab9:
         with st.expander("📥 Importar Stock desde MacroGest (reemplaza todo)", expanded=obtener_stock_full().empty):
             st.info("CSV/Excel con columnas: `codigo`, `descripcion_1`, `unidad_medida`, `deposito`, `lote`, `stock_actual`")
             arch_s = st.file_uploader("Archivo de stock", type=["csv","xlsx","xls"], key="up_stock")
+            if arch_s:
+                # ── Preview de columnas para diagnóstico ─────────────────────
+                try:
+                    _df_prev = pd.read_csv(arch_s) if arch_s.name.endswith(".csv") else pd.read_excel(arch_s)
+                    arch_s.seek(0)
+                    st.caption(f"📋 Columnas detectadas: `{'`, `'.join(str(c) for c in _df_prev.columns)}`")
+                except Exception:
+                    pass
             if arch_s and st.button("🚀 IMPORTAR STOCK COMPLETO", type="primary"):
                 try:
+                    arch_s.seek(0)
                     df_s = pd.read_csv(arch_s) if arch_s.name.endswith(".csv") else pd.read_excel(arch_s)
-                    df_s.columns = [c.strip().lower() for c in df_s.columns]
+                    # Normalizar: minúsculas + espacios → guiones bajos
+                    df_s.columns = [str(c).strip().lower().replace(" ","_").replace(".","") for c in df_s.columns]
+                    # Mapeo de nombres alternativos de MacroGest
+                    _COL_MAP = {
+                        "descripcion":      "descripcion_1",
+                        "descripcion1":     "descripcion_1",
+                        "desc":             "descripcion_1",
+                        "nombre":           "descripcion_1",
+                        "articulo":         "descripcion_1",
+                        "unidad":           "unidad_medida",
+                        "um":               "unidad_medida",
+                        "u_medida":         "unidad_medida",
+                        "stock":            "stock_actual",
+                        "saldo":            "stock_actual",
+                        "existencia":       "stock_actual",
+                        "cantidad":         "stock_actual",
+                        "deposito_nombre":  "deposito",
+                        "dep":              "deposito",
+                        "almacen":          "deposito",
+                    }
+                    df_s.rename(columns={k: v for k, v in _COL_MAP.items() if k in df_s.columns}, inplace=True)
+                    # Verificar columna clave
+                    if "descripcion_1" not in df_s.columns:
+                        st.error(f"❌ No se encontró la columna de producto. Columnas disponibles: {list(df_s.columns)}")
+                        st.stop()
                     borrar_solo_importacion()
                     conn = conectar_db()
                     pa = mo = 0
@@ -2189,7 +2222,15 @@ with tab9:
             if arch_inc and st.button("🔄 IMPORTAR INCREMENTAL", type="primary"):
                 try:
                     df_inc = pd.read_csv(arch_inc) if arch_inc.name.endswith(".csv") else pd.read_excel(arch_inc)
-                    df_inc.columns = [c.strip().lower() for c in df_inc.columns]
+                    df_inc.columns = [str(c).strip().lower().replace(" ","_").replace(".","") for c in df_inc.columns]
+                    _COL_MAP_INC = {
+                        "descripcion":"descripcion_1","descripcion1":"descripcion_1",
+                        "desc":"descripcion_1","nombre":"descripcion_1","articulo":"descripcion_1",
+                        "unidad":"unidad_medida","um":"unidad_medida",
+                        "stock":"stock_actual","saldo":"stock_actual","existencia":"stock_actual","cantidad":"stock_actual",
+                        "dep":"deposito","almacen":"deposito",
+                    }
+                    df_inc.rename(columns={k: v for k, v in _COL_MAP_INC.items() if k in df_inc.columns}, inplace=True)
                     stk_actual = obtener_stock_full()
                     stk_actual_dict = {} if stk_actual.empty else {
                         (r["Producto"],r["Deposito"]): r["Stock Actual"]
