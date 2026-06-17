@@ -476,7 +476,7 @@ def obtener_historial_movimientos():
     conn.close()
     return df
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=120)
 def obtener_entregas(hoja=None):
     conn = conectar_db()
     if hoja and hoja != "Todas":
@@ -486,7 +486,7 @@ def obtener_entregas(hoja=None):
     conn.close()
     return df
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=300)
 def obtener_productos_completo():
     conn = conectar_db()
     df = _rsql("SELECT * FROM productos ORDER BY nombre", conn)
@@ -529,6 +529,7 @@ def calcular_rotacion_stock(dias=90):
 # ─────────────────────────────────────────────────────────────────────────────
 # 5. STOCK CON COMPROMISOS
 # ─────────────────────────────────────────────────────────────────────────────
+@st.cache_data(ttl=30)
 def obtener_stock_con_compromisos():
     stock = obtener_stock_full()
     if stock.empty: return stock
@@ -1094,6 +1095,7 @@ def parsear_macrogest_ventas(archivo, vendedor, campana=CAMPANA_ACTUAL):
     })
     return df_cartera, df_v
 
+@st.cache_data(ttl=60)
 def ventas_reales_por_vendedor(campana=CAMPANA_ACTUAL):
     """
     Combina ventas_detalle (MacroGest) + entregas para medir performance real.
@@ -1152,7 +1154,10 @@ def gauge_kpi(valor, meta, titulo, unidad=""):
 # ─────────────────────────────────────────────────────────────────────────────
 # 11. INIT
 # ─────────────────────────────────────────────────────────────────────────────
-inicializar_db()
+# Solo corre 1 vez por sesión — evita 15+ queries a Supabase en cada rerun
+if not st.session_state.get("_db_initialized"):
+    inicializar_db()
+    st.session_state["_db_initialized"] = True
 
 # Session state
 _defaults = {
@@ -1166,6 +1171,7 @@ _defaults = {
     "user_nombre":         "",
     "username":            "",
     "trans_pendiente":     None,
+    "_auth_enabled":       None,
 }
 for k, v in _defaults.items():
     if k not in st.session_state:
@@ -1177,11 +1183,13 @@ if st.session_state.wa_numero is None:
 if st.session_state.umbral_alerta is None:
     stored = obtener_metadata("umbral_alerta")
     st.session_state.umbral_alerta = int(stored) if stored else 20
+if st.session_state._auth_enabled is None:
+    st.session_state._auth_enabled = obtener_metadata("auth_enabled") == "1"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 12. AUTH GATE
 # ─────────────────────────────────────────────────────────────────────────────
-auth_enabled = obtener_metadata("auth_enabled") == "1"
+auth_enabled = st.session_state._auth_enabled
 if auth_enabled and not st.session_state.get("authenticated"):
     mostrar_login()
     st.stop()
@@ -2394,6 +2402,7 @@ with tab9:
                                 key="auth_toggle")
             if st.button("💾 Guardar config auth"):
                 guardar_metadata("auth_enabled", "1" if auth_on else "0")
+                st.session_state._auth_enabled = auth_on
                 st.success("Config auth guardada. Recargá la página.")
             if auth_on:
                 st.warning("⚠️ Recordá cambiar la contraseña del usuario **admin** antes de activar.")
