@@ -45,6 +45,40 @@ except ImportError:
 st.set_page_config(page_title="Gestión de Agroquímicos — LC", layout="wide")
 st.markdown("""
 <style>
+/* ─── KPI GRID (reemplaza st.metric en mobile) ─── */
+.kpi-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin: 10px 0 14px;
+}
+.kpi-item {
+    background: var(--secondary-background-color);
+    border: 1px solid rgba(128,128,128,0.15);
+    border-radius: 12px;
+    padding: 13px 12px 10px;
+    min-width: 0;
+}
+.kpi-label {
+    font-size: .75rem;
+    color: #999;
+    margin-bottom: 3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.kpi-value {
+    font-size: 1.6rem;
+    font-weight: 800;
+    line-height: 1.15;
+    color: inherit;
+}
+.kpi-value.ok   { color: #4caf7d; }
+.kpi-value.warn { color: #ffc107; }
+.kpi-value.bad  { color: #f44336; }
+.kpi-value.info { color: #5b9cf6; }
+.kpi-value.muted{ color: #aaa; font-size:1.3rem; }
+
 /* ─── BASE ─── */
 .main{background-color:#f4f7f6}
 .stButton>button{
@@ -1337,35 +1371,36 @@ if auth_enabled and st.session_state.get("authenticated"):
 # ─────────────────────────────────────────────────────────────────────────────
 st.title("🧪 Depósito LC")
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
-    "⚡ Panel",
-    "📦 LC",
-    "🌿 DEP55",
-    "🚚 Directa",
-    "📋 Stock",
-    "📜 Historial",
-    "💲 Valor.",
-    "📈 Reportes",
-    "⚙️ Config.",
-    "📊 Plan",
-])
+_TAB_LABELS = [
+    ("⚡", "Panel"),
+    ("📦", "LC / LCAGRO"),
+    ("🌿", "Depósito 55"),
+    ("🚚", "Directa"),
+    ("📋", "Stock"),
+    ("📜", "Historial"),
+    ("💲", "Valorización"),
+    ("📈", "Reportes"),
+    ("⚙️", "Config."),
+    ("📊", "Plan Comercial"),
+]
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs(
+    [e for e, _ in _TAB_LABELS]
+)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 1 — PANEL DE CONTROL
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab1:
+    st.markdown(f"### ⚡ Panel de control")
     stock_df = obtener_stock_con_compromisos()
 
     if stock_df.empty:
-        st.warning("⚠️ Sin datos. Subí el archivo en Configuración.")
+        st.warning("⚠️ Sin datos. Subí el archivo en ⚙️ Configuración.")
     else:
         U = st.session_state.umbral_alerta
-        for meta, caption in [
-            ("ultima_importacion",          "🕐 Última importación stock"),
-            ("ultima_importacion_entregas",  "📦 Última importación entregas"),
-        ]:
-            val = obtener_metadata(meta)
-            if val: st.caption(f"{caption}: **{val}**")
+        imp1 = obtener_metadata("ultima_importacion")
+        imp2 = obtener_metadata("ultima_importacion_entregas")
+        if imp1: st.caption(f"🕐 Stock: **{imp1}**   |   📦 Entregas: **{imp2 or '—'}**")
 
         # KPIs
         neg_n  = len(stock_df[stock_df["Stock Actual"] < 0])
@@ -1378,17 +1413,44 @@ with tab1:
             ent_panel["dias_p"] = ent_panel["dia_recibido"].apply(dias_desde)
             venc30 = len(ent_panel[(ent_panel["pendiente"] > 0) & (ent_panel["dias_p"] > 30)])
 
-        # KPI rows — 2 cols por fila para que funcione bien en mobile y desktop
-        k1, k2 = st.columns(2)
-        with k1: st.metric("📦 Productos",    stock_df["Producto"].nunique())
-        with k2: st.metric("🏭 Depósitos",    stock_df["Deposito"].nunique())
-        k3, k4 = st.columns(2)
-        with k3: st.metric("📊 Volumen Total", f"{stock_df['Stock Actual'].sum():,.0f}")
-        with k4: st.metric("⏳ Pend.+30d",    venc30, delta=-venc30, delta_color="inverse")
-        k5, k6, k7 = st.columns(3)
-        with k5: st.metric("🟡 Stock Bajo",   bajo_n, delta=-bajo_n,  delta_color="inverse")
-        with k6: st.metric("⚠️ Negativo",     neg_n,  delta=-neg_n,   delta_color="inverse")
-        with k7: st.metric("🔒 Comprometido", comp_n, delta=-comp_n,  delta_color="inverse")
+        n_prod  = stock_df["Producto"].nunique()
+        n_dep   = stock_df["Deposito"].nunique()
+        vol_tot = stock_df["Stock Actual"].sum()
+        vol_cls = "bad" if vol_tot < 0 else "info"
+
+        st.markdown(f"""
+<div class="kpi-grid">
+  <div class="kpi-item">
+    <div class="kpi-label">📦 Productos</div>
+    <div class="kpi-value info">{n_prod}</div>
+  </div>
+  <div class="kpi-item">
+    <div class="kpi-label">🏭 Depósitos</div>
+    <div class="kpi-value info">{n_dep}</div>
+  </div>
+  <div class="kpi-item">
+    <div class="kpi-label">📊 Volumen Total</div>
+    <div class="kpi-value {vol_cls}">{vol_tot:,.0f}</div>
+  </div>
+  <div class="kpi-item">
+    <div class="kpi-label">⏳ Pend. +30d</div>
+    <div class="kpi-value {'bad' if venc30 > 0 else 'ok'}">{venc30}</div>
+  </div>
+  <div class="kpi-item">
+    <div class="kpi-label">🟡 Stock Bajo</div>
+    <div class="kpi-value {'warn' if bajo_n > 0 else 'ok'}">{bajo_n}</div>
+  </div>
+  <div class="kpi-item">
+    <div class="kpi-label">⚠️ Negativo</div>
+    <div class="kpi-value {'bad' if neg_n > 0 else 'ok'}">{neg_n}</div>
+  </div>
+  <div class="kpi-item">
+    <div class="kpi-label">🔒 Comprometido</div>
+    <div class="kpi-value {'warn' if comp_n > 0 else 'ok'}">{comp_n}</div>
+  </div>
+  <div class="kpi-item" style="background:transparent;border-color:transparent"></div>
+</div>
+""", unsafe_allow_html=True)
 
         st.divider()
         # Alerta WhatsApp
