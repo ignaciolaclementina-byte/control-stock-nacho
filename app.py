@@ -45,6 +45,7 @@ except ImportError:
 st.set_page_config(page_title="Gestión de Agroquímicos — LC", layout="wide")
 st.markdown("""
 <style>
+/* ─── BASE ─── */
 .main{background-color:#f4f7f6}
 .stButton>button{width:100%;border-radius:8px;font-weight:bold;height:3em}
 .stock-card{background:white;padding:18px;border-radius:12px;
@@ -69,6 +70,79 @@ st.markdown("""
     padding:1px 6px;border-radius:8px;font-weight:bold;margin-left:4px;vertical-align:middle}
 .login-box   {max-width:400px;margin:80px auto;padding:30px;background:white;
     border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,.1)}
+
+/* ─── MOBILE ─── */
+@media (max-width: 640px) {
+    /* Reduce lateral padding */
+    section.main .block-container {
+        padding-left: 0.6rem !important;
+        padding-right: 0.6rem !important;
+        padding-top: 0.8rem !important;
+    }
+    /* Make columns wrap into 2-per-row instead of overflowing */
+    div[data-testid="stHorizontalBlock"] {
+        flex-wrap: wrap !important;
+        gap: 0.4rem 0.4rem !important;
+    }
+    div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+        flex: 0 0 calc(50% - 0.3rem) !important;
+        min-width: calc(50% - 0.3rem) !important;
+        width: calc(50% - 0.3rem) !important;
+    }
+    /* Title smaller */
+    h1 { font-size: 1.2rem !important; margin-bottom: 0.3rem !important; }
+    h2 { font-size: 1rem !important; }
+    h3 { font-size: .9rem !important; }
+    /* Tab buttons: smaller text, ellipsis overflow */
+    button[data-baseweb="tab"] {
+        padding: 6px 6px !important;
+        min-width: 0 !important;
+    }
+    button[data-baseweb="tab"] p {
+        font-size: 0.7rem !important;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 70px;
+    }
+    /* Stock cards: tighter on mobile */
+    .stock-card { padding: 10px 10px 8px; }
+    .stock-title { font-size:.82rem; min-height:2em; }
+    .stock-value { font-size:1.2rem; }
+    .stock-info  { font-size:.75rem; }
+    /* DataFrames: horizontal scroll */
+    [data-testid="stDataFrame"] > div {
+        overflow-x: auto !important;
+    }
+    /* Metrics: tighter */
+    [data-testid="metric-container"] {
+        padding: 8px !important;
+    }
+    [data-testid="metric-container"] label {
+        font-size: .75rem !important;
+    }
+    [data-testid="metric-container"] [data-testid="stMetricValue"] {
+        font-size: 1.1rem !important;
+    }
+    /* Inputs: bigger touch targets */
+    input, select, textarea {
+        font-size: 16px !important; /* prevents iOS zoom */
+    }
+    /* Expander headers */
+    [data-testid="stExpander"] summary {
+        padding: 10px 8px !important;
+    }
+}
+
+@media (max-width: 380px) {
+    /* Very small phones: full-width columns */
+    div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+        flex: 0 0 100% !important;
+        min-width: 100% !important;
+        width: 100% !important;
+    }
+    button[data-baseweb="tab"] p { max-width: 52px; font-size: 0.65rem !important; }
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -1207,19 +1281,19 @@ if auth_enabled and st.session_state.get("authenticated"):
 # ─────────────────────────────────────────────────────────────────────────────
 # 13. TABS PRINCIPALES
 # ─────────────────────────────────────────────────────────────────────────────
-st.title("🧪 Control de Depósito Inteligente")
+st.title("🧪 Depósito LC")
 
 tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
     "⚡ Panel",
-    "📦 LC / LCAGRO",
-    "🌿 Bayer DEP55",
-    "🚚 Bayer Directa",
-    "📋 Stock Físico",
+    "📦 LC",
+    "🌿 DEP55",
+    "🚚 Directa",
+    "📋 Stock",
     "📜 Historial",
-    "💲 Valorización",
+    "💲 Valor.",
     "📈 Reportes",
-    "⚙️ Configuración",
-    "📊 Plan Comercial",
+    "⚙️ Config.",
+    "📊 Plan",
 ])
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1250,14 +1324,16 @@ with tab1:
             ent_panel["dias_p"] = ent_panel["dia_recibido"].apply(dias_desde)
             venc30 = len(ent_panel[(ent_panel["pendiente"] > 0) & (ent_panel["dias_p"] > 30)])
 
-        c1, c2, c3, c4, c5, c6, c7 = st.columns(7)
-        with c1: st.metric("Productos",      stock_df["Producto"].nunique())
-        with c2: st.metric("Volumen Total",  f"{stock_df['Stock Actual'].sum():,.0f}")
-        with c3: st.metric("Stock Bajo",     bajo_n,  delta=-bajo_n,  delta_color="inverse")
-        with c4: st.metric("Negativo ⚠️",    neg_n,   delta=-neg_n,   delta_color="inverse")
-        with c5: st.metric("Comprometido",   comp_n,  delta=-comp_n,  delta_color="inverse")
-        with c6: st.metric("Depósitos",      stock_df["Deposito"].nunique())
-        with c7: st.metric("Pend. +30d ⏳",  venc30,  delta=-venc30,  delta_color="inverse")
+        # KPI row — 4 cols (CSS wraps to 2×2 on mobile)
+        c1, c2, c3, c4 = st.columns(4)
+        with c1: st.metric("Productos",     stock_df["Producto"].nunique())
+        with c2: st.metric("Volumen Total", f"{stock_df['Stock Actual'].sum():,.0f}")
+        with c3: st.metric("Depósitos",     stock_df["Deposito"].nunique())
+        with c4: st.metric("Pend.+30d ⏳",  venc30, delta=-venc30, delta_color="inverse")
+        c5, c6, c7 = st.columns(3)
+        with c5: st.metric("Stock Bajo",    bajo_n, delta=-bajo_n,  delta_color="inverse")
+        with c6: st.metric("Negativo ⚠️",   neg_n,  delta=-neg_n,   delta_color="inverse")
+        with c7: st.metric("Comprometido",  comp_n, delta=-comp_n,  delta_color="inverse")
 
         # Alerta WhatsApp
         wa = st.session_state.wa_numero
