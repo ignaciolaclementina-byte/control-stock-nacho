@@ -47,101 +47,158 @@ st.markdown("""
 <style>
 /* ─── BASE ─── */
 .main{background-color:#f4f7f6}
-.stButton>button{width:100%;border-radius:8px;font-weight:bold;height:3em}
-.stock-card{background:white;padding:18px;border-radius:12px;
-    box-shadow:0 4px 15px rgba(0,0,0,.05);margin-bottom:12px;
-    border:1px solid #e1e4e8;position:relative}
-.card-normal {border-left:8px solid #28a745}
-.card-low    {border-left:8px solid #ffc107}
-.card-warning{border-left:8px solid #dc3545}
-.stock-title {font-size:.95rem;color:#1a1c21;font-weight:700;margin-bottom:8px;
-    line-height:1.2;min-height:2.4em}
-.stock-value {font-size:1.5rem;color:#007bff;font-weight:800;display:block}
-.stock-unit  {font-size:.8rem;color:#6c757d;font-weight:400}
-.stock-info  {margin-top:10px;padding-top:8px;border-top:1px solid #f0f2f6;
-    font-size:.8rem;color:#495057}
-.label-blue  {background:#e7f3ff;color:#007bff;padding:2px 6px;border-radius:4px;font-weight:bold}
-.label-orange{background:#fff3cd;color:#856404;padding:2px 6px;border-radius:4px;font-weight:bold}
-.neg-badge   {display:inline-block;background:#dc3545;color:white;font-size:.65rem;
-    padding:1px 6px;border-radius:8px;font-weight:bold;margin-left:4px;vertical-align:middle}
-.comp-badge  {display:inline-block;background:#fd7e14;color:white;font-size:.65rem;
-    padding:1px 6px;border-radius:8px;font-weight:bold;margin-left:4px;vertical-align:middle}
-.venc-badge  {display:inline-block;background:#6f42c1;color:white;font-size:.65rem;
-    padding:1px 6px;border-radius:8px;font-weight:bold;margin-left:4px;vertical-align:middle}
-.login-box   {max-width:400px;margin:80px auto;padding:30px;background:white;
-    border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,.1)}
+.stButton>button{
+    width:100%;border-radius:10px;font-weight:bold;
+    min-height:48px;font-size:1rem;
+    transition: transform .1s, box-shadow .1s;
+}
+.stButton>button:active { transform: scale(.97); }
+.stock-card{
+    background:white;padding:16px 14px 12px;border-radius:14px;
+    box-shadow:0 2px 10px rgba(0,0,0,.07);margin-bottom:12px;
+    border:1px solid #e1e4e8;position:relative;
+    transition: box-shadow .15s;
+}
+.stock-card:hover { box-shadow:0 4px 18px rgba(0,0,0,.12); }
+.card-normal {border-left:6px solid #28a745}
+.card-low    {border-left:6px solid #ffc107}
+.card-warning{border-left:6px solid #dc3545}
+.stock-title {font-size:.92rem;color:#1a1c21;font-weight:700;margin-bottom:6px;
+    line-height:1.3;min-height:2.4em}
+.stock-value {font-size:1.55rem;color:#007bff;font-weight:800;display:block;line-height:1.2}
+.stock-unit  {font-size:.78rem;color:#6c757d;font-weight:400}
+.stock-info  {margin-top:8px;padding-top:7px;border-top:1px solid #f0f2f6;
+    font-size:.78rem;color:#495057;line-height:1.6}
+.label-blue  {background:#e7f3ff;color:#007bff;padding:2px 7px;border-radius:5px;font-weight:bold}
+.label-orange{background:#fff3cd;color:#856404;padding:2px 7px;border-radius:5px;font-weight:bold}
+.neg-badge   {display:inline-block;background:#dc3545;color:white;font-size:.62rem;
+    padding:2px 7px;border-radius:8px;font-weight:bold;margin-left:4px;vertical-align:middle}
+.comp-badge  {display:inline-block;background:#fd7e14;color:white;font-size:.62rem;
+    padding:2px 7px;border-radius:8px;font-weight:bold;margin-left:4px;vertical-align:middle}
+.venc-badge  {display:inline-block;background:#6f42c1;color:white;font-size:.62rem;
+    padding:2px 7px;border-radius:8px;font-weight:bold;margin-left:4px;vertical-align:middle}
+.login-box   {max-width:400px;margin:60px auto;padding:32px 28px;background:white;
+    border-radius:18px;box-shadow:0 8px 30px rgba(0,0,0,.1)}
+
+/* ─── TAB BAR: scroll horizontal sin wrap ─── */
+div[data-testid="stTabs"] > div:first-child {
+    overflow-x: auto !important;
+    flex-wrap: nowrap !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+}
+div[data-testid="stTabs"] > div:first-child::-webkit-scrollbar { display: none; }
 
 /* ─── MOBILE ─── */
 @media (max-width: 640px) {
-    /* Reduce lateral padding */
+    /* Contenedor principal */
     section.main .block-container {
-        padding-left: 0.6rem !important;
-        padding-right: 0.6rem !important;
-        padding-top: 0.8rem !important;
+        padding-left: 0.5rem !important;
+        padding-right: 0.5rem !important;
+        padding-top: 0.6rem !important;
     }
-    /* Make columns wrap into 2-per-row instead of overflowing */
+
+    /* Columnas: wrap a 2 por fila */
     div[data-testid="stHorizontalBlock"] {
         flex-wrap: wrap !important;
-        gap: 0.4rem 0.4rem !important;
+        gap: 0.4rem !important;
     }
     div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
-        flex: 0 0 calc(50% - 0.3rem) !important;
-        min-width: calc(50% - 0.3rem) !important;
-        width: calc(50% - 0.3rem) !important;
+        flex: 0 0 calc(50% - 0.25rem) !important;
+        min-width: calc(50% - 0.25rem) !important;
+        width: calc(50% - 0.25rem) !important;
     }
-    /* Title smaller */
-    h1 { font-size: 1.2rem !important; margin-bottom: 0.3rem !important; }
+
+    /* Títulos */
+    h1 { font-size: 1.15rem !important; margin-bottom: 0.3rem !important; }
     h2 { font-size: 1rem !important; }
     h3 { font-size: .9rem !important; }
-    /* Tab buttons: smaller text, ellipsis overflow */
+
+    /* Tab bar: scrollable, compacta */
     button[data-baseweb="tab"] {
-        padding: 6px 6px !important;
+        padding: 8px 8px !important;
         min-width: 0 !important;
+        min-height: 40px !important;
     }
     button[data-baseweb="tab"] p {
-        font-size: 0.7rem !important;
+        font-size: 0.72rem !important;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-        max-width: 70px;
+        max-width: 72px;
     }
-    /* Stock cards: tighter on mobile */
-    .stock-card { padding: 10px 10px 8px; }
-    .stock-title { font-size:.82rem; min-height:2em; }
-    .stock-value { font-size:1.2rem; }
-    .stock-info  { font-size:.75rem; }
-    /* DataFrames: horizontal scroll */
-    [data-testid="stDataFrame"] > div {
-        overflow-x: auto !important;
+
+    /* Botones: touch targets grandes */
+    .stButton > button {
+        min-height: 52px !important;
+        font-size: 1rem !important;
+        border-radius: 12px !important;
     }
-    /* Metrics: tighter */
-    [data-testid="metric-container"] {
-        padding: 8px !important;
-    }
-    [data-testid="metric-container"] label {
-        font-size: .75rem !important;
-    }
-    [data-testid="metric-container"] [data-testid="stMetricValue"] {
-        font-size: 1.1rem !important;
-    }
-    /* Inputs: bigger touch targets */
+
+    /* Inputs / selects: evitar zoom iOS + área táctil grande */
     input, select, textarea {
-        font-size: 16px !important; /* prevents iOS zoom */
+        font-size: 16px !important;
+        min-height: 44px !important;
     }
-    /* Expander headers */
-    [data-testid="stExpander"] summary {
+    [data-testid="stSelectbox"] > div > div,
+    [data-testid="stMultiSelect"] > div > div {
+        min-height: 44px !important;
+    }
+
+    /* DataFrames: scroll horizontal */
+    [data-testid="stDataFrame"] > div { overflow-x: auto !important; }
+
+    /* Métricas */
+    [data-testid="metric-container"] {
         padding: 10px 8px !important;
+        border-radius: 10px !important;
+        background: white !important;
+        box-shadow: 0 1px 6px rgba(0,0,0,.06) !important;
+    }
+    [data-testid="metric-container"] label { font-size: .72rem !important; }
+    [data-testid="metric-container"] [data-testid="stMetricValue"] { font-size: 1.15rem !important; }
+
+    /* Stock cards */
+    .stock-card { padding: 12px 11px 10px; border-radius: 12px; }
+    .stock-title { font-size:.85rem; min-height:1.8em; }
+    .stock-value { font-size:1.35rem; }
+    .stock-info  { font-size:.76rem; }
+
+    /* Expanders: header más grande para tocar */
+    [data-testid="stExpander"] summary {
+        padding: 12px 10px !important;
+        font-size: .95rem !important;
+    }
+
+    /* Toggle / checkbox: más espacio */
+    [data-testid="stCheckbox"], [data-testid="stToggle"] {
+        padding: 6px 0 !important;
+    }
+
+    /* Radio horizontal: botones grandes */
+    [data-testid="stRadio"] label { min-height: 40px !important; align-items: center; }
+
+    /* Alerts / warnings más compactas */
+    [data-testid="stAlert"] { padding: 10px 12px !important; font-size: .85rem !important; }
+
+    /* Caption más pequeño */
+    [data-testid="stCaptionContainer"] p { font-size: .72rem !important; }
+
+    /* Link button (WhatsApp) */
+    a[data-testid="stLinkButton"] button {
+        min-height: 52px !important;
+        font-size: .95rem !important;
     }
 }
 
-@media (max-width: 380px) {
-    /* Very small phones: full-width columns */
+@media (max-width: 400px) {
     div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
         flex: 0 0 100% !important;
         min-width: 100% !important;
         width: 100% !important;
     }
-    button[data-baseweb="tab"] p { max-width: 52px; font-size: 0.65rem !important; }
+    button[data-baseweb="tab"] p { max-width: 54px; font-size: 0.66rem !important; }
+    .stock-value { font-size: 1.2rem; }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -1349,22 +1406,20 @@ with tab1:
 
         # Gráficos
         with st.expander("📊 Gráficos", expanded=False):
-            cg1, cg2 = st.columns(2)
-            with cg1:
-                dep_g = stock_df.groupby("Deposito")["Stock Actual"].sum().reset_index()
-                fig   = px.bar(dep_g.sort_values("Stock Actual"), x="Stock Actual", y="Deposito",
-                               orientation="h", title="Stock por Depósito", color="Stock Actual",
-                               color_continuous_scale="Blues")
-                fig.update_layout(height=300, showlegend=False, margin=dict(l=0,r=0,t=40,b=0))
-                st.plotly_chart(fig, use_container_width=True)
-            with cg2:
-                top = (stock_df.groupby("Producto")["Stock Actual"].sum()
-                       .reset_index().sort_values("Stock Actual", ascending=False).head(15))
-                fig2 = px.bar(top.sort_values("Stock Actual"), x="Stock Actual", y="Producto",
-                              orientation="h", title="Top 15 Productos", color="Stock Actual",
-                              color_continuous_scale="Greens")
-                fig2.update_layout(height=400, showlegend=False, margin=dict(l=0,r=0,t=40,b=0))
-                st.plotly_chart(fig2, use_container_width=True)
+            dep_g = stock_df.groupby("Deposito")["Stock Actual"].sum().reset_index()
+            fig   = px.bar(dep_g.sort_values("Stock Actual"), x="Stock Actual", y="Deposito",
+                           orientation="h", title="Stock por Depósito", color="Stock Actual",
+                           color_continuous_scale="Blues")
+            fig.update_layout(height=300, showlegend=False, margin=dict(l=0,r=0,t=40,b=0))
+            st.plotly_chart(fig, use_container_width=True)
+
+            top = (stock_df.groupby("Producto")["Stock Actual"].sum()
+                   .reset_index().sort_values("Stock Actual", ascending=False).head(15))
+            fig2 = px.bar(top.sort_values("Stock Actual"), x="Stock Actual", y="Producto",
+                          orientation="h", title="Top 15 Productos", color="Stock Actual",
+                          color_continuous_scale="Greens")
+            fig2.update_layout(height=400, showlegend=False, margin=dict(l=0,r=0,t=40,b=0))
+            st.plotly_chart(fig2, use_container_width=True)
 
             if not ent_panel.empty:
                 est_g = ent_panel.groupby("estado").size().reset_index(name="N")
@@ -1449,9 +1504,9 @@ with tab1:
             prod_df_venc = obtener_productos_completo()
 
             items = df_f.to_dict("records")
-            cols_g = st.columns(4)
+            cols_g = st.columns(2)
             for i, item in enumerate(items):
-                with cols_g[i % 4]:
+                with cols_g[i % 2]:
                     stk   = item["Stock Actual"]
                     comp  = item.get("Comprometido", 0)
                     disp  = item.get("Disponible Neto", stk)
@@ -1490,13 +1545,13 @@ with tab1:
 
         # Movimiento manual
         with st.expander("➕ Registrar movimiento manual"):
+            prod_m = st.selectbox("Producto", sorted(stock_df["Producto"].unique()), key="mov_prod")
+            tipo_m = st.radio("Tipo", ["Entrada","Salida"], horizontal=True, key="mov_tipo")
             cm1, cm2 = st.columns(2)
             with cm1:
-                prod_m  = st.selectbox("Producto", sorted(stock_df["Producto"].unique()), key="mov_prod")
-                tipo_m  = st.radio("Tipo", ["Entrada","Salida"], horizontal=True, key="mov_tipo")
+                cant_m = st.number_input("Cantidad", min_value=0.01, step=0.5, key="mov_cant")
             with cm2:
-                cant_m  = st.number_input("Cantidad", min_value=0.01, step=0.5, key="mov_cant")
-                dep_m   = st.selectbox("Depósito", sorted(stock_df["Deposito"].unique()), key="mov_dep")
+                dep_m  = st.selectbox("Depósito", sorted(stock_df["Deposito"].unique()), key="mov_dep")
             lote_m = st.text_input("Lote", value="S/L", key="mov_lote")
             ref_m  = st.text_input("Referencia", value="", key="mov_ref")
             if st.session_state.mov_pendiente is None:
