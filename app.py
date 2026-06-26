@@ -116,16 +116,14 @@ div[data-testid="stTabs"] > div:first-child::-webkit-scrollbar { display: none; 
 
     /* Tab bar: scrollable, compacta */
     button[data-baseweb="tab"] {
-        padding: 8px 8px !important;
+        padding: 8px 10px !important;
         min-width: 0 !important;
-        min-height: 40px !important;
+        min-height: 44px !important;
     }
     button[data-baseweb="tab"] p {
-        font-size: 0.72rem !important;
+        font-size: 0.75rem !important;
         white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        max-width: 72px;
+        max-width: none !important;
     }
 
     /* Botones: touch targets grandes */
@@ -191,14 +189,13 @@ div[data-testid="stTabs"] > div:first-child::-webkit-scrollbar { display: none; 
     }
 }
 
-@media (max-width: 400px) {
+@media (max-width: 330px) {
+    /* Solo teléfonos muy pequeños (ej. iPhone SE 1ra gen = 320px) */
     div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
         flex: 0 0 100% !important;
         min-width: 100% !important;
         width: 100% !important;
     }
-    button[data-baseweb="tab"] p { max-width: 54px; font-size: 0.66rem !important; }
-    .stock-value { font-size: 1.2rem; }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -1381,17 +1378,19 @@ with tab1:
             ent_panel["dias_p"] = ent_panel["dia_recibido"].apply(dias_desde)
             venc30 = len(ent_panel[(ent_panel["pendiente"] > 0) & (ent_panel["dias_p"] > 30)])
 
-        # KPI row — 4 cols (CSS wraps to 2×2 on mobile)
-        c1, c2, c3, c4 = st.columns(4)
-        with c1: st.metric("Productos",     stock_df["Producto"].nunique())
-        with c2: st.metric("Volumen Total", f"{stock_df['Stock Actual'].sum():,.0f}")
-        with c3: st.metric("Depósitos",     stock_df["Deposito"].nunique())
-        with c4: st.metric("Pend.+30d ⏳",  venc30, delta=-venc30, delta_color="inverse")
-        c5, c6, c7 = st.columns(3)
-        with c5: st.metric("Stock Bajo",    bajo_n, delta=-bajo_n,  delta_color="inverse")
-        with c6: st.metric("Negativo ⚠️",   neg_n,  delta=-neg_n,   delta_color="inverse")
-        with c7: st.metric("Comprometido",  comp_n, delta=-comp_n,  delta_color="inverse")
+        # KPI rows — 2 cols por fila para que funcione bien en mobile y desktop
+        k1, k2 = st.columns(2)
+        with k1: st.metric("📦 Productos",    stock_df["Producto"].nunique())
+        with k2: st.metric("🏭 Depósitos",    stock_df["Deposito"].nunique())
+        k3, k4 = st.columns(2)
+        with k3: st.metric("📊 Volumen Total", f"{stock_df['Stock Actual'].sum():,.0f}")
+        with k4: st.metric("⏳ Pend.+30d",    venc30, delta=-venc30, delta_color="inverse")
+        k5, k6, k7 = st.columns(3)
+        with k5: st.metric("🟡 Stock Bajo",   bajo_n, delta=-bajo_n,  delta_color="inverse")
+        with k6: st.metric("⚠️ Negativo",     neg_n,  delta=-neg_n,   delta_color="inverse")
+        with k7: st.metric("🔒 Comprometido", comp_n, delta=-comp_n,  delta_color="inverse")
 
+        st.divider()
         # Alerta WhatsApp
         wa = st.session_state.wa_numero
         if (neg_n > 0 or bajo_n > 0) and wa:
@@ -1430,7 +1429,7 @@ with tab1:
                     fig3.update_layout(height=280, margin=dict(l=0,r=0,t=40,b=0))
                     st.plotly_chart(fig3, use_container_width=True)
 
-        st.markdown("---")
+        st.divider()
         st.subheader("🔍 Filtros")
 
         search_q = st.text_input("⌨️ Buscar por nombre o código", placeholder="Escribí aquí...", key="search_p1")
