@@ -45,192 +45,30 @@ except ImportError:
 st.set_page_config(page_title="Gestión de Agroquímicos — LC", layout="wide")
 st.markdown("""
 <style>
-/* ─── KPI GRID (reemplaza st.metric en mobile) ─── */
-.kpi-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-    margin: 10px 0 14px;
-}
-.kpi-item {
-    background: var(--secondary-background-color);
-    border: 1px solid rgba(128,128,128,0.15);
-    border-radius: 12px;
-    padding: 13px 12px 10px;
-    min-width: 0;
-}
-.kpi-label {
-    font-size: .75rem;
-    color: #999;
-    margin-bottom: 3px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-.kpi-value {
-    font-size: 1.6rem;
-    font-weight: 800;
-    line-height: 1.15;
-    color: inherit;
-}
-.kpi-value.ok   { color: #4caf7d; }
-.kpi-value.warn { color: #ffc107; }
-.kpi-value.bad  { color: #f44336; }
-.kpi-value.info { color: #5b9cf6; }
-.kpi-value.muted{ color: #aaa; font-size:1.3rem; }
-
-/* ─── BASE ─── */
 .main{background-color:#f4f7f6}
-.stButton>button{
-    width:100%;border-radius:10px;font-weight:bold;
-    min-height:48px;font-size:1rem;
-    transition: transform .1s, box-shadow .1s;
-}
-.stButton>button:active { transform: scale(.97); }
-.stock-card{
-    background:white;padding:16px 14px 12px;border-radius:14px;
-    box-shadow:0 2px 10px rgba(0,0,0,.07);margin-bottom:12px;
-    border:1px solid #e1e4e8;position:relative;
-    transition: box-shadow .15s;
-}
-.stock-card:hover { box-shadow:0 4px 18px rgba(0,0,0,.12); }
-.card-normal {border-left:6px solid #28a745}
-.card-low    {border-left:6px solid #ffc107}
-.card-warning{border-left:6px solid #dc3545}
-.stock-title {font-size:.92rem;color:#1a1c21;font-weight:700;margin-bottom:6px;
-    line-height:1.3;min-height:2.4em}
-.stock-value {font-size:1.55rem;color:#007bff;font-weight:800;display:block;line-height:1.2}
-.stock-unit  {font-size:.78rem;color:#6c757d;font-weight:400}
-.stock-info  {margin-top:8px;padding-top:7px;border-top:1px solid #f0f2f6;
-    font-size:.78rem;color:#495057;line-height:1.6}
-.label-blue  {background:#e7f3ff;color:#007bff;padding:2px 7px;border-radius:5px;font-weight:bold}
-.label-orange{background:#fff3cd;color:#856404;padding:2px 7px;border-radius:5px;font-weight:bold}
-.neg-badge   {display:inline-block;background:#dc3545;color:white;font-size:.62rem;
-    padding:2px 7px;border-radius:8px;font-weight:bold;margin-left:4px;vertical-align:middle}
-.comp-badge  {display:inline-block;background:#fd7e14;color:white;font-size:.62rem;
-    padding:2px 7px;border-radius:8px;font-weight:bold;margin-left:4px;vertical-align:middle}
-.venc-badge  {display:inline-block;background:#6f42c1;color:white;font-size:.62rem;
-    padding:2px 7px;border-radius:8px;font-weight:bold;margin-left:4px;vertical-align:middle}
-.login-box   {max-width:400px;margin:60px auto;padding:32px 28px;background:white;
-    border-radius:18px;box-shadow:0 8px 30px rgba(0,0,0,.1)}
-
-/* ─── TAB BAR: scroll horizontal sin wrap ─── */
-div[data-testid="stTabs"] > div:first-child {
-    overflow-x: auto !important;
-    flex-wrap: nowrap !important;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-}
-div[data-testid="stTabs"] > div:first-child::-webkit-scrollbar { display: none; }
-
-/* ─── MOBILE ─── */
-@media (max-width: 640px) {
-    /* Contenedor principal */
-    section.main .block-container {
-        padding-left: 0.5rem !important;
-        padding-right: 0.5rem !important;
-        padding-top: 0.6rem !important;
-    }
-
-    /* Columnas: wrap a 2 por fila */
-    div[data-testid="stHorizontalBlock"] {
-        flex-wrap: wrap !important;
-        gap: 0.4rem !important;
-    }
-    div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
-        flex: 0 0 calc(50% - 0.25rem) !important;
-        min-width: calc(50% - 0.25rem) !important;
-        width: calc(50% - 0.25rem) !important;
-    }
-
-    /* Títulos */
-    h1 { font-size: 1.15rem !important; margin-bottom: 0.3rem !important; }
-    h2 { font-size: 1rem !important; }
-    h3 { font-size: .9rem !important; }
-
-    /* Tab bar: scrollable, compacta */
-    button[data-baseweb="tab"] {
-        padding: 8px 10px !important;
-        min-width: 0 !important;
-        min-height: 44px !important;
-    }
-    button[data-baseweb="tab"] p {
-        font-size: 0.75rem !important;
-        white-space: nowrap;
-        max-width: none !important;
-    }
-
-    /* Botones: touch targets grandes */
-    .stButton > button {
-        min-height: 52px !important;
-        font-size: 1rem !important;
-        border-radius: 12px !important;
-    }
-
-    /* Inputs / selects: evitar zoom iOS + área táctil grande */
-    input, select, textarea {
-        font-size: 16px !important;
-        min-height: 44px !important;
-    }
-    [data-testid="stSelectbox"] > div > div,
-    [data-testid="stMultiSelect"] > div > div {
-        min-height: 44px !important;
-    }
-
-    /* DataFrames: scroll horizontal */
-    [data-testid="stDataFrame"] > div { overflow-x: auto !important; }
-
-    /* Métricas */
-    [data-testid="metric-container"] {
-        padding: 10px 8px !important;
-        border-radius: 10px !important;
-        background: white !important;
-        box-shadow: 0 1px 6px rgba(0,0,0,.06) !important;
-    }
-    [data-testid="metric-container"] label { font-size: .72rem !important; }
-    [data-testid="metric-container"] [data-testid="stMetricValue"] { font-size: 1.15rem !important; }
-
-    /* Stock cards */
-    .stock-card { padding: 12px 11px 10px; border-radius: 12px; }
-    .stock-title { font-size:.85rem; min-height:1.8em; }
-    .stock-value { font-size:1.35rem; }
-    .stock-info  { font-size:.76rem; }
-
-    /* Expanders: header más grande para tocar */
-    [data-testid="stExpander"] summary {
-        padding: 12px 10px !important;
-        font-size: .95rem !important;
-    }
-
-    /* Toggle / checkbox: más espacio */
-    [data-testid="stCheckbox"], [data-testid="stToggle"] {
-        padding: 6px 0 !important;
-    }
-
-    /* Radio horizontal: botones grandes */
-    [data-testid="stRadio"] label { min-height: 40px !important; align-items: center; }
-
-    /* Alerts / warnings más compactas */
-    [data-testid="stAlert"] { padding: 10px 12px !important; font-size: .85rem !important; }
-
-    /* Caption más pequeño */
-    [data-testid="stCaptionContainer"] p { font-size: .72rem !important; }
-
-    /* Link button (WhatsApp) */
-    a[data-testid="stLinkButton"] button {
-        min-height: 52px !important;
-        font-size: .95rem !important;
-    }
-}
-
-@media (max-width: 330px) {
-    /* Solo teléfonos muy pequeños (ej. iPhone SE 1ra gen = 320px) */
-    div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
-        flex: 0 0 100% !important;
-        min-width: 100% !important;
-        width: 100% !important;
-    }
-}
+.stButton>button{width:100%;border-radius:8px;font-weight:bold;height:3em}
+.stock-card{background:white;padding:18px;border-radius:12px;
+    box-shadow:0 4px 15px rgba(0,0,0,.05);margin-bottom:12px;
+    border:1px solid #e1e4e8;position:relative}
+.card-normal {border-left:8px solid #28a745}
+.card-low    {border-left:8px solid #ffc107}
+.card-warning{border-left:8px solid #dc3545}
+.stock-title {font-size:.95rem;color:#1a1c21;font-weight:700;margin-bottom:8px;
+    line-height:1.2;min-height:2.4em}
+.stock-value {font-size:1.5rem;color:#007bff;font-weight:800;display:block}
+.stock-unit  {font-size:.8rem;color:#6c757d;font-weight:400}
+.stock-info  {margin-top:10px;padding-top:8px;border-top:1px solid #f0f2f6;
+    font-size:.8rem;color:#495057}
+.label-blue  {background:#e7f3ff;color:#007bff;padding:2px 6px;border-radius:4px;font-weight:bold}
+.label-orange{background:#fff3cd;color:#856404;padding:2px 6px;border-radius:4px;font-weight:bold}
+.neg-badge   {display:inline-block;background:#dc3545;color:white;font-size:.65rem;
+    padding:1px 6px;border-radius:8px;font-weight:bold;margin-left:4px;vertical-align:middle}
+.comp-badge  {display:inline-block;background:#fd7e14;color:white;font-size:.65rem;
+    padding:1px 6px;border-radius:8px;font-weight:bold;margin-left:4px;vertical-align:middle}
+.venc-badge  {display:inline-block;background:#6f42c1;color:white;font-size:.65rem;
+    padding:1px 6px;border-radius:8px;font-weight:bold;margin-left:4px;vertical-align:middle}
+.login-box   {max-width:400px;margin:80px auto;padding:30px;background:white;
+    border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,.1)}
 </style>
 """, unsafe_allow_html=True)
 
@@ -638,7 +476,7 @@ def obtener_historial_movimientos():
     conn.close()
     return df
 
-@st.cache_data(ttl=120)
+@st.cache_data(ttl=30)
 def obtener_entregas(hoja=None):
     conn = conectar_db()
     if hoja and hoja != "Todas":
@@ -648,7 +486,7 @@ def obtener_entregas(hoja=None):
     conn.close()
     return df
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=30)
 def obtener_productos_completo():
     conn = conectar_db()
     df = _rsql("SELECT * FROM productos ORDER BY nombre", conn)
@@ -691,7 +529,6 @@ def calcular_rotacion_stock(dias=90):
 # ─────────────────────────────────────────────────────────────────────────────
 # 5. STOCK CON COMPROMISOS
 # ─────────────────────────────────────────────────────────────────────────────
-@st.cache_data(ttl=30)
 def obtener_stock_con_compromisos():
     stock = obtener_stock_full()
     if stock.empty: return stock
@@ -1257,7 +1094,6 @@ def parsear_macrogest_ventas(archivo, vendedor, campana=CAMPANA_ACTUAL):
     })
     return df_cartera, df_v
 
-@st.cache_data(ttl=60)
 def ventas_reales_por_vendedor(campana=CAMPANA_ACTUAL):
     """
     Combina ventas_detalle (MacroGest) + entregas para medir performance real.
@@ -1316,10 +1152,7 @@ def gauge_kpi(valor, meta, titulo, unidad=""):
 # ─────────────────────────────────────────────────────────────────────────────
 # 11. INIT
 # ─────────────────────────────────────────────────────────────────────────────
-# Solo corre 1 vez por sesión — evita 15+ queries a Supabase en cada rerun
-if not st.session_state.get("_db_initialized"):
-    inicializar_db()
-    st.session_state["_db_initialized"] = True
+inicializar_db()
 
 # Session state
 _defaults = {
@@ -1333,7 +1166,6 @@ _defaults = {
     "user_nombre":         "",
     "username":            "",
     "trans_pendiente":     None,
-    "_auth_enabled":       None,
 }
 for k, v in _defaults.items():
     if k not in st.session_state:
@@ -1345,13 +1177,11 @@ if st.session_state.wa_numero is None:
 if st.session_state.umbral_alerta is None:
     stored = obtener_metadata("umbral_alerta")
     st.session_state.umbral_alerta = int(stored) if stored else 20
-if st.session_state._auth_enabled is None:
-    st.session_state._auth_enabled = obtener_metadata("auth_enabled") == "1"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 12. AUTH GATE
 # ─────────────────────────────────────────────────────────────────────────────
-auth_enabled = st.session_state._auth_enabled
+auth_enabled = obtener_metadata("auth_enabled") == "1"
 if auth_enabled and not st.session_state.get("authenticated"):
     mostrar_login()
     st.stop()
@@ -1369,38 +1199,37 @@ if auth_enabled and st.session_state.get("authenticated"):
 # ─────────────────────────────────────────────────────────────────────────────
 # 13. TABS PRINCIPALES
 # ─────────────────────────────────────────────────────────────────────────────
-st.title("🧪 Depósito LC")
+st.title("🧪 Control de Depósito Inteligente")
 
-_TAB_LABELS = [
-    ("⚡", "Panel"),
-    ("📦", "LC / LCAGRO"),
-    ("🌿", "Depósito 55"),
-    ("🚚", "Directa"),
-    ("📋", "Stock"),
-    ("📜", "Historial"),
-    ("💲", "Valorización"),
-    ("📈", "Reportes"),
-    ("⚙️", "Config."),
-    ("📊", "Plan Comercial"),
-]
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs(
-    [e for e, _ in _TAB_LABELS]
-)
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
+    "⚡ Panel",
+    "📦 LC / LCAGRO",
+    "🌿 Bayer DEP55",
+    "🚚 Bayer Directa",
+    "📋 Stock Físico",
+    "📜 Historial",
+    "💲 Valorización",
+    "📈 Reportes",
+    "⚙️ Configuración",
+    "📊 Plan Comercial",
+])
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 1 — PANEL DE CONTROL
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab1:
-    st.markdown(f"### ⚡ Panel de control")
     stock_df = obtener_stock_con_compromisos()
 
     if stock_df.empty:
-        st.warning("⚠️ Sin datos. Subí el archivo en ⚙️ Configuración.")
+        st.warning("⚠️ Sin datos. Subí el archivo en Configuración.")
     else:
         U = st.session_state.umbral_alerta
-        imp1 = obtener_metadata("ultima_importacion")
-        imp2 = obtener_metadata("ultima_importacion_entregas")
-        if imp1: st.caption(f"🕐 Stock: **{imp1}**   |   📦 Entregas: **{imp2 or '—'}**")
+        for meta, caption in [
+            ("ultima_importacion",          "🕐 Última importación stock"),
+            ("ultima_importacion_entregas",  "📦 Última importación entregas"),
+        ]:
+            val = obtener_metadata(meta)
+            if val: st.caption(f"{caption}: **{val}**")
 
         # KPIs
         neg_n  = len(stock_df[stock_df["Stock Actual"] < 0])
@@ -1413,46 +1242,15 @@ with tab1:
             ent_panel["dias_p"] = ent_panel["dia_recibido"].apply(dias_desde)
             venc30 = len(ent_panel[(ent_panel["pendiente"] > 0) & (ent_panel["dias_p"] > 30)])
 
-        n_prod  = stock_df["Producto"].nunique()
-        n_dep   = stock_df["Deposito"].nunique()
-        vol_tot = stock_df["Stock Actual"].sum()
-        vol_cls = "bad" if vol_tot < 0 else "info"
+        c1, c2, c3, c4, c5, c6, c7 = st.columns(7)
+        with c1: st.metric("Productos",      stock_df["Producto"].nunique())
+        with c2: st.metric("Volumen Total",  f"{stock_df['Stock Actual'].sum():,.0f}")
+        with c3: st.metric("Stock Bajo",     bajo_n,  delta=-bajo_n,  delta_color="inverse")
+        with c4: st.metric("Negativo ⚠️",    neg_n,   delta=-neg_n,   delta_color="inverse")
+        with c5: st.metric("Comprometido",   comp_n,  delta=-comp_n,  delta_color="inverse")
+        with c6: st.metric("Depósitos",      stock_df["Deposito"].nunique())
+        with c7: st.metric("Pend. +30d ⏳",  venc30,  delta=-venc30,  delta_color="inverse")
 
-        st.markdown(f"""
-<div class="kpi-grid">
-  <div class="kpi-item">
-    <div class="kpi-label">📦 Productos</div>
-    <div class="kpi-value info">{n_prod}</div>
-  </div>
-  <div class="kpi-item">
-    <div class="kpi-label">🏭 Depósitos</div>
-    <div class="kpi-value info">{n_dep}</div>
-  </div>
-  <div class="kpi-item">
-    <div class="kpi-label">📊 Volumen Total</div>
-    <div class="kpi-value {vol_cls}">{vol_tot:,.0f}</div>
-  </div>
-  <div class="kpi-item">
-    <div class="kpi-label">⏳ Pend. +30d</div>
-    <div class="kpi-value {'bad' if venc30 > 0 else 'ok'}">{venc30}</div>
-  </div>
-  <div class="kpi-item">
-    <div class="kpi-label">🟡 Stock Bajo</div>
-    <div class="kpi-value {'warn' if bajo_n > 0 else 'ok'}">{bajo_n}</div>
-  </div>
-  <div class="kpi-item">
-    <div class="kpi-label">⚠️ Negativo</div>
-    <div class="kpi-value {'bad' if neg_n > 0 else 'ok'}">{neg_n}</div>
-  </div>
-  <div class="kpi-item">
-    <div class="kpi-label">🔒 Comprometido</div>
-    <div class="kpi-value {'warn' if comp_n > 0 else 'ok'}">{comp_n}</div>
-  </div>
-  <div class="kpi-item" style="background:transparent;border-color:transparent"></div>
-</div>
-""", unsafe_allow_html=True)
-
-        st.divider()
         # Alerta WhatsApp
         wa = st.session_state.wa_numero
         if (neg_n > 0 or bajo_n > 0) and wa:
@@ -1467,20 +1265,22 @@ with tab1:
 
         # Gráficos
         with st.expander("📊 Gráficos", expanded=False):
-            dep_g = stock_df.groupby("Deposito")["Stock Actual"].sum().reset_index()
-            fig   = px.bar(dep_g.sort_values("Stock Actual"), x="Stock Actual", y="Deposito",
-                           orientation="h", title="Stock por Depósito", color="Stock Actual",
-                           color_continuous_scale="Blues")
-            fig.update_layout(height=300, showlegend=False, margin=dict(l=0,r=0,t=40,b=0))
-            st.plotly_chart(fig, use_container_width=True)
-
-            top = (stock_df.groupby("Producto")["Stock Actual"].sum()
-                   .reset_index().sort_values("Stock Actual", ascending=False).head(15))
-            fig2 = px.bar(top.sort_values("Stock Actual"), x="Stock Actual", y="Producto",
-                          orientation="h", title="Top 15 Productos", color="Stock Actual",
-                          color_continuous_scale="Greens")
-            fig2.update_layout(height=400, showlegend=False, margin=dict(l=0,r=0,t=40,b=0))
-            st.plotly_chart(fig2, use_container_width=True)
+            cg1, cg2 = st.columns(2)
+            with cg1:
+                dep_g = stock_df.groupby("Deposito")["Stock Actual"].sum().reset_index()
+                fig   = px.bar(dep_g.sort_values("Stock Actual"), x="Stock Actual", y="Deposito",
+                               orientation="h", title="Stock por Depósito", color="Stock Actual",
+                               color_continuous_scale="Blues")
+                fig.update_layout(height=300, showlegend=False, margin=dict(l=0,r=0,t=40,b=0))
+                st.plotly_chart(fig, use_container_width=True)
+            with cg2:
+                top = (stock_df.groupby("Producto")["Stock Actual"].sum()
+                       .reset_index().sort_values("Stock Actual", ascending=False).head(15))
+                fig2 = px.bar(top.sort_values("Stock Actual"), x="Stock Actual", y="Producto",
+                              orientation="h", title="Top 15 Productos", color="Stock Actual",
+                              color_continuous_scale="Greens")
+                fig2.update_layout(height=400, showlegend=False, margin=dict(l=0,r=0,t=40,b=0))
+                st.plotly_chart(fig2, use_container_width=True)
 
             if not ent_panel.empty:
                 est_g = ent_panel.groupby("estado").size().reset_index(name="N")
@@ -1491,7 +1291,7 @@ with tab1:
                     fig3.update_layout(height=280, margin=dict(l=0,r=0,t=40,b=0))
                     st.plotly_chart(fig3, use_container_width=True)
 
-        st.divider()
+        st.markdown("---")
         st.subheader("🔍 Filtros")
 
         search_q = st.text_input("⌨️ Buscar por nombre o código", placeholder="Escribí aquí...", key="search_p1")
@@ -1565,9 +1365,9 @@ with tab1:
             prod_df_venc = obtener_productos_completo()
 
             items = df_f.to_dict("records")
-            cols_g = st.columns(2)
+            cols_g = st.columns(4)
             for i, item in enumerate(items):
-                with cols_g[i % 2]:
+                with cols_g[i % 4]:
                     stk   = item["Stock Actual"]
                     comp  = item.get("Comprometido", 0)
                     disp  = item.get("Disponible Neto", stk)
@@ -1606,13 +1406,13 @@ with tab1:
 
         # Movimiento manual
         with st.expander("➕ Registrar movimiento manual"):
-            prod_m = st.selectbox("Producto", sorted(stock_df["Producto"].unique()), key="mov_prod")
-            tipo_m = st.radio("Tipo", ["Entrada","Salida"], horizontal=True, key="mov_tipo")
             cm1, cm2 = st.columns(2)
             with cm1:
-                cant_m = st.number_input("Cantidad", min_value=0.01, step=0.5, key="mov_cant")
+                prod_m  = st.selectbox("Producto", sorted(stock_df["Producto"].unique()), key="mov_prod")
+                tipo_m  = st.radio("Tipo", ["Entrada","Salida"], horizontal=True, key="mov_tipo")
             with cm2:
-                dep_m  = st.selectbox("Depósito", sorted(stock_df["Deposito"].unique()), key="mov_dep")
+                cant_m  = st.number_input("Cantidad", min_value=0.01, step=0.5, key="mov_cant")
+                dep_m   = st.selectbox("Depósito", sorted(stock_df["Deposito"].unique()), key="mov_dep")
             lote_m = st.text_input("Lote", value="S/L", key="mov_lote")
             ref_m  = st.text_input("Referencia", value="", key="mov_ref")
             if st.session_state.mov_pendiente is None:
@@ -2594,7 +2394,6 @@ with tab9:
                                 key="auth_toggle")
             if st.button("💾 Guardar config auth"):
                 guardar_metadata("auth_enabled", "1" if auth_on else "0")
-                st.session_state._auth_enabled = auth_on
                 st.success("Config auth guardada. Recargá la página.")
             if auth_on:
                 st.warning("⚠️ Recordá cambiar la contraseña del usuario **admin** antes de activar.")
