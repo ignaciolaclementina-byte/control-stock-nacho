@@ -45,192 +45,30 @@ except ImportError:
 st.set_page_config(page_title="Gestión de Agroquímicos — LC", layout="wide")
 st.markdown("""
 <style>
-/* ─── KPI GRID (reemplaza st.metric en mobile) ─── */
-.kpi-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-    margin: 10px 0 14px;
-}
-.kpi-item {
-    background: var(--secondary-background-color);
-    border: 1px solid rgba(128,128,128,0.15);
-    border-radius: 12px;
-    padding: 13px 12px 10px;
-    min-width: 0;
-}
-.kpi-label {
-    font-size: .75rem;
-    color: #999;
-    margin-bottom: 3px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-.kpi-value {
-    font-size: 1.6rem;
-    font-weight: 800;
-    line-height: 1.15;
-    color: inherit;
-}
-.kpi-value.ok   { color: #4caf7d; }
-.kpi-value.warn { color: #ffc107; }
-.kpi-value.bad  { color: #f44336; }
-.kpi-value.info { color: #5b9cf6; }
-.kpi-value.muted{ color: #aaa; font-size:1.3rem; }
-
-/* ─── BASE ─── */
 .main{background-color:#f4f7f6}
-.stButton>button{
-    width:100%;border-radius:10px;font-weight:bold;
-    min-height:48px;font-size:1rem;
-    transition: transform .1s, box-shadow .1s;
-}
-.stButton>button:active { transform: scale(.97); }
-.stock-card{
-    background:white;padding:16px 14px 12px;border-radius:14px;
-    box-shadow:0 2px 10px rgba(0,0,0,.07);margin-bottom:12px;
-    border:1px solid #e1e4e8;position:relative;
-    transition: box-shadow .15s;
-}
-.stock-card:hover { box-shadow:0 4px 18px rgba(0,0,0,.12); }
-.card-normal {border-left:6px solid #28a745}
-.card-low    {border-left:6px solid #ffc107}
-.card-warning{border-left:6px solid #dc3545}
-.stock-title {font-size:.92rem;color:#1a1c21;font-weight:700;margin-bottom:6px;
-    line-height:1.3;min-height:2.4em}
-.stock-value {font-size:1.55rem;color:#007bff;font-weight:800;display:block;line-height:1.2}
-.stock-unit  {font-size:.78rem;color:#6c757d;font-weight:400}
-.stock-info  {margin-top:8px;padding-top:7px;border-top:1px solid #f0f2f6;
-    font-size:.78rem;color:#495057;line-height:1.6}
-.label-blue  {background:#e7f3ff;color:#007bff;padding:2px 7px;border-radius:5px;font-weight:bold}
-.label-orange{background:#fff3cd;color:#856404;padding:2px 7px;border-radius:5px;font-weight:bold}
-.neg-badge   {display:inline-block;background:#dc3545;color:white;font-size:.62rem;
-    padding:2px 7px;border-radius:8px;font-weight:bold;margin-left:4px;vertical-align:middle}
-.comp-badge  {display:inline-block;background:#fd7e14;color:white;font-size:.62rem;
-    padding:2px 7px;border-radius:8px;font-weight:bold;margin-left:4px;vertical-align:middle}
-.venc-badge  {display:inline-block;background:#6f42c1;color:white;font-size:.62rem;
-    padding:2px 7px;border-radius:8px;font-weight:bold;margin-left:4px;vertical-align:middle}
-.login-box   {max-width:400px;margin:60px auto;padding:32px 28px;background:white;
-    border-radius:18px;box-shadow:0 8px 30px rgba(0,0,0,.1)}
-
-/* ─── TAB BAR: scroll horizontal sin wrap ─── */
-div[data-testid="stTabs"] > div:first-child {
-    overflow-x: auto !important;
-    flex-wrap: nowrap !important;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-}
-div[data-testid="stTabs"] > div:first-child::-webkit-scrollbar { display: none; }
-
-/* ─── MOBILE ─── */
-@media (max-width: 640px) {
-    /* Contenedor principal */
-    section.main .block-container {
-        padding-left: 0.5rem !important;
-        padding-right: 0.5rem !important;
-        padding-top: 0.6rem !important;
-    }
-
-    /* Columnas: wrap a 2 por fila */
-    div[data-testid="stHorizontalBlock"] {
-        flex-wrap: wrap !important;
-        gap: 0.4rem !important;
-    }
-    div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
-        flex: 0 0 calc(50% - 0.25rem) !important;
-        min-width: calc(50% - 0.25rem) !important;
-        width: calc(50% - 0.25rem) !important;
-    }
-
-    /* Títulos */
-    h1 { font-size: 1.15rem !important; margin-bottom: 0.3rem !important; }
-    h2 { font-size: 1rem !important; }
-    h3 { font-size: .9rem !important; }
-
-    /* Tab bar: scrollable, compacta */
-    button[data-baseweb="tab"] {
-        padding: 8px 10px !important;
-        min-width: 0 !important;
-        min-height: 44px !important;
-    }
-    button[data-baseweb="tab"] p {
-        font-size: 0.75rem !important;
-        white-space: nowrap;
-        max-width: none !important;
-    }
-
-    /* Botones: touch targets grandes */
-    .stButton > button {
-        min-height: 52px !important;
-        font-size: 1rem !important;
-        border-radius: 12px !important;
-    }
-
-    /* Inputs / selects: evitar zoom iOS + área táctil grande */
-    input, select, textarea {
-        font-size: 16px !important;
-        min-height: 44px !important;
-    }
-    [data-testid="stSelectbox"] > div > div,
-    [data-testid="stMultiSelect"] > div > div {
-        min-height: 44px !important;
-    }
-
-    /* DataFrames: scroll horizontal */
-    [data-testid="stDataFrame"] > div { overflow-x: auto !important; }
-
-    /* Métricas */
-    [data-testid="metric-container"] {
-        padding: 10px 8px !important;
-        border-radius: 10px !important;
-        background: white !important;
-        box-shadow: 0 1px 6px rgba(0,0,0,.06) !important;
-    }
-    [data-testid="metric-container"] label { font-size: .72rem !important; }
-    [data-testid="metric-container"] [data-testid="stMetricValue"] { font-size: 1.15rem !important; }
-
-    /* Stock cards */
-    .stock-card { padding: 12px 11px 10px; border-radius: 12px; }
-    .stock-title { font-size:.85rem; min-height:1.8em; }
-    .stock-value { font-size:1.35rem; }
-    .stock-info  { font-size:.76rem; }
-
-    /* Expanders: header más grande para tocar */
-    [data-testid="stExpander"] summary {
-        padding: 12px 10px !important;
-        font-size: .95rem !important;
-    }
-
-    /* Toggle / checkbox: más espacio */
-    [data-testid="stCheckbox"], [data-testid="stToggle"] {
-        padding: 6px 0 !important;
-    }
-
-    /* Radio horizontal: botones grandes */
-    [data-testid="stRadio"] label { min-height: 40px !important; align-items: center; }
-
-    /* Alerts / warnings más compactas */
-    [data-testid="stAlert"] { padding: 10px 12px !important; font-size: .85rem !important; }
-
-    /* Caption más pequeño */
-    [data-testid="stCaptionContainer"] p { font-size: .72rem !important; }
-
-    /* Link button (WhatsApp) */
-    a[data-testid="stLinkButton"] button {
-        min-height: 52px !important;
-        font-size: .95rem !important;
-    }
-}
-
-@media (max-width: 330px) {
-    /* Solo teléfonos muy pequeños (ej. iPhone SE 1ra gen = 320px) */
-    div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
-        flex: 0 0 100% !important;
-        min-width: 100% !important;
-        width: 100% !important;
-    }
-}
+.stButton>button{width:100%;border-radius:8px;font-weight:bold;height:3em}
+.stock-card{background:white;padding:18px;border-radius:12px;
+    box-shadow:0 4px 15px rgba(0,0,0,.05);margin-bottom:12px;
+    border:1px solid #e1e4e8;position:relative}
+.card-normal {border-left:8px solid #28a745}
+.card-low    {border-left:8px solid #ffc107}
+.card-warning{border-left:8px solid #dc3545}
+.stock-title {font-size:.95rem;color:#1a1c21;font-weight:700;margin-bottom:8px;
+    line-height:1.2;min-height:2.4em}
+.stock-value {font-size:1.5rem;color:#007bff;font-weight:800;display:block}
+.stock-unit  {font-size:.8rem;color:#6c757d;font-weight:400}
+.stock-info  {margin-top:10px;padding-top:8px;border-top:1px solid #f0f2f6;
+    font-size:.8rem;color:#495057}
+.label-blue  {background:#e7f3ff;color:#007bff;padding:2px 6px;border-radius:4px;font-weight:bold}
+.label-orange{background:#fff3cd;color:#856404;padding:2px 6px;border-radius:4px;font-weight:bold}
+.neg-badge   {display:inline-block;background:#dc3545;color:white;font-size:.65rem;
+    padding:1px 6px;border-radius:8px;font-weight:bold;margin-left:4px;vertical-align:middle}
+.comp-badge  {display:inline-block;background:#fd7e14;color:white;font-size:.65rem;
+    padding:1px 6px;border-radius:8px;font-weight:bold;margin-left:4px;vertical-align:middle}
+.venc-badge  {display:inline-block;background:#6f42c1;color:white;font-size:.65rem;
+    padding:1px 6px;border-radius:8px;font-weight:bold;margin-left:4px;vertical-align:middle}
+.login-box   {max-width:400px;margin:80px auto;padding:30px;background:white;
+    border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,.1)}
 </style>
 """, unsafe_allow_html=True)
 
@@ -256,7 +94,6 @@ _UPSERT_CONF = {
     "metas_campana":    ["campana", "vendedor", "producto"],
     "cartera_clientes": ["vendedor", "cliente", "campana"],
     "productos_foco":   ["campana", "producto"],
-    "stock_minimos":    ["producto"],
 }
 _IGNORE_CONF = {
     "productos":      ["nombre"],
@@ -532,11 +369,6 @@ def inicializar_db():
             observaciones TEXT,
             numero_pedido TEXT
         )""",
-        """CREATE TABLE IF NOT EXISTS stock_minimos (
-            producto      TEXT PRIMARY KEY,
-            stock_minimo  REAL DEFAULT 0,
-            observaciones TEXT
-        )""",
     ]:
         try:
             c.execute(ddl)
@@ -644,7 +476,7 @@ def obtener_historial_movimientos():
     conn.close()
     return df
 
-@st.cache_data(ttl=120)
+@st.cache_data(ttl=30)
 def obtener_entregas(hoja=None):
     conn = conectar_db()
     if hoja and hoja != "Todas":
@@ -654,7 +486,7 @@ def obtener_entregas(hoja=None):
     conn.close()
     return df
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=30)
 def obtener_productos_completo():
     conn = conectar_db()
     df = _rsql("SELECT * FROM productos ORDER BY nombre", conn)
@@ -695,47 +527,8 @@ def calcular_rotacion_stock(dias=90):
     return df_r.sort_values("Días_Cobertura", na_position="last")
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 4b. STOCK MÍNIMOS POR PRODUCTO
-# ─────────────────────────────────────────────────────────────────────────────
-@st.cache_data(ttl=120)
-def obtener_stock_minimos():
-    conn = conectar_db()
-    df   = _rsql("SELECT producto, stock_minimo, observaciones FROM stock_minimos ORDER BY producto", conn)
-    conn.close()
-    return df
-
-def guardar_stock_minimos_bulk(df_minimos: pd.DataFrame):
-    """df_minimos debe tener columnas: producto, stock_minimo, observaciones."""
-    conn = conectar_db()
-    for _, row in df_minimos.iterrows():
-        prod = safe_str(row.get("producto",""))
-        if not prod: continue
-        conn.execute(
-            "INSERT OR REPLACE INTO stock_minimos (producto,stock_minimo,observaciones) VALUES (?,?,?)",
-            (prod, safe_float(row.get("stock_minimo",0)), safe_str(row.get("observaciones","")))
-        )
-    conn.commit(); conn.close()
-    st.cache_data.clear()
-
-def obtener_alertas_stock_minimo():
-    """Devuelve productos cuyo stock total < stock_mínimo configurado."""
-    stock_df = obtener_stock_full()
-    mins_df  = obtener_stock_minimos()
-    if stock_df.empty or mins_df.empty: return pd.DataFrame()
-    stock_total = stock_df.groupby(["Producto","Unidad"])["Stock Actual"].sum().reset_index()
-    merged = stock_total.merge(
-        mins_df.rename(columns={"producto":"Producto","stock_minimo":"Mínimo","observaciones":"Obs"}),
-        on="Producto", how="inner"
-    )
-    alerta = merged[merged["Stock Actual"] < merged["Mínimo"]].copy()
-    alerta["Déficit"] = (alerta["Mínimo"] - alerta["Stock Actual"]).round(1)
-    alerta["%_Cobertura"] = (alerta["Stock Actual"] / alerta["Mínimo"].replace(0, 1) * 100).round(1)
-    return alerta.sort_values("Déficit", ascending=False)
-
-# ─────────────────────────────────────────────────────────────────────────────
 # 5. STOCK CON COMPROMISOS
 # ─────────────────────────────────────────────────────────────────────────────
-@st.cache_data(ttl=30)
 def obtener_stock_con_compromisos():
     stock = obtener_stock_full()
     if stock.empty: return stock
@@ -1301,7 +1094,6 @@ def parsear_macrogest_ventas(archivo, vendedor, campana=CAMPANA_ACTUAL):
     })
     return df_cartera, df_v
 
-@st.cache_data(ttl=60)
 def ventas_reales_por_vendedor(campana=CAMPANA_ACTUAL):
     """
     Combina ventas_detalle (MacroGest) + entregas para medir performance real.
@@ -1360,10 +1152,7 @@ def gauge_kpi(valor, meta, titulo, unidad=""):
 # ─────────────────────────────────────────────────────────────────────────────
 # 11. INIT
 # ─────────────────────────────────────────────────────────────────────────────
-# Solo corre 1 vez por sesión — evita 15+ queries a Supabase en cada rerun
-if not st.session_state.get("_db_initialized"):
-    inicializar_db()
-    st.session_state["_db_initialized"] = True
+inicializar_db()
 
 # Session state
 _defaults = {
@@ -1377,7 +1166,6 @@ _defaults = {
     "user_nombre":         "",
     "username":            "",
     "trans_pendiente":     None,
-    "_auth_enabled":       None,
 }
 for k, v in _defaults.items():
     if k not in st.session_state:
@@ -1389,13 +1177,11 @@ if st.session_state.wa_numero is None:
 if st.session_state.umbral_alerta is None:
     stored = obtener_metadata("umbral_alerta")
     st.session_state.umbral_alerta = int(stored) if stored else 20
-if st.session_state._auth_enabled is None:
-    st.session_state._auth_enabled = obtener_metadata("auth_enabled") == "1"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 12. AUTH GATE
 # ─────────────────────────────────────────────────────────────────────────────
-auth_enabled = st.session_state._auth_enabled
+auth_enabled = obtener_metadata("auth_enabled") == "1"
 if auth_enabled and not st.session_state.get("authenticated"):
     mostrar_login()
     st.stop()
@@ -1413,38 +1199,37 @@ if auth_enabled and st.session_state.get("authenticated"):
 # ─────────────────────────────────────────────────────────────────────────────
 # 13. TABS PRINCIPALES
 # ─────────────────────────────────────────────────────────────────────────────
-st.title("🧪 Depósito LC")
+st.title("🧪 Control de Depósito Inteligente")
 
-_TAB_LABELS = [
-    ("⚡", "Panel"),
-    ("📦", "LC / LCAGRO"),
-    ("🌿", "Depósito 55"),
-    ("🚚", "Directa"),
-    ("📋", "Stock"),
-    ("📜", "Historial"),
-    ("💲", "Valorización"),
-    ("📈", "Reportes"),
-    ("⚙️", "Config."),
-    ("📊", "Plan Comercial"),
-]
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs(
-    [e for e, _ in _TAB_LABELS]
-)
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
+    "⚡ Panel",
+    "📦 LC / LCAGRO",
+    "🌿 Bayer DEP55",
+    "🚚 Bayer Directa",
+    "📋 Stock Físico",
+    "📜 Historial",
+    "💲 Valorización",
+    "📈 Reportes",
+    "⚙️ Configuración",
+    "📊 Plan Comercial",
+])
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 1 — PANEL DE CONTROL
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab1:
-    st.markdown(f"### ⚡ Panel de control")
     stock_df = obtener_stock_con_compromisos()
 
     if stock_df.empty:
-        st.warning("⚠️ Sin datos. Subí el archivo en ⚙️ Configuración.")
+        st.warning("⚠️ Sin datos. Subí el archivo en Configuración.")
     else:
         U = st.session_state.umbral_alerta
-        imp1 = obtener_metadata("ultima_importacion")
-        imp2 = obtener_metadata("ultima_importacion_entregas")
-        if imp1: st.caption(f"🕐 Stock: **{imp1}**   |   📦 Entregas: **{imp2 or '—'}**")
+        for meta, caption in [
+            ("ultima_importacion",          "🕐 Última importación stock"),
+            ("ultima_importacion_entregas",  "📦 Última importación entregas"),
+        ]:
+            val = obtener_metadata(meta)
+            if val: st.caption(f"{caption}: **{val}**")
 
         # KPIs
         neg_n  = len(stock_df[stock_df["Stock Actual"] < 0])
@@ -1457,71 +1242,15 @@ with tab1:
             ent_panel["dias_p"] = ent_panel["dia_recibido"].apply(dias_desde)
             venc30 = len(ent_panel[(ent_panel["pendiente"] > 0) & (ent_panel["dias_p"] > 30)])
 
-        n_prod  = stock_df["Producto"].nunique()
-        n_dep   = stock_df["Deposito"].nunique()
-        vol_tot = stock_df["Stock Actual"].sum()
-        vol_cls = "bad" if vol_tot < 0 else "info"
+        c1, c2, c3, c4, c5, c6, c7 = st.columns(7)
+        with c1: st.metric("Productos",      stock_df["Producto"].nunique())
+        with c2: st.metric("Volumen Total",  f"{stock_df['Stock Actual'].sum():,.0f}")
+        with c3: st.metric("Stock Bajo",     bajo_n,  delta=-bajo_n,  delta_color="inverse")
+        with c4: st.metric("Negativo ⚠️",    neg_n,   delta=-neg_n,   delta_color="inverse")
+        with c5: st.metric("Comprometido",   comp_n,  delta=-comp_n,  delta_color="inverse")
+        with c6: st.metric("Depósitos",      stock_df["Deposito"].nunique())
+        with c7: st.metric("Pend. +30d ⏳",  venc30,  delta=-venc30,  delta_color="inverse")
 
-        # Alertas de stock mínimo por producto
-        alertas_min = obtener_alertas_stock_minimo()
-        bajo_min_n  = len(alertas_min)
-
-        # Vencimientos próximos (≤30 días)
-        prod_venc_panel = obtener_productos_completo()
-        venc_critico_n  = 0
-        if not prod_venc_panel.empty and "fecha_vencimiento" in prod_venc_panel.columns:
-            prod_venc_panel["_dv"] = prod_venc_panel["fecha_vencimiento"].apply(dias_hasta)
-            venc_critico_n = len(prod_venc_panel[
-                prod_venc_panel["_dv"].apply(lambda x: isinstance(x, (int,float)) and x < 30)
-            ])
-
-        st.markdown(f"""
-<div class="kpi-grid">
-  <div class="kpi-item">
-    <div class="kpi-label">📦 Productos</div>
-    <div class="kpi-value info">{n_prod}</div>
-  </div>
-  <div class="kpi-item">
-    <div class="kpi-label">🏭 Depósitos</div>
-    <div class="kpi-value info">{n_dep}</div>
-  </div>
-  <div class="kpi-item">
-    <div class="kpi-label">📊 Volumen Total</div>
-    <div class="kpi-value {vol_cls}">{vol_tot:,.0f}</div>
-  </div>
-  <div class="kpi-item">
-    <div class="kpi-label">⏳ Pend. +30d</div>
-    <div class="kpi-value {'bad' if venc30 > 0 else 'ok'}">{venc30}</div>
-  </div>
-  <div class="kpi-item">
-    <div class="kpi-label">🟡 Stock Bajo</div>
-    <div class="kpi-value {'warn' if bajo_n > 0 else 'ok'}">{bajo_n}</div>
-  </div>
-  <div class="kpi-item">
-    <div class="kpi-label">⚠️ Negativo</div>
-    <div class="kpi-value {'bad' if neg_n > 0 else 'ok'}">{neg_n}</div>
-  </div>
-  <div class="kpi-item">
-    <div class="kpi-label">🔒 Comprometido</div>
-    <div class="kpi-value {'warn' if comp_n > 0 else 'ok'}">{comp_n}</div>
-  </div>
-  <div class="kpi-item">
-    <div class="kpi-label">🎯 Bajo Mínimo</div>
-    <div class="kpi-value {'bad' if bajo_min_n > 0 else 'ok'}">{bajo_min_n}</div>
-  </div>
-</div>
-""", unsafe_allow_html=True)
-
-        # Alertas compactas si hay stock bajo mínimo
-        if bajo_min_n > 0:
-            with st.expander(f"🎯 {bajo_min_n} producto(s) bajo el mínimo configurado", expanded=False):
-                st.dataframe(
-                    alertas_min[["Producto","Unidad","Stock Actual","Mínimo","Déficit","%_Cobertura"]],
-                    use_container_width=True, hide_index=True
-                )
-                st.caption("Configurar mínimos en **📋 Stock → 🎯 Stock Mínimo**")
-
-        st.divider()
         # Alerta WhatsApp
         wa = st.session_state.wa_numero
         if (neg_n > 0 or bajo_n > 0) and wa:
@@ -1536,20 +1265,22 @@ with tab1:
 
         # Gráficos
         with st.expander("📊 Gráficos", expanded=False):
-            dep_g = stock_df.groupby("Deposito")["Stock Actual"].sum().reset_index()
-            fig   = px.bar(dep_g.sort_values("Stock Actual"), x="Stock Actual", y="Deposito",
-                           orientation="h", title="Stock por Depósito", color="Stock Actual",
-                           color_continuous_scale="Blues")
-            fig.update_layout(height=300, showlegend=False, margin=dict(l=0,r=0,t=40,b=0))
-            st.plotly_chart(fig, use_container_width=True)
-
-            top = (stock_df.groupby("Producto")["Stock Actual"].sum()
-                   .reset_index().sort_values("Stock Actual", ascending=False).head(15))
-            fig2 = px.bar(top.sort_values("Stock Actual"), x="Stock Actual", y="Producto",
-                          orientation="h", title="Top 15 Productos", color="Stock Actual",
-                          color_continuous_scale="Greens")
-            fig2.update_layout(height=400, showlegend=False, margin=dict(l=0,r=0,t=40,b=0))
-            st.plotly_chart(fig2, use_container_width=True)
+            cg1, cg2 = st.columns(2)
+            with cg1:
+                dep_g = stock_df.groupby("Deposito")["Stock Actual"].sum().reset_index()
+                fig   = px.bar(dep_g.sort_values("Stock Actual"), x="Stock Actual", y="Deposito",
+                               orientation="h", title="Stock por Depósito", color="Stock Actual",
+                               color_continuous_scale="Blues")
+                fig.update_layout(height=300, showlegend=False, margin=dict(l=0,r=0,t=40,b=0))
+                st.plotly_chart(fig, use_container_width=True)
+            with cg2:
+                top = (stock_df.groupby("Producto")["Stock Actual"].sum()
+                       .reset_index().sort_values("Stock Actual", ascending=False).head(15))
+                fig2 = px.bar(top.sort_values("Stock Actual"), x="Stock Actual", y="Producto",
+                              orientation="h", title="Top 15 Productos", color="Stock Actual",
+                              color_continuous_scale="Greens")
+                fig2.update_layout(height=400, showlegend=False, margin=dict(l=0,r=0,t=40,b=0))
+                st.plotly_chart(fig2, use_container_width=True)
 
             if not ent_panel.empty:
                 est_g = ent_panel.groupby("estado").size().reset_index(name="N")
@@ -1560,7 +1291,7 @@ with tab1:
                     fig3.update_layout(height=280, margin=dict(l=0,r=0,t=40,b=0))
                     st.plotly_chart(fig3, use_container_width=True)
 
-        st.divider()
+        st.markdown("---")
         st.subheader("🔍 Filtros")
 
         search_q = st.text_input("⌨️ Buscar por nombre o código", placeholder="Escribí aquí...", key="search_p1")
@@ -1634,9 +1365,9 @@ with tab1:
             prod_df_venc = obtener_productos_completo()
 
             items = df_f.to_dict("records")
-            cols_g = st.columns(2)
+            cols_g = st.columns(4)
             for i, item in enumerate(items):
-                with cols_g[i % 2]:
+                with cols_g[i % 4]:
                     stk   = item["Stock Actual"]
                     comp  = item.get("Comprometido", 0)
                     disp  = item.get("Disponible Neto", stk)
@@ -1675,13 +1406,13 @@ with tab1:
 
         # Movimiento manual
         with st.expander("➕ Registrar movimiento manual"):
-            prod_m = st.selectbox("Producto", sorted(stock_df["Producto"].unique()), key="mov_prod")
-            tipo_m = st.radio("Tipo", ["Entrada","Salida"], horizontal=True, key="mov_tipo")
             cm1, cm2 = st.columns(2)
             with cm1:
-                cant_m = st.number_input("Cantidad", min_value=0.01, step=0.5, key="mov_cant")
+                prod_m  = st.selectbox("Producto", sorted(stock_df["Producto"].unique()), key="mov_prod")
+                tipo_m  = st.radio("Tipo", ["Entrada","Salida"], horizontal=True, key="mov_tipo")
             with cm2:
-                dep_m  = st.selectbox("Depósito", sorted(stock_df["Deposito"].unique()), key="mov_dep")
+                cant_m  = st.number_input("Cantidad", min_value=0.01, step=0.5, key="mov_cant")
+                dep_m   = st.selectbox("Depósito", sorted(stock_df["Deposito"].unique()), key="mov_dep")
             lote_m = st.text_input("Lote", value="S/L", key="mov_lote")
             ref_m  = st.text_input("Referencia", value="", key="mov_ref")
             if st.session_state.mov_pendiente is None:
@@ -1935,302 +1666,55 @@ with tab4: mostrar_tab_entregas("BAYER DIRECTA",     "🚚 Facturación Directa 
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# TAB 5 — STOCK: CONSOLIDADO / SUCURSALES / VENCIMIENTOS / DÍAS / MÍNIMOS
+# TAB 5 — STOCK FÍSICO
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab5:
-    st.subheader("📋 Stock")
+    st.subheader("📋 Toma de Stock Físico")
     st_df = obtener_stock_full()
-
-    s_tab1, s_tab2, s_tab3, s_tab4, s_tab5, s_tab6 = st.tabs([
-        "📊 Consolidado", "🏭 Por Sucursal", "⏰ Vencimientos",
-        "📅 Días en Stock", "🎯 Stock Mínimo", "📝 Toma de Stock"
-    ])
-
-    # ── Consolidado ──────────────────────────────────────────────────────────
-    with s_tab1:
-        st.write("### 📊 Stock Disponible Consolidado")
-        st.caption("Todos los depósitos y sucursales (LC, LCAgro, Dep 55, Bayer Directo)")
-        if st_df.empty:
-            st.info("Sin datos.")
-        else:
-            stk_comp = obtener_stock_con_compromisos()
-            cons = (stk_comp.groupby(["Producto","Unidad"])
-                    .agg({"Stock Actual": "sum", "Comprometido": "sum", "Disponible Neto": "sum"})
-                    .reset_index().sort_values("Disponible Neto", ascending=False))
-            # Merge stock mínimo
-            mins_cons = obtener_stock_minimos()
-            if not mins_cons.empty:
-                cons = cons.merge(
-                    mins_cons.rename(columns={"producto":"Producto","stock_minimo":"Mínimo"})[["Producto","Mínimo"]],
-                    on="Producto", how="left"
-                )
-                cons["Mínimo"] = cons["Mínimo"].fillna(0)
-                def _estado(row):
-                    if row["Disponible Neto"] < 0: return "🔴 Negativo"
-                    if row["Mínimo"] > 0 and row["Disponible Neto"] < row["Mínimo"]: return "🟠 Bajo Mínimo"
-                    return "🟢 OK"
-                cons["Estado"] = cons.apply(_estado, axis=1)
-            else:
-                cons["Estado"] = cons["Disponible Neto"].apply(
-                    lambda x: "🔴 Negativo" if x < 0 else "🟢 OK"
-                )
-
-            sc_bus = st.text_input("🔍 Filtrar producto", key="cons_bus")
-            if sc_bus:
-                cons = cons[cons["Producto"].str.contains(sc_bus, case=False, na=False)]
-
-            st.markdown(f"**{len(cons)} productos**")
-            st.dataframe(cons, use_container_width=True, hide_index=True)
-            if not cons.empty:
-                st.download_button("📥 Exportar Consolidado",
-                                   data=to_excel_bytes(cons, "Stock_Consolidado"),
-                                   file_name="stock_consolidado.xlsx")
-
-    # ── Por Sucursal ──────────────────────────────────────────────────────────
-    with s_tab2:
-        st.write("### 🏭 Stock por Sucursal / Depósito")
-        if st_df.empty:
-            st.info("Sin datos.")
-        else:
-            depositos = sorted(st_df["Deposito"].unique().tolist())
-            dep_sel = st.multiselect("Depósitos a mostrar", depositos, default=depositos, key="dep_suc")
-            df_suc = st_df[st_df["Deposito"].isin(dep_sel)] if dep_sel else st_df.copy()
-
-            # Pivot por depósito
-            try:
-                pivot_dep = df_suc.pivot_table(
-                    index=["Producto","Unidad"], columns="Deposito",
-                    values="Stock Actual", aggfunc="sum", fill_value=0
-                ).reset_index()
-                pivot_dep["TOTAL"] = pivot_dep[[c for c in pivot_dep.columns if c not in ("Producto","Unidad")]].sum(axis=1)
-                pivot_dep = pivot_dep.sort_values("TOTAL", ascending=False)
-                st.dataframe(pivot_dep, use_container_width=True, hide_index=True)
-                if not pivot_dep.empty:
-                    st.download_button("📥 Exportar Por Sucursal",
-                                       data=to_excel_bytes(pivot_dep, "Stock_Por_Sucursal"),
-                                       file_name="stock_por_sucursal.xlsx")
-            except Exception as e:
-                st.error(f"Error al armar pivot: {e}")
-                st.dataframe(df_suc, use_container_width=True, hide_index=True)
-
-            # Gráfico
-            if not df_suc.empty and len(dep_sel) > 1:
-                dep_g = df_suc.groupby("Deposito")["Stock Actual"].sum().reset_index()
-                fig_dep = px.bar(dep_g.sort_values("Stock Actual"), x="Stock Actual", y="Deposito",
-                                 orientation="h", color="Deposito", title="Stock por Depósito")
-                fig_dep.update_layout(height=280, showlegend=False, margin=dict(l=0,r=0,t=40,b=0))
-                st.plotly_chart(fig_dep, use_container_width=True)
-
-    # ── Vencimientos ──────────────────────────────────────────────────────────
-    with s_tab3:
-        st.write("### ⏰ Stock por Vencer")
-        st.caption("Basado en fecha de vencimiento por producto. Cargable en Valorización → Precios.")
-        prod_venc5 = obtener_productos_completo()
-        if prod_venc5.empty or "fecha_vencimiento" not in prod_venc5.columns:
-            st.info("Sin fechas de vencimiento. Cargalas en 💲 Valorización.")
-        else:
-            pv5 = prod_venc5[prod_venc5["fecha_vencimiento"].notna() &
-                              (prod_venc5["fecha_vencimiento"].astype(str).str.strip() != "")].copy()
-            if pv5.empty:
-                st.info("Sin fechas de vencimiento cargadas.")
-            else:
-                pv5["Días"] = pv5["fecha_vencimiento"].apply(dias_hasta)
-                pv5["Estado"] = pv5["Días"].apply(
-                    lambda d: "🔴 Vencido" if d < 0 else
-                              ("🟠 <30d" if d < 30 else ("🟡 30-90d" if d < 90 else
-                               ("🔵 90-180d" if d < 180 else "🟢 OK")))
-                )
-                # Merge con stock
-                stk_prod = st_df.groupby("Producto")["Stock Actual"].sum().reset_index() if not st_df.empty else pd.DataFrame()
-                pv5 = pv5.rename(columns={"nombre":"Producto","fecha_vencimiento":"Vence"})
-                if not stk_prod.empty:
-                    pv5 = pv5.merge(stk_prod, on="Producto", how="left")
-                    pv5["Stock Actual"] = pv5["Stock Actual"].fillna(0)
-
-                vc1, vc2, vc3 = st.columns(3)
-                filtro_d = vc1.radio("Mostrar", ["Todos","≤30d","≤90d","≤180d"], horizontal=True, key="vf_dias")
-                if filtro_d == "≤30d":   pv5 = pv5[pv5["Días"] <= 30]
-                elif filtro_d == "≤90d": pv5 = pv5[pv5["Días"] <= 90]
-                elif filtro_d == "≤180d":pv5 = pv5[pv5["Días"] <= 180]
-
-                pv5 = pv5.sort_values("Días")
-                cols_show = ["Producto","Vence","Días","Estado"]
-                if "Stock Actual" in pv5.columns: cols_show.append("Stock Actual")
-
-                sv1, sv2, sv3, sv4 = st.columns(4)
-                sv1.metric("🔴 Vencidos",    len(pv5[pv5["Días"] < 0]))
-                sv2.metric("🟠 <30 días",    len(pv5[(pv5["Días"] >= 0) & (pv5["Días"] < 30)]))
-                sv3.metric("🟡 30-90 días",  len(pv5[(pv5["Días"] >= 30) & (pv5["Días"] < 90)]))
-                sv4.metric("🔵 90-180 días", len(pv5[(pv5["Días"] >= 90) & (pv5["Días"] < 180)]))
-
-                st.dataframe(pv5[cols_show], use_container_width=True, hide_index=True)
-                if not pv5.empty:
-                    st.download_button("📥 Exportar Vencimientos",
-                                       data=to_excel_bytes(pv5[cols_show], "Vencimientos"),
-                                       file_name="vencimientos.xlsx")
-
-    # ── Días en Stock ─────────────────────────────────────────────────────────
-    with s_tab4:
-        st.write("### 📅 Días en Stock (Cobertura)")
-        st.caption("Días de cobertura = Stock disponible ÷ salidas promedio diarias. "
-                   "Un valor alto = producto con baja rotación.")
-        dias_ven = st.slider("Ventana histórica de salidas (días)", 30, 180, 90, key="dias_s4")
-        df_rot5  = calcular_rotacion_stock(dias_ven)
-        if df_rot5.empty:
-            st.info("Sin movimientos suficientes para calcular cobertura.")
-        else:
-            ds1, ds2, ds3, ds4 = st.columns(4)
-            ds1.metric("Sin salidas",      len(df_rot5[df_rot5["Días_Cobertura"].isna()]))
-            ds2.metric("Cobertura <30d 🚨", len(df_rot5[df_rot5["Días_Cobertura"].notna() & (df_rot5["Días_Cobertura"] < 30)]))
-            ds3.metric("30-90d ⚠️",        len(df_rot5[df_rot5["Días_Cobertura"].notna() & (df_rot5["Días_Cobertura"].between(30,90))]))
-            ds4.metric("Cobertura >90d ✅", len(df_rot5[df_rot5["Días_Cobertura"].notna() & (df_rot5["Días_Cobertura"] > 90)]))
-
-            st.dataframe(
-                df_rot5.rename(columns={
-                    "Total_Salidas":"Salidas (período)","Sal_Diarias":"Sal/Día",
-                    "Días_Cobertura":"Días Cobertura","Rotación_Anual":"Rotación Anual"
-                }),
-                use_container_width=True, hide_index=True
-            )
-
-            top_crit = df_rot5[df_rot5["Días_Cobertura"].notna()].sort_values("Días_Cobertura").head(20)
-            if not top_crit.empty:
-                fig_cob = px.bar(top_crit, x="Días_Cobertura", y="Producto",
-                                 orientation="h", title="Top 20 más críticos (menos cobertura)",
-                                 color="Días_Cobertura", color_continuous_scale="RdYlGn",
-                                 range_color=[0, 90])
-                fig_cob.update_layout(height=500, margin=dict(l=0,r=0,t=40,b=0))
-                st.plotly_chart(fig_cob, use_container_width=True)
-
-            st.download_button("📥 Exportar Días en Stock",
-                               data=to_excel_bytes(df_rot5, "Dias_Cobertura"),
-                               file_name="dias_cobertura.xlsx")
-
-    # ── Stock Mínimo ──────────────────────────────────────────────────────────
-    with s_tab5:
-        st.write("### 🎯 Stock Mínimo por Producto")
-        st.caption("Configurá el stock mínimo operativo por producto. "
-                   "Recibís alerta en el Panel cuando el disponible cae por debajo.")
-
-        # Alertas actuales
-        alertas_5 = obtener_alertas_stock_minimo()
-        if not alertas_5.empty:
-            st.error(f"⚠️ **{len(alertas_5)} producto(s) por debajo del mínimo:**")
-            st.dataframe(alertas_5[["Producto","Unidad","Stock Actual","Mínimo","Déficit","%_Cobertura"]],
-                         use_container_width=True, hide_index=True)
-            st.markdown("---")
-
-        # Tabla editable para configurar mínimos
-        st.write("#### Configurar Stock Mínimo")
-        if st_df.empty:
-            st.info("Importá datos de stock primero.")
-        else:
-            prods_all = sorted(st_df["Producto"].unique().tolist())
-            mins_curr = obtener_stock_minimos()
-
-            # Build editable df: todos los productos con sus mínimos actuales
-            df_edit_min = pd.DataFrame({"producto": prods_all})
-            if not mins_curr.empty:
-                df_edit_min = df_edit_min.merge(
-                    mins_curr[["producto","stock_minimo","observaciones"]],
-                    on="producto", how="left"
-                )
-            else:
-                df_edit_min["stock_minimo"]  = 0.0
-                df_edit_min["observaciones"] = ""
-
-            df_edit_min["stock_minimo"]  = df_edit_min["stock_minimo"].fillna(0.0)
-            df_edit_min["observaciones"] = df_edit_min["observaciones"].fillna("")
-
-            df_edit_min = df_edit_min.rename(columns={
-                "producto":"Producto","stock_minimo":"Stock Mínimo","observaciones":"Notas"
-            })
-
-            st.info("📝 Editá directamente. Ponés 0 si no querés mínimo para ese producto.")
-            edited_min = st.data_editor(
-                df_edit_min,
-                column_config={
-                    "Producto":    st.column_config.TextColumn("Producto", disabled=True),
-                    "Stock Mínimo":st.column_config.NumberColumn("Stock Mínimo", min_value=0, step=100),
-                    "Notas":       st.column_config.TextColumn("Notas (ej: Round Top <10.000)", width="large"),
-                },
-                use_container_width=True, hide_index=True, key="edit_minimos"
-            )
-
-            sm1, sm2 = st.columns(2)
-            if sm1.button("💾 Guardar Stock Mínimos", type="primary", key="btn_save_min"):
-                df_to_save = edited_min.rename(columns={
-                    "Producto":"producto","Stock Mínimo":"stock_minimo","Notas":"observaciones"
-                })
-                df_to_save = df_to_save[df_to_save["stock_minimo"] > 0]
-                if df_to_save.empty:
-                    conn_sm = conectar_db()
-                    conn_sm.execute("DELETE FROM stock_minimos")
-                    conn_sm.commit(); conn_sm.close()
-                    st.cache_data.clear()
-                    st.success("Mínimos borrados.")
-                else:
-                    conn_sm = conectar_db()
-                    conn_sm.execute("DELETE FROM stock_minimos")
-                    conn_sm.commit(); conn_sm.close()
-                    guardar_stock_minimos_bulk(df_to_save)
-                    st.success(f"✅ {len(df_to_save)} mínimos guardados.")
-                st.rerun()
-
-            if sm2.button("📥 Exportar Config Mínimos", key="btn_exp_min"):
-                st.download_button("⬇️ Descargar",
-                                   data=to_excel_bytes(edited_min, "Stock_Minimos"),
-                                   file_name="stock_minimos.xlsx")
-
-    # ── Toma de Stock ─────────────────────────────────────────────────────────
-    with s_tab6:
-        st.write("### 📝 Toma de Stock Físico")
-        if not st_df.empty:
-            st.download_button("📥 Descargar Planilla de Conteo (.xlsx)",
-                               data=descargar_planilla_inventario(st_df),
-                               file_name="Planilla_Toma_Stock.xlsx")
-            st.markdown("---")
-            st.write("#### Registrar Ajuste Auditado")
-            ci1, ci2, ci3 = st.columns(3)
-            with ci1:
-                p_inv = st.selectbox("Producto", sorted(st_df["Producto"].unique()), key="inv_p")
-            with ci2:
-                d_inv = st.selectbox("Depósito", sorted(st_df["Deposito"].unique()), key="inv_d")
-            with ci3:
-                filt_s  = st_df[(st_df["Producto"]==p_inv) & (st_df["Deposito"]==d_inv)]
-                val_sis = filt_s.iloc[0]["Stock Actual"] if not filt_s.empty else 0.0
-                st.metric("Stock en Sistema", f"{val_sis:,.1f}")
-            ci4, ci5 = st.columns(2)
-            with ci4:
-                val_fis = st.number_input("Conteo Físico Real", min_value=0.0, step=1.0, value=float(val_sis))
-            with ci5:
-                obs_inv = st.text_input("Observaciones / Auditor")
-            dif = val_fis - val_sis
-            st.metric("Diferencia detectada", f"{dif:,.1f}", delta=dif)
-            if st.button("💾 Guardar Auditoría"):
-                conn  = conectar_db()
-                cod_p = safe_str(st_df[st_df["Producto"]==p_inv].iloc[0]["Código"]) \
-                        if not st_df[st_df["Producto"]==p_inv].empty else "S/C"
-                conn.execute("""INSERT INTO inventario_fisico
-                    (fecha_conteo,codigo,producto,deposito,stock_sistema,conteo_fisico,diferencia,observaciones)
-                    VALUES (?,?,?,?,?,?,?,?)""",
-                    (datetime.now().strftime("%d/%m/%Y %H:%M"), cod_p, p_inv, d_inv,
-                     val_sis, val_fis, dif, obs_inv))
-                if dif != 0:
-                    id_p = conn.execute("SELECT id_producto FROM productos WHERE nombre=?", (p_inv,)).fetchone()
-                    if id_p:
-                        conn.execute("""INSERT INTO movimientos
-                            (fecha_hora,tipo_movimiento,id_producto,cantidad,lote,referencia,deposito,origen,usuario)
-                            VALUES (?,?,?,?,?,?,?,?,?)""",
-                            (datetime.now().strftime("%d/%m/%Y %H:%M"),
-                             "Entrada" if dif>0 else "Salida", id_p[0], abs(dif),
-                             "S/L", f"Ajuste Inventario. {obs_inv}", d_inv, "manual", usuario_actual()))
-                conn.commit(); conn.close()
-                st.cache_data.clear()
-                st.success("✅ Auditoría guardada.")
-                st.rerun()
-        else:
-            st.info("Sin datos de stock.")
+    if not st_df.empty:
+        st.download_button("📥 Descargar Planilla de Conteo (.xlsx)",
+                           data=descargar_planilla_inventario(st_df),
+                           file_name="Planilla_Toma_Stock.xlsx")
+        st.markdown("---")
+        st.write("### 📝 Registrar Ajuste Auditado")
+        ci1, ci2, ci3 = st.columns(3)
+        with ci1:
+            p_inv = st.selectbox("Producto", sorted(st_df["Producto"].unique()), key="inv_p")
+        with ci2:
+            d_inv = st.selectbox("Depósito", sorted(st_df["Deposito"].unique()), key="inv_d")
+        with ci3:
+            filt_s   = st_df[(st_df["Producto"]==p_inv) & (st_df["Deposito"]==d_inv)]
+            val_sis  = filt_s.iloc[0]["Stock Actual"] if not filt_s.empty else 0.0
+            st.metric("Stock en Sistema", f"{val_sis:,.1f}")
+        ci4, ci5 = st.columns(2)
+        with ci4:
+            val_fis = st.number_input("Conteo Físico Real", min_value=0.0, step=1.0, value=float(val_sis))
+        with ci5:
+            obs_inv = st.text_input("Observaciones / Auditor")
+        dif = val_fis - val_sis
+        st.metric("Diferencia detectada", f"{dif:,.1f}", delta=dif)
+        if st.button("💾 Guardar Auditoría"):
+            conn   = conectar_db()
+            cod_p  = safe_str(st_df[st_df["Producto"]==p_inv].iloc[0]["Código"]) if not st_df[st_df["Producto"]==p_inv].empty else "S/C"
+            conn.execute("""INSERT INTO inventario_fisico
+                (fecha_conteo,codigo,producto,deposito,stock_sistema,conteo_fisico,diferencia,observaciones)
+                VALUES (?,?,?,?,?,?,?,?)""",
+                (datetime.now().strftime("%d/%m/%Y %H:%M"), cod_p, p_inv, d_inv, val_sis, val_fis, dif, obs_inv))
+            if dif != 0:
+                id_p = conn.execute("SELECT id_producto FROM productos WHERE nombre=?", (p_inv,)).fetchone()
+                if id_p:
+                    conn.execute("""INSERT INTO movimientos
+                        (fecha_hora,tipo_movimiento,id_producto,cantidad,lote,referencia,deposito,origen,usuario)
+                        VALUES (?,?,?,?,?,?,?,?,?)""",
+                        (datetime.now().strftime("%d/%m/%Y %H:%M"),
+                         "Entrada" if dif>0 else "Salida", id_p[0], abs(dif),
+                         "S/L", f"Ajuste Inventario. {obs_inv}", d_inv, "manual", usuario_actual()))
+            conn.commit(); conn.close()
+            st.cache_data.clear()
+            st.success("✅ Auditoría guardada.")
+            st.rerun()
+    else:
+        st.info("Sin datos de stock.")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -2654,7 +2138,7 @@ with tab8:
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab9:
     st.subheader("⚙️ Configuración")
-    cfg1, cfg2, cfg3 = st.tabs(["📥 Importación / Exportación", "🔧 Parámetros & Sistema", "🎯 Stock Mínimo"])
+    cfg1, cfg2 = st.tabs(["📥 Importación / Exportación", "🔧 Parámetros & Sistema"])
 
     # ── Importación / Exportación ─────────────────────────────────────────────
     with cfg1:
@@ -2910,7 +2394,6 @@ with tab9:
                                 key="auth_toggle")
             if st.button("💾 Guardar config auth"):
                 guardar_metadata("auth_enabled", "1" if auth_on else "0")
-                st.session_state._auth_enabled = auth_on
                 st.success("Config auth guardada. Recargá la página.")
             if auth_on:
                 st.warning("⚠️ Recordá cambiar la contraseña del usuario **admin** antes de activar.")
@@ -2930,68 +2413,6 @@ with tab9:
                          disabled=(conf_borrado.strip() != "CONFIRMAR")):
                 borrar_datos_totales()
                 st.success("Base vaciada.")
-                st.rerun()
-
-    # ── Stock Mínimo (Tab Config) ─────────────────────────────────────────────
-    with cfg3:
-        st.write("### 🎯 Stock Mínimo por Producto")
-        st.caption("Configurá el nivel de stock mínimo operativo para cada producto. "
-                   "El Panel mostrará una alerta cuando el disponible neto caiga por debajo.")
-
-        stk_cfg3 = obtener_stock_full()
-        if stk_cfg3.empty:
-            st.info("Importá datos de stock primero para ver la lista de productos.")
-        else:
-            # Carga masiva desde Excel
-            with st.expander("📤 Carga masiva desde Excel"):
-                st.caption("El archivo debe tener columnas: `producto`, `stock_minimo`, `observaciones` (opcional).")
-                arch_min = st.file_uploader("Subir Excel de mínimos", type=["xlsx","xls","csv"], key="up_min")
-                if arch_min and st.button("💾 Importar Mínimos", key="btn_imp_min"):
-                    try:
-                        df_imp_min = pd.read_csv(arch_min) if arch_min.name.endswith(".csv") \
-                                     else pd.read_excel(arch_min)
-                        df_imp_min.columns = [c.strip().lower() for c in df_imp_min.columns]
-                        if "producto" not in df_imp_min.columns or "stock_minimo" not in df_imp_min.columns:
-                            st.error("El archivo necesita columnas `producto` y `stock_minimo`.")
-                        else:
-                            guardar_stock_minimos_bulk(df_imp_min)
-                            st.success(f"✅ {len(df_imp_min)} mínimos importados.")
-                            st.rerun()
-                    except Exception as e:
-                        st.error(f"Error: {e}")
-
-            st.markdown("---")
-
-            prods_c3  = sorted(stk_cfg3["Producto"].unique().tolist())
-            mins_c3   = obtener_stock_minimos()
-            df_c3     = pd.DataFrame({"producto": prods_c3})
-            if not mins_c3.empty:
-                df_c3 = df_c3.merge(mins_c3[["producto","stock_minimo","observaciones"]], on="producto", how="left")
-            else:
-                df_c3["stock_minimo"]  = 0.0
-                df_c3["observaciones"] = ""
-            df_c3["stock_minimo"]  = df_c3["stock_minimo"].fillna(0.0)
-            df_c3["observaciones"] = df_c3["observaciones"].fillna("")
-
-            st.info("Ponés 0 para desactivar la alerta de ese producto.")
-            edited_c3 = st.data_editor(
-                df_c3.rename(columns={"producto":"Producto","stock_minimo":"Stock Mínimo","observaciones":"Notas"}),
-                column_config={
-                    "Producto":    st.column_config.TextColumn("Producto", disabled=True),
-                    "Stock Mínimo":st.column_config.NumberColumn("Stock Mínimo", min_value=0, step=100),
-                    "Notas":       st.column_config.TextColumn("Notas", width="large"),
-                },
-                use_container_width=True, hide_index=True, key="edit_min_cfg3"
-            )
-            if st.button("💾 Guardar", type="primary", key="btn_save_min_cfg3"):
-                df_sv = edited_c3.rename(columns={"Producto":"producto","Stock Mínimo":"stock_minimo","Notas":"observaciones"})
-                conn_c3 = conectar_db()
-                conn_c3.execute("DELETE FROM stock_minimos")
-                conn_c3.commit(); conn_c3.close()
-                df_sv_pos = df_sv[df_sv["stock_minimo"] > 0]
-                if not df_sv_pos.empty:
-                    guardar_stock_minimos_bulk(df_sv_pos)
-                st.success(f"✅ {len(df_sv_pos)} mínimos guardados.")
                 st.rerun()
 
     st.markdown("---")
