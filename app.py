@@ -3348,11 +3348,12 @@ with tab11:
                         "**Plan Comercial → Cartera de Clientes → Importar desde MacroGest**.")
             st.dataframe(resumen_mg, use_container_width=True, hide_index=True)
             st.markdown("---")
-            cols_mg = ["dia_recibido","cliente","producto","cantidad_comprada",
+            cols_mg = ["dia_recibido","cliente","deposito","producto","cantidad_comprada",
                        "cant_entregada","pendiente","estado","vendedor","rto"]
             cols_mg = [c for c in cols_mg if c in df_f_mg.columns]
             df_show_mg = df_f_mg[cols_mg].rename(columns={
-                "dia_recibido":"Fecha","cliente":"Cliente","producto":"Producto",
+                "dia_recibido":"Fecha","cliente":"Cliente","deposito":"Depósito",
+                "producto":"Producto",
                 "cantidad_comprada":"Comprado","cant_entregada":"Entregado",
                 "pendiente":"Pendiente","estado":"Estado",
                 "vendedor":"Vendedor","rto":"N° Pedido",
