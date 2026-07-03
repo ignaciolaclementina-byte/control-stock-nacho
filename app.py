@@ -3316,10 +3316,13 @@ with tab11:
         if not df_f_mg.empty:
             resumen_mg = (
                 df_f_mg.groupby("producto")
-                .agg(Clientes=("cliente","nunique"),
-                     Comprado=("cantidad_comprada","sum"),
-                     Entregado=("cant_entregada","sum"),
-                     Pendiente=("pendiente","sum"))
+                .agg(
+                    Clientes =("cliente",   "nunique"),
+                    Depósitos=("deposito",  lambda x: ", ".join(sorted(x.dropna().astype(str).unique()))),
+                    Comprado =("cantidad_comprada","sum"),
+                    Entregado=("cant_entregada",   "sum"),
+                    Pendiente=("pendiente",         "sum"),
+                )
                 .reset_index()
                 .rename(columns={"producto":"Producto"})
                 .sort_values("Pendiente", ascending=False)
