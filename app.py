@@ -423,14 +423,14 @@ def borrar_datos_totales():
     for t in ("movimientos","productos","metadata","inventario_fisico","transferencias","precios_historicos"):
         conn.execute(f"DELETE FROM {t}")
     conn.commit(); conn.close()
-    st.cache_data.clear()
+    limpiar_cache()
 
 def borrar_solo_importacion():
     conn = conectar_db()
     conn.execute("DELETE FROM movimientos WHERE origen = 'excel'")
     conn.execute("DELETE FROM productos WHERE id_producto NOT IN (SELECT DISTINCT id_producto FROM movimientos)")
     conn.commit(); conn.close()
-    st.cache_data.clear()
+    limpiar_cache()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 4. QUERIES CON CACHÉ
@@ -495,17 +495,21 @@ def obtener_productos_completo():
 
 @st.cache_data(ttl=60)
 def calcular_rotacion_stock(dias=90):
-    conn        = conectar_db()
-    fecha_corte = (datetime.now() - timedelta(days=dias)).strftime("%d/%m/%Y")
+    conn           = conectar_db()
+    fecha_corte_dt = datetime.now() - timedelta(days=dias)
     query = """
-        SELECT p.nombre "Producto", SUM(m.cantidad) "Total_Salidas"
+        SELECT p.nombre "Producto", m.fecha_hora "FechaHora", m.cantidad "Cantidad"
         FROM movimientos m JOIN productos p ON m.id_producto=p.id_producto
         WHERE m.tipo_movimiento='Salida' AND COALESCE(m.anulado,0)=0
-          AND m.fecha_hora >= ?
-        GROUP BY p.nombre
     """
-    df_s = _rsql(query, conn, params=(fecha_corte,))
+    df_raw = _rsql(query, conn)
     conn.close()
+    if not df_raw.empty:
+        df_raw["_dt"] = pd.to_datetime(df_raw["FechaHora"], format="%d/%m/%Y %H:%M", errors="coerce")
+        df_raw = df_raw[df_raw["_dt"] >= fecha_corte_dt]
+        df_s = df_raw.groupby("Producto")["Cantidad"].sum().reset_index().rename(columns={"Cantidad":"Total_Salidas"})
+    else:
+        df_s = pd.DataFrame()
 
     stock = obtener_stock_full()
     if stock.empty: return pd.DataFrame()
@@ -586,6 +590,10 @@ def mostrar_login():
 # ─────────────────────────────────────────────────────────────────────────────
 # 7. HELPERS
 # ─────────────────────────────────────────────────────────────────────────────
+def limpiar_cache():
+    """Invalida todas las caches de datos. Llamar tras cualquier escritura en DB."""
+    limpiar_cache()
+
 def safe_float(val, default=0.0):
     try:
         if val is None: return default
@@ -1268,6 +1276,7 @@ with tab1:
 
     if stock_df.empty:
         st.warning("⚠️ Sin datos. Subí el archivo en Configuración.")
+        st.caption("Para empezar, andá a ⚙️ Configuración → Importar Stock desde MacroGest y subí el archivo de saldos.")
     else:
         U = st.session_state.umbral_alerta
         for meta, caption in [
@@ -1359,12 +1368,19 @@ with tab1:
                         m = stock_df[
                             stock_df["Producto"].str.contains(qr_clean, case=False, na=False) |
                             stock_df["Código"].astype(str).str.contains(qr_clean, case=False, na=False)
-                        ]
-                        if not m.empty:
+                        ].copy()
+                        if len(m) == 1:
                             st.session_state.qr_detectado = m.iloc[0]["Producto"]
                             st.rerun()
+                        elif len(m) > 1:
+                            opciones_qr = m["Producto"].unique().tolist()
+                            st.info(f"Se encontraron {len(opciones_qr)} productos con ese código. Seleccioná uno:")
+                            elegido_qr = st.selectbox("Producto del QR", opciones_qr, key="qr_multi_sel")
+                            if st.button("✅ Usar este producto", key="qr_multi_btn"):
+                                st.session_state.qr_detectado = elegido_qr
+                                st.rerun()
                         else:
-                            st.info("QR leído pero sin coincidencia.")
+                            st.info("QR leído pero sin coincidencia en el stock actual.")
                 else:
                     st.warning("QR no detectado.")
 
@@ -1461,6 +1477,17 @@ with tab1:
                 dep_m   = st.selectbox("Depósito", sorted(stock_df["Deposito"].unique()), key="mov_dep")
             lote_m = st.text_input("Lote", value="S/L", key="mov_lote")
             ref_m  = st.text_input("Referencia", value="", key="mov_ref")
+            # Advertencia de stock disponible en tiempo real
+            if tipo_m == "Salida":
+                stk_disp = float(stock_df[
+                    (stock_df["Producto"] == prod_m) & (stock_df["Deposito"] == dep_m)
+                ]["Stock Actual"].sum()) if not stock_df.empty else 0.0
+                st.metric("Stock disponible en depósito seleccionado", f"{stk_disp:,.1f}",
+                          help="Cantidad actual en el depósito antes de esta salida")
+                if cant_m > stk_disp:
+                    st.warning(f"⚠️ La cantidad ingresada ({cant_m:,.1f}) supera el stock disponible ({stk_disp:,.1f}). El stock quedará negativo.")
+                if stk_disp <= 0:
+                    st.error("🚫 El stock en este depósito ya es cero o negativo.")
             if st.session_state.mov_pendiente is None:
                 if st.button("📋 Preparar movimiento"):
                     st.session_state.mov_pendiente = dict(
@@ -1487,7 +1514,7 @@ with tab1:
                                  p["deposito"], "manual", usuario_actual()))
                             conn.commit()
                         conn.close()
-                        st.cache_data.clear()
+                        limpiar_cache()
                         st.session_state.mov_pendiente = None
                         st.success("✅ Registrado.")
                         st.rerun()
@@ -1520,7 +1547,16 @@ with tab1:
                 st.warning("Origen y destino deben ser distintos.")
             else:
                 if st.session_state.trans_pendiente is None:
-                    if st.button("↔️ Preparar transferencia"):
+                    if not es_admin():
+                        cod_sup_t = st.text_input("Código de supervisor", type="password",
+                                                   key="cod_sup_trans",
+                                                   help="Requerido para operadores. Los admins no necesitan código.")
+                        puede_transferir = cod_sup_t == (obtener_metadata("codigo_supervisor") or "1234")
+                        if cod_sup_t and not puede_transferir:
+                            st.error("❌ Código de supervisor incorrecto.")
+                    else:
+                        puede_transferir = True
+                    if st.button("↔️ Preparar transferencia", disabled=not puede_transferir):
                         st.session_state.trans_pendiente = dict(
                             producto=prod_t, dep_origen=dep_origen, dep_destino=dep_destino,
                             cantidad=cant_t, lote=lote_t, referencia=ref_t
@@ -1554,7 +1590,7 @@ with tab1:
                                      tp["dep_origen"], tp["dep_destino"], ref, usu))
                                 conn.commit()
                             conn.close()
-                            st.cache_data.clear()
+                            limpiar_cache()
                             st.success(f"✅ Transferencia ejecutada.")
                             st.session_state.trans_pendiente = None
                             st.rerun()
@@ -1617,7 +1653,7 @@ def mostrar_tab_entregas(hoja_nombre, titulo):
                         conn.commit(); conn.close()
                         guardar_metadata("ultima_importacion_entregas",
                                          datetime.now().strftime("%d/%m/%Y %H:%M"))
-                        st.cache_data.clear()
+                        limpiar_cache()
                         msg = f"✅ {ok} registros. {sal} salidas." if descontar else f"✅ {ok} registros."
                         st.success(msg)
                         if no_match: st.warning(f"Sin coincidencia: {', '.join(no_match)}")
@@ -1756,7 +1792,7 @@ with tab5:
                          "Entrada" if dif>0 else "Salida", id_p[0], abs(dif),
                          "S/L", f"Ajuste Inventario. {obs_inv}", d_inv, "manual", usuario_actual()))
             conn.commit(); conn.close()
-            st.cache_data.clear()
+            limpiar_cache()
             st.success("✅ Auditoría guardada.")
             st.rerun()
     else:
@@ -1835,7 +1871,7 @@ with tab6:
                                  usuario_actual()))
                             conn.execute("UPDATE movimientos SET anulado=1 WHERE id_movimiento=?", (int(id_an),))
                             conn.commit()
-                            st.cache_data.clear()
+                            limpiar_cache()
                             st.success(f"✅ Movimiento {id_an} anulado.")
                     else:
                         st.error(f"ID {id_an} no encontrado.")
@@ -1873,6 +1909,7 @@ with tab6:
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab7:
     st.subheader("💲 Valorización de Inventario")
+    st.caption("Aquí podés asignar precios a cada producto para calcular el valor total del inventario en USD y ARS.")
     stk_full = obtener_stock_full()
     prod_full = obtener_productos_completo()
 
@@ -1932,7 +1969,7 @@ with tab7:
                                 (id_p[0], datetime.now().strftime("%d/%m/%Y"), precio, moneda,
                                  usuario_actual()))
                 conn.commit(); conn.close()
-                st.cache_data.clear()
+                limpiar_cache()
                 st.success("✅ Precios actualizados.")
                 st.rerun()
 
@@ -2269,7 +2306,7 @@ with tab9:
                     conn.close()
                     _prog.progress(100, "¡Listo!")
                     guardar_metadata("ultima_importacion", datetime.now().strftime("%d/%m/%Y %H:%M"))
-                    st.cache_data.clear()
+                    limpiar_cache()
                     st.session_state["stock_imp_ok"] = (
                         f"✅ Stock importado: {pa} productos nuevos, {mo} líneas "
                         f"(de {_total} filas válidas)."
@@ -2351,7 +2388,7 @@ with tab9:
                         ajustes += 1
                     conn.commit(); conn.close()
                     guardar_metadata("ultima_importacion", datetime.now().strftime("%d/%m/%Y %H:%M"))
-                    st.cache_data.clear()
+                    limpiar_cache()
                     st.success(f"✅ {ajustes} ajustes incrementales aplicados.")
                     st.rerun()
                 except Exception as ex:
@@ -2373,11 +2410,16 @@ with tab9:
         new_umbral = st.number_input("Umbral de Stock Bajo", min_value=1,
                                      value=int(st.session_state.umbral_alerta))
         new_wa     = st.text_input("WhatsApp (5493XXXXXXXXX)", value=st.session_state.wa_numero)
+        cod_sup_cfg = st.text_input("Código de supervisor (para transferencias)",
+            value=obtener_metadata("codigo_supervisor") or "1234",
+            type="password", key="cod_sup_cfg",
+            help="Código que deben ingresar los operadores para autorizar transferencias entre depósitos")
         if st.button("💾 Guardar Parámetros"):
             st.session_state.umbral_alerta = new_umbral
             st.session_state.wa_numero     = new_wa
             guardar_metadata("umbral_alerta", str(new_umbral))
             guardar_metadata("wa_numero",     new_wa)
+            guardar_metadata("codigo_supervisor", cod_sup_cfg)
             st.success("Guardado.")
 
         st.markdown("---")
@@ -2595,7 +2637,7 @@ Cada vendedor debe:
                         (float(r["Meta Total Campaña"]), int(r["Prioridad"]),
                          CAMPANA_ACTUAL, r["Producto"]))
                 conn.commit(); conn.close()
-                st.cache_data.clear()
+                limpiar_cache()
                 st.success("✅ Metas actualizadas.")
                 st.rerun()
 
@@ -2650,7 +2692,7 @@ Cada vendedor debe:
                         (CAMPANA_ACTUAL, vend_sel_m, r["Producto"], r["Unidad"],
                          float(r["Meta Volumen"]), float(r["Meta Facturación"]), r["Moneda"]))
                 conn.commit(); conn.close()
-                st.cache_data.clear()
+                limpiar_cache()
                 st.success(f"✅ Metas de {vend_sel_m} guardadas.")
                 st.rerun()
 
@@ -2658,6 +2700,23 @@ Cada vendedor debe:
     with pc3:
         st.write("### 📈 KPI Dashboard — Campaña 2026-2027")
 
+        # Estado de datos disponibles
+        n_ventas_est = len(obtener_ventas_detalle())
+        n_mg_est = len(obtener_entregas("MACROGEST"))
+        est1, est2 = st.columns(2)
+        with est1:
+            st.metric("📋 Líneas de venta cargadas", n_ventas_est,
+                      delta="Con datos ✓" if n_ventas_est > 0 else "Sin datos",
+                      delta_color="normal" if n_ventas_est > 0 else "inverse")
+        with est2:
+            st.metric("🔄 Pedidos sin entregar", n_mg_est,
+                      delta="Con datos ✓" if n_mg_est > 0 else "Sin datos",
+                      delta_color="normal" if n_mg_est > 0 else "inverse")
+        if n_ventas_est == 0:
+            st.info("💡 Para ver el dashboard completo: importá ventas desde "
+                    "**Plan Comercial → Cartera de Clientes → Importar desde MacroGest** "
+                    "y pedidos desde el tab **🔄 Sin Entregar MG**.")
+        st.markdown("---")
         ventas_r = ventas_reales_por_vendedor()
         df_metas_all = obtener_metas_campana()
         df_cart  = obtener_cartera()
@@ -2909,7 +2968,7 @@ Cada vendedor debe:
                     (vend_nuevo, cli_nom, cli_tipo, cli_ha, cli_pot,
                      1 if cli_fv else 0, cli_uc, "activo", cli_obs, CAMPANA_ACTUAL))
                 conn.commit(); conn.close()
-                st.cache_data.clear()
+                limpiar_cache()
                 st.success(f"✅ Cliente '{cli_nom}' guardado.")
                 st.rerun()
             else:
@@ -2989,7 +3048,7 @@ Cada vendedor debe:
                                  r["entregada"],r["importe_total"],r["fecha"],r["fecha_entrega"],
                                  r["localidad"],r["observaciones"],r["numero_pedido"]))
                         conn.commit(); conn.close()
-                        st.cache_data.clear()
+                        limpiar_cache()
                         st.success(f"✅ {len(df_car_prev)} clientes y {len(df_ven_prev)} líneas de venta importadas para {vend_mg}.")
                         st.rerun()
 
@@ -3020,7 +3079,7 @@ Cada vendedor debe:
                              CAMPANA_ACTUAL))
                         ok_ci += 1
                     conn.commit(); conn.close()
-                    st.cache_data.clear()
+                    limpiar_cache()
                     st.success(f"✅ {ok_ci} clientes importados.")
                     st.rerun()
                 except Exception as ex:
@@ -3067,7 +3126,7 @@ Cada vendedor debe:
                          fact_rep, nuev_rep, visit_rep,
                          av_rep, ob_rep, op_rep, pa_rep, CAMPANA_ACTUAL))
                     conn.commit(); conn.close()
-                    st.cache_data.clear()
+                    limpiar_cache()
                     st.session_state["rep_ok"] = f"✅ Reporte de {vend_r} ({fecha_rep.strftime('%d/%m/%Y')}) guardado correctamente."
                     st.rerun()
                 except Exception as e:
@@ -3123,6 +3182,7 @@ Cada vendedor debe:
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab11:
     st.subheader("🔄 Pedidos Sin Entregar — MacroGest")
+    st.caption("Importá el reporte de MacroGest con los pedidos pendientes de entrega. Los datos quedan guardados y se actualizan con cada importación.")
 
     with st.expander("📂 Importar archivo Sin Entregar", expanded=obtener_entregas("MACROGEST").empty):
         mg_col1, mg_col2 = st.columns(2)
@@ -3195,7 +3255,7 @@ with tab11:
                     conn.commit(); conn.close()
                     guardar_metadata("ultima_importacion_mg",
                                      datetime.now().strftime("%d/%m/%Y %H:%M"))
-                    st.cache_data.clear()
+                    limpiar_cache()
                     st.success(f"✅ {ok_mg} registros importados.")
                     st.rerun()
 
@@ -3222,7 +3282,7 @@ with tab11:
                             delta=f"-{tp2:,.0f}" if tp2>0 else "0",
                             delta_color="inverse")
         st.markdown("---")
-        mf1,mf2,mf3,mf4 = st.columns(4)
+        mf1, mf2, mf3, mf4, mf5 = st.columns(5)
         with mf1:
             f_cli_mg = st.text_input("🔍 Cliente", key="mg_fcli")
         with mf2:
@@ -3233,12 +3293,25 @@ with tab11:
             f_vend_mg = st.selectbox("Vendedor", vends_mg, key="mg_fvend")
         with mf4:
             solo_pend_mg = st.toggle("Solo pendientes > 0", value=True, key="mg_fpend")
+        with mf5:
+            f_edad_mg = st.selectbox(
+                "Antigüedad",
+                ["Todos", "Reciente (≤30d)", "Demorado (30-60d)", "Crítico (>60d)"],
+                key="mg_fedad",
+                help="Días desde la fecha de recibo del pedido"
+            )
 
         df_f_mg = df_mg_stored.copy()
         if f_cli_mg:  df_f_mg = df_f_mg[df_f_mg["cliente"].str.contains(f_cli_mg, case=False, na=False)]
         if f_prod_mg != "Todos": df_f_mg = df_f_mg[df_f_mg["producto"] == f_prod_mg]
         if f_vend_mg != "Todos": df_f_mg = df_f_mg[df_f_mg["vendedor"].replace("","S/V") == f_vend_mg]
         if solo_pend_mg: df_f_mg = df_f_mg[df_f_mg["pendiente"] > 0]
+        if f_edad_mg != "Todos":
+            df_f_mg["_dias"] = df_f_mg["dia_recibido"].apply(dias_desde)
+            if f_edad_mg == "Reciente (≤30d)":      df_f_mg = df_f_mg[df_f_mg["_dias"] <= 30]
+            elif f_edad_mg == "Demorado (30-60d)":  df_f_mg = df_f_mg[(df_f_mg["_dias"] > 30) & (df_f_mg["_dias"] <= 60)]
+            elif f_edad_mg == "Crítico (>60d)":     df_f_mg = df_f_mg[df_f_mg["_dias"] > 60]
+            df_f_mg = df_f_mg.drop(columns=["_dias"], errors="ignore")
 
         if not df_f_mg.empty:
             resumen_mg = (
@@ -3254,6 +3327,22 @@ with tab11:
             resumen_mg["% Entregado"] = (
                 resumen_mg["Entregado"] / resumen_mg["Comprado"].replace(0,1) * 100
             ).round(1).astype(str) + "%"
+            # Cruzar con ventas_detalle para calcular valor $ pendiente
+            df_vd_mg = obtener_ventas_detalle()
+            if not df_vd_mg.empty:
+                precio_prom = (df_vd_mg.groupby("descripcion")["precio"]
+                               .mean().reset_index()
+                               .rename(columns={"descripcion":"Producto","precio":"Precio Prom"}))
+                resumen_mg = resumen_mg.merge(precio_prom, on="Producto", how="left")
+                resumen_mg["Precio Prom"] = resumen_mg["Precio Prom"].fillna(0)
+                resumen_mg["Importe Pend. $"] = (resumen_mg["Pendiente"] * resumen_mg["Precio Prom"]).round(0)
+                total_imp_mg = resumen_mg["Importe Pend. $"].sum()
+                st.metric("💰 Valor total pendiente de entrega (estimado)",
+                          f"USD {total_imp_mg:,.0f}",
+                          help="Calculado usando precio promedio de ventas MacroGest importadas")
+            else:
+                st.info("💡 Para ver el valor monetario pendiente, importá ventas desde "
+                        "**Plan Comercial → Cartera de Clientes → Importar desde MacroGest**.")
             st.dataframe(resumen_mg, use_container_width=True, hide_index=True)
             st.markdown("---")
             cols_mg = ["dia_recibido","cliente","producto","cantidad_comprada",
@@ -3275,3 +3364,61 @@ with tab11:
                 data=out_mg.getvalue(),
                 file_name=f"sin_entregar_mg_{datetime.now().strftime('%Y%m%d')}.xlsx",
             )
+            st.markdown("---")
+            with st.expander("✏️ Registrar entrega o marcar como completado", expanded=False):
+                st.caption("Actualizá el estado de un pedido directamente desde acá.")
+                if df_f_mg.empty:
+                    st.info("No hay registros con los filtros actuales.")
+                else:
+                    pedidos_disp = df_f_mg[df_f_mg["rto"].replace("","").notna()]["rto"].unique().tolist()
+                    pedidos_disp = [p for p in pedidos_disp if p and str(p).strip()]
+                    if pedidos_disp:
+                        rto_sel = st.selectbox("N° Pedido a actualizar", pedidos_disp, key="mg_rto_sel",
+                                               help="Seleccioná el número de pedido a modificar")
+                        row_sel = df_f_mg[df_f_mg["rto"] == rto_sel]
+                        if not row_sel.empty:
+                            r0 = row_sel.iloc[0]
+                            st.write(f"**Cliente:** {r0['cliente']} | **Producto:** {r0['producto']} | "
+                                     f"**Pendiente actual:** {r0['pendiente']:,.1f}")
+                            ua1, ua2 = st.columns(2)
+                            with ua1:
+                                nueva_entrega = st.number_input(
+                                    "Cantidad entregada ahora", min_value=0.0,
+                                    max_value=float(r0["pendiente"]) if r0["pendiente"] > 0 else 9999.0,
+                                    step=1.0, key="mg_nueva_ent",
+                                    help="Ingresá la cantidad que se acaba de entregar"
+                                )
+                                if st.button("📦 Registrar entrega parcial", key="mg_btn_parcial",
+                                             help="Descuenta la cantidad del pendiente"):
+                                    if nueva_entrega > 0:
+                                        conn = conectar_db()
+                                        conn.execute("""
+                                            UPDATE entregas SET
+                                                cant_entregada = cant_entregada + ?,
+                                                pendiente = MAX(0, pendiente - ?)
+                                            WHERE hoja='MACROGEST' AND rto=?
+                                        """, (nueva_entrega, nueva_entrega, rto_sel))
+                                        conn.commit(); conn.close()
+                                        limpiar_cache()
+                                        st.toast(f"✅ {nueva_entrega:,.1f} unidades registradas como entregadas.")
+                                        st.rerun()
+                                    else:
+                                        st.warning("Ingresá una cantidad mayor a cero.")
+                            with ua2:
+                                st.write("")  # spacer
+                                if st.button("✅ Marcar pedido como COMPLETADO", key="mg_btn_comp",
+                                             type="primary",
+                                             help="Cierra el pedido poniendo pendiente=0 y estado=ENTREGADO"):
+                                    conn = conectar_db()
+                                    conn.execute("""
+                                        UPDATE entregas SET pendiente=0, estado='ENTREGADO',
+                                            cant_entregada=cantidad_comprada
+                                        WHERE hoja='MACROGEST' AND rto=?
+                                    """, (rto_sel,))
+                                    conn.commit(); conn.close()
+                                    limpiar_cache()
+                                    st.toast(f"✅ Pedido {rto_sel} marcado como completado.")
+                                    st.rerun()
+                    else:
+                        st.info("Los registros filtrados no tienen N° de pedido asignado. "
+                                "Podés usar 'cliente+producto' para identificarlos.")
