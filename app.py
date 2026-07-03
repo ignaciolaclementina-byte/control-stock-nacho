@@ -1452,6 +1452,30 @@ with tab1:
 
                     comp_line = (f"<br><b>🔒 Comprometido:</b> {comp:,.1f} | "
                                  f"<b>Disp.Neto:</b> {disp:,.1f}") if comp > 0 else ""
+
+                    # Clientes con entrega pendiente para este producto
+                    clientes_pend_line = ""
+                    if not ent_panel.empty and comp > 0:
+                        cli_pend = (ent_panel[
+                            (ent_panel["producto"].str.lower() == item["Producto"].lower()) &
+                            (ent_panel["pendiente"] > 0)
+                        ][["cliente","pendiente","deposito"]]
+                        .sort_values("pendiente", ascending=False)
+                        .head(5))
+                        if not cli_pend.empty:
+                            filas = "".join(
+                                f"<tr><td style='padding:1px 6px'>{r['cliente']}</td>"
+                                f"<td style='padding:1px 6px;text-align:right'><b>{r['pendiente']:,.0f}</b></td>"
+                                f"<td style='padding:1px 6px;color:#6c757d'>{r['deposito'] or '-'}</td></tr>"
+                                for _, r in cli_pend.iterrows()
+                            )
+                            clientes_pend_line = (
+                                f"<br><b>👥 Clientes con pendiente:</b>"
+                                f"<table style='width:100%;font-size:.75rem;margin-top:4px'>"
+                                f"<tr style='color:#6c757d'><td>Cliente</td><td>Pend.</td><td>Depósito</td></tr>"
+                                f"{filas}</table>"
+                            )
+
                     st.markdown(f"""
                         <div class="stock-card {clase}">
                             <div class="stock-title">{item['Producto']}{b_neg}{b_comp}</div>
@@ -1460,7 +1484,7 @@ with tab1:
                             <div class="stock-info">
                                 <b>🆔</b> {item['Código']}<br>
                                 <b>📍</b> <span class="label-blue">{item['Deposito']}</span>
-                                {comp_line}{venc_info}
+                                {comp_line}{venc_info}{clientes_pend_line}
                             </div>
                         </div>""", unsafe_allow_html=True)
 
