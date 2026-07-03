@@ -1094,6 +1094,51 @@ def parsear_macrogest_ventas(archivo, vendedor, campana=CAMPANA_ACTUAL):
     })
     return df_cartera, df_v
 
+def parsear_sin_entregar_macrogest(archivo, vendedor=""):
+    """
+    Lee exportacion MacroGest de pedidos sin entregar.
+    Columnas: cuenta, deno_cuenta, articulo, descripcion,
+    precio, cantidad, entregada, fecha, localidad, estado, numero.
+    Mapea a tabla entregas con hoja='MACROGEST'.
+    Calcula pendiente = cantidad - entregada.
+    """
+    try:
+        df = pd.read_excel(archivo)
+    except Exception:
+        try:
+            df = pd.read_csv(archivo)
+        except Exception:
+            return pd.DataFrame()
+    df.columns = [str(c).strip().lower().replace(" ","_") for c in df.columns]
+    def _n(v):
+        try:    return float(str(v).replace(",",".").replace(" ",""))
+        except: return 0.0
+    registros = []
+    for _, r in df.iterrows():
+        cliente = safe_str(r.get("deno_cuenta",""))
+        if not cliente: continue
+        cantidad  = _n(r.get("cantidad",  0))
+        entregada = _n(r.get("entregada", 0))
+        pendiente = max(round(cantidad - entregada, 4), 0)
+        fecha = ""
+        try:    fecha = pd.Timestamp(r["fecha"]).strftime("%d/%m/%Y")
+        except: pass
+        registros.append({
+            "hoja":              "MACROGEST",
+            "rto":               safe_str(r.get("numero","")),
+            "dia_recibido":      fecha,
+            "cliente":           cliente,
+            "deposito":          safe_str(r.get("deposito","")) or "MacroGest",
+            "cantidad_comprada": cantidad,
+            "producto":          safe_str(r.get("descripcion","")),
+            "lote":              safe_str(r.get("codigo_sinonimo","")) or "S/L",
+            "cant_entregada":    entregada,
+            "pendiente":         pendiente,
+            "estado":            safe_str(r.get("estado","")),
+            "vendedor":          vendedor,
+        })
+    return pd.DataFrame(registros) if registros else pd.DataFrame()
+
 def ventas_reales_por_vendedor(campana=CAMPANA_ACTUAL):
     """
     Combina ventas_detalle (MacroGest) + entregas para medir performance real.
@@ -1201,7 +1246,7 @@ if auth_enabled and st.session_state.get("authenticated"):
 # ─────────────────────────────────────────────────────────────────────────────
 st.title("🧪 Control de Depósito Inteligente")
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11 = st.tabs([
     "⚡ Panel",
     "📦 LC / LCAGRO",
     "🌿 Bayer DEP55",
@@ -1212,6 +1257,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
     "📈 Reportes",
     "⚙️ Configuración",
     "📊 Plan Comercial",
+    "🔄 Sin Entregar MG",
 ])
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -3071,3 +3117,161 @@ Cada vendedor debe:
             st.download_button("📥 Exportar Reportes",
                                data=to_excel_bytes(df_rep_h, "Reportes"),
                                file_name=f"reportes_{vend_r.replace(' ','_')}.xlsx")
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TAB 11 — SIN ENTREGAR MACROGEST
+# ═══════════════════════════════════════════════════════════════════════════════
+with tab11:
+    st.subheader("🔄 Pedidos Sin Entregar — MacroGest")
+
+    with st.expander("📂 Importar archivo Sin Entregar", expanded=obtener_entregas("MACROGEST").empty):
+        mg_col1, mg_col2 = st.columns(2)
+        with mg_col1:
+            mg_vendedor = st.text_input(
+                "Vendedor (opcional)",
+                value="",
+                key="mg_vend_se",
+                placeholder="ej: Juan Perez",
+            )
+        with mg_col2:
+            mg_reemplazar = st.toggle(
+                "Reemplazar datos MacroGest previos",
+                value=True,
+                key="mg_reempl_se",
+            )
+        arch_mg_se = st.file_uploader(
+            "Archivo MacroGest (.xlsx / .csv)",
+            type=["xlsx", "xls", "csv"],
+            key="up_mg_se",
+        )
+        if arch_mg_se:
+            try:
+                arch_mg_se.seek(0)
+                df_prev_mg = parsear_sin_entregar_macrogest(arch_mg_se, mg_vendedor)
+            except Exception as ex:
+                df_prev_mg = pd.DataFrame()
+                st.error(f"Error leyendo archivo: {ex}")
+
+            if not df_prev_mg.empty:
+                tc_mg = df_prev_mg["cantidad_comprada"].sum()
+                te_mg = df_prev_mg["cant_entregada"].sum()
+                tp_mg = df_prev_mg["pendiente"].sum()
+                st.markdown(
+                    f"**{len(df_prev_mg)} renglones** · "
+                    f"{df_prev_mg['cliente'].nunique()} clientes · "
+                    f"{df_prev_mg['producto'].nunique()} productos"
+                )
+                km1, km2, km3 = st.columns(3)
+                with km1: st.metric("Comprado total",  f"{tc_mg:,.0f}")
+                with km2: st.metric("Entregado total", f"{te_mg:,.0f}")
+                with km3: st.metric("Pendiente total", f"{tp_mg:,.0f}")
+                st.dataframe(
+                    df_prev_mg[["cliente","producto","cantidad_comprada",
+                                "cant_entregada","pendiente","estado",
+                                "dia_recibido","vendedor"]].head(20),
+                    use_container_width=True, hide_index=True,
+                )
+                st.caption("Preview — primeros 20 registros.")
+                if st.button("✅ Confirmar importación", type="primary", key="confirm_mg_se"):
+                    conn = conectar_db()
+                    if mg_reemplazar:
+                        conn.execute("DELETE FROM entregas WHERE hoja='MACROGEST'")
+                    ok_mg = 0
+                    for _, r in df_prev_mg.iterrows():
+                        conn.execute("""
+                            INSERT INTO entregas
+                            (hoja,rto,dia_recibido,cliente,deposito,
+                             cantidad_comprada,producto,lote,
+                             cant_entregada,pendiente,estado,vendedor)
+                            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+                        """, (
+                            "MACROGEST", r["rto"], r["dia_recibido"],
+                            r["cliente"], r["deposito"],
+                            r["cantidad_comprada"], r["producto"], r["lote"],
+                            r["cant_entregada"], r["pendiente"],
+                            r["estado"], r["vendedor"],
+                        ))
+                        ok_mg += 1
+                    conn.commit(); conn.close()
+                    guardar_metadata("ultima_importacion_mg",
+                                     datetime.now().strftime("%d/%m/%Y %H:%M"))
+                    st.cache_data.clear()
+                    st.success(f"✅ {ok_mg} registros importados.")
+                    st.rerun()
+
+    st.markdown("---")
+    ultima_mg = obtener_metadata("ultima_importacion_mg")
+    if ultima_mg:
+        st.caption(f"Última importación MacroGest: **{ultima_mg}**")
+
+    df_mg_stored = obtener_entregas("MACROGEST")
+
+    if df_mg_stored.empty:
+        st.info("Sin datos. Importá un archivo arriba.")
+    else:
+        tc2 = df_mg_stored["cantidad_comprada"].sum()
+        te2 = df_mg_stored["cant_entregada"].sum()
+        tp2 = df_mg_stored["pendiente"].sum()
+        pct2 = te2 / tc2 * 100 if tc2 > 0 else 0
+        k1,k2,k3,k4,k5 = st.columns(5)
+        with k1: st.metric("Registros",  len(df_mg_stored))
+        with k2: st.metric("Clientes",   df_mg_stored["cliente"].nunique())
+        with k3: st.metric("Comprado",   f"{tc2:,.0f}")
+        with k4: st.metric("Entregado",  f"{te2:,.0f}", delta=f"{pct2:.1f}%")
+        with k5: st.metric("Pendiente",  f"{tp2:,.0f}",
+                            delta=f"-{tp2:,.0f}" if tp2>0 else "0",
+                            delta_color="inverse")
+        st.markdown("---")
+        mf1,mf2,mf3,mf4 = st.columns(4)
+        with mf1:
+            f_cli_mg = st.text_input("🔍 Cliente", key="mg_fcli")
+        with mf2:
+            prods_mg = ["Todos"] + sorted(df_mg_stored["producto"].dropna().unique().tolist())
+            f_prod_mg = st.selectbox("Producto", prods_mg, key="mg_fprod")
+        with mf3:
+            vends_mg = ["Todos"] + sorted(df_mg_stored["vendedor"].replace("","S/V").dropna().unique().tolist())
+            f_vend_mg = st.selectbox("Vendedor", vends_mg, key="mg_fvend")
+        with mf4:
+            solo_pend_mg = st.toggle("Solo pendientes > 0", value=True, key="mg_fpend")
+
+        df_f_mg = df_mg_stored.copy()
+        if f_cli_mg:  df_f_mg = df_f_mg[df_f_mg["cliente"].str.contains(f_cli_mg, case=False, na=False)]
+        if f_prod_mg != "Todos": df_f_mg = df_f_mg[df_f_mg["producto"] == f_prod_mg]
+        if f_vend_mg != "Todos": df_f_mg = df_f_mg[df_f_mg["vendedor"].replace("","S/V") == f_vend_mg]
+        if solo_pend_mg: df_f_mg = df_f_mg[df_f_mg["pendiente"] > 0]
+
+        if not df_f_mg.empty:
+            resumen_mg = (
+                df_f_mg.groupby("producto")
+                .agg(Clientes=("cliente","nunique"),
+                     Comprado=("cantidad_comprada","sum"),
+                     Entregado=("cant_entregada","sum"),
+                     Pendiente=("pendiente","sum"))
+                .reset_index()
+                .rename(columns={"producto":"Producto"})
+                .sort_values("Pendiente", ascending=False)
+            )
+            resumen_mg["% Entregado"] = (
+                resumen_mg["Entregado"] / resumen_mg["Comprado"].replace(0,1) * 100
+            ).round(1).astype(str) + "%"
+            st.dataframe(resumen_mg, use_container_width=True, hide_index=True)
+            st.markdown("---")
+            cols_mg = ["dia_recibido","cliente","producto","cantidad_comprada",
+                       "cant_entregada","pendiente","estado","vendedor","rto"]
+            cols_mg = [c for c in cols_mg if c in df_f_mg.columns]
+            df_show_mg = df_f_mg[cols_mg].rename(columns={
+                "dia_recibido":"Fecha","cliente":"Cliente","producto":"Producto",
+                "cantidad_comprada":"Comprado","cant_entregada":"Entregado",
+                "pendiente":"Pendiente","estado":"Estado",
+                "vendedor":"Vendedor","rto":"N° Pedido",
+            })
+            st.dataframe(df_show_mg, use_container_width=True, hide_index=True)
+            out_mg = io.BytesIO()
+            with pd.ExcelWriter(out_mg, engine="openpyxl") as w:
+                resumen_mg.to_excel(w, index=False, sheet_name="Resumen_Producto")
+                df_show_mg.to_excel(w, index=False, sheet_name="Detalle")
+            st.download_button(
+                "📥 Exportar Sin Entregar (.xlsx)",
+                data=out_mg.getvalue(),
+                file_name=f"sin_entregar_mg_{datetime.now().strftime('%Y%m%d')}.xlsx",
+            )
