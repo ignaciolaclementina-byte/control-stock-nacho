@@ -592,7 +592,7 @@ def mostrar_login():
 # ─────────────────────────────────────────────────────────────────────────────
 def limpiar_cache():
     """Invalida todas las caches de datos. Llamar tras cualquier escritura en DB."""
-    limpiar_cache()
+    st.cache_data.clear()
 
 def safe_float(val, default=0.0):
     try:
