@@ -1650,30 +1650,46 @@ def mostrar_tab_entregas(hoja_nombre, titulo):
                     else:
                         conn = conectar_db()
                         conn.execute("DELETE FROM entregas")
-                        ok = sal = 0; no_match = []
-                        for _, r in df_u.iterrows():
-                            conn.execute("""INSERT INTO entregas
-                                (hoja,rto,dia_recibido,cliente,deposito,cantidad_comprada,
-                                producto,lote,cant_entregada,pendiente,estado,vendedor)
-                                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
-                                (r["hoja"],r["rto"],r["dia_recibido"],r["cliente"],r["deposito"],
-                                 r["cantidad_comprada"],r["producto"],r["lote"],
-                                 r["cant_entregada"],r["pendiente"],r["estado"],r["vendedor"]))
-                            ok += 1
-                            if descontar and r["cant_entregada"] > 0:
-                                mp = conn.execute("SELECT id_producto FROM productos WHERE nombre=?",
-                                                  (r["producto"],)).fetchone()
-                                if mp:
-                                    conn.execute("""INSERT INTO movimientos
-                                        (fecha_hora,tipo_movimiento,id_producto,cantidad,lote,referencia,deposito,origen,usuario)
-                                        VALUES (?,?,?,?,?,?,?,?,?)""",
-                                        (r["dia_recibido"] or datetime.now().strftime("%d/%m/%Y"),
-                                         "Salida", mp[0], r["cant_entregada"],
-                                         r["lote"] or "S/L", f"Entrega {r['cliente']}", dep_sal, "entrega",
-                                         usuario_actual()))
-                                    sal += 1
-                                elif r["producto"] not in no_match:
-                                    no_match.append(r["producto"])
+                        # Batch insert entregas
+                        ent_batch = [
+                            (r["hoja"], r["rto"], r["dia_recibido"], r["cliente"],
+                             r["deposito"], r["cantidad_comprada"], r["producto"], r["lote"],
+                             r["cant_entregada"], r["pendiente"], r["estado"], r["vendedor"])
+                            for _, r in df_u.iterrows()
+                        ]
+                        conn.cursor().executemany("""INSERT INTO entregas
+                            (hoja,rto,dia_recibido,cliente,deposito,cantidad_comprada,
+                            producto,lote,cant_entregada,pendiente,estado,vendedor)
+                            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""", ent_batch)
+                        ok = len(ent_batch)
+                        sal = 0; no_match = []
+                        if descontar:
+                            # Obtener IDs de productos de una sola vez
+                            prod_names = df_u[df_u["cant_entregada"] > 0]["producto"].unique().tolist()
+                            if prod_names:
+                                ph = ",".join(["?"] * len(prod_names))
+                                id_rows = conn.execute(
+                                    f"SELECT id_producto, nombre FROM productos WHERE nombre IN ({ph})",
+                                    prod_names).fetchall()
+                                id_map_e = {row[1]: row[0] for row in id_rows}
+                                _ts_e = datetime.now().strftime("%d/%m/%Y %H:%M")
+                                _usu_e = usuario_actual()
+                                sal_batch = []
+                                for _, r in df_u[df_u["cant_entregada"] > 0].iterrows():
+                                    pid = id_map_e.get(r["producto"])
+                                    if pid:
+                                        sal_batch.append((
+                                            r["dia_recibido"] or _ts_e, "Salida", pid,
+                                            r["cant_entregada"], r["lote"] or "S/L",
+                                            f"Entrega {r['cliente']}", dep_sal, "entrega", _usu_e))
+                                        sal += 1
+                                    elif r["producto"] not in no_match:
+                                        no_match.append(r["producto"])
+                                if sal_batch:
+                                    conn.cursor().executemany("""INSERT INTO movimientos
+                                        (fecha_hora,tipo_movimiento,id_producto,cantidad,lote,
+                                         referencia,deposito,origen,usuario)
+                                        VALUES (?,?,?,?,?,?,?,?,?)""", sal_batch)
                         conn.commit(); conn.close()
                         guardar_metadata("ultima_importacion_entregas",
                                          datetime.now().strftime("%d/%m/%Y %H:%M"))
@@ -2298,35 +2314,64 @@ with tab9:
                     _prog.progress(30, "Limpiando datos anteriores...")
                     borrar_solo_importacion()
                     conn = conectar_db()
-                    pa = mo = 0
                     _total = len(df_validas)
-                    _prog.progress(35, f"Insertando {_total} registros en base de datos...")
-                    for _i, (_, row) in enumerate(df_validas.iterrows()):
-                        nom = row["_nom"]
-                        cod = safe_str(row.get("codigo",""))
-                        uni = safe_str(row.get("unidad_medida","U")) or "U"
-                        dep = safe_str(row.get("deposito","0")) or "0"
-                        lot = safe_str(row.get("lote","S/L")) or "S/L"
-                        stk = safe_float(row.get("stock_actual", 0.0))
-                        cur_ins = conn.execute(
-                            "INSERT OR IGNORE INTO productos (nombre,unidad,codigo) VALUES (?,?,?)",
-                            (nom, uni, cod))
-                        if _changes(conn, cur_ins) > 0: pa += 1
-                        row_id = conn.execute(
-                            "SELECT id_producto FROM productos WHERE nombre=?", (nom,)).fetchone()
-                        if not row_id:
-                            continue
-                        conn.execute(
-                            """INSERT INTO movimientos
-                               (fecha_hora,tipo_movimiento,id_producto,cantidad,lote,referencia,deposito,origen,usuario)
-                               VALUES (?,?,?,?,?,?,?,?,?)""",
-                            (datetime.now().strftime("%d/%m/%Y %H:%M"), "Entrada", row_id[0],
-                             stk, lot, "Saldo Inicial", dep, "excel", usuario_actual()))
-                        mo += 1
-                        if _i % 20 == 0:
-                            _pct = 35 + int(55 * _i / _total)
-                            _prog.progress(_pct, f"Procesando {_i+1}/{_total}...")
+                    _ts = datetime.now().strftime("%d/%m/%Y %H:%M")
+                    _usu = usuario_actual()
+
+                    # ── Paso 1: preparar filas ─────────────────────────────────
+                    _prog.progress(35, f"Preparando {_total} filas...")
+                    filas_raw = []
+                    for _, row in df_validas.iterrows():
+                        filas_raw.append({
+                            "nom": row["_nom"],
+                            "cod": safe_str(row.get("codigo","")),
+                            "uni": safe_str(row.get("unidad_medida","U")) or "U",
+                            "dep": safe_str(row.get("deposito","0")) or "0",
+                            "lot": safe_str(row.get("lote","S/L")) or "S/L",
+                            "stk": safe_float(row.get("stock_actual", 0.0)),
+                        })
+
+                    # ── Paso 2: insertar productos únicos en batch ─────────────
+                    _prog.progress(45, "Insertando productos (batch)...")
+                    productos_uniq = {r["nom"]: r for r in filas_raw}
+                    prod_batch = [(p["nom"], p["uni"], p["cod"]) for p in productos_uniq.values()]
+                    conn.cursor().executemany(
+                        "INSERT OR IGNORE INTO productos (nombre,unidad,codigo) VALUES (?,?,?)",
+                        prod_batch
+                    )
                     conn.commit()
+                    pa = len(prod_batch)
+
+                    # ── Paso 3: cargar mapa nombre → id_producto ───────────────
+                    _prog.progress(60, "Mapeando IDs de productos...")
+                    noms_sql = ",".join(["?"] * len(productos_uniq))
+                    id_map_rows = conn.execute(
+                        f"SELECT id_producto, nombre FROM productos WHERE nombre IN ({noms_sql})",
+                        list(productos_uniq.keys())
+                    ).fetchall()
+                    id_map = {r[1]: r[0] for r in id_map_rows}
+
+                    # ── Paso 4: insertar movimientos en batch ──────────────────
+                    _prog.progress(70, "Insertando movimientos (batch)...")
+                    mov_batch = []
+                    for r in filas_raw:
+                        pid = id_map.get(r["nom"])
+                        if pid is None:
+                            continue
+                        mov_batch.append((
+                            _ts, "Entrada", pid,
+                            r["stk"], r["lot"], "Saldo Inicial",
+                            r["dep"], "excel", _usu
+                        ))
+                    conn.cursor().executemany(
+                        """INSERT INTO movimientos
+                           (fecha_hora,tipo_movimiento,id_producto,cantidad,lote,
+                            referencia,deposito,origen,usuario)
+                           VALUES (?,?,?,?,?,?,?,?,?)""",
+                        mov_batch
+                    )
+                    conn.commit()
+                    mo = len(mov_batch)
                     conn.close()
                     _prog.progress(100, "¡Listo!")
                     guardar_metadata("ultima_importacion", datetime.now().strftime("%d/%m/%Y %H:%M"))
@@ -2387,7 +2432,8 @@ with tab9:
                         for _, r in stk_actual.iterrows()
                     }
                     conn = conectar_db()
-                    ajustes = 0
+                    # Calcular ajustes necesarios
+                    ajustes_raw = []
                     for _, row in df_inc.iterrows():
                         nom = safe_str(row.get("descripcion_1",""))
                         if not nom: continue
@@ -2396,20 +2442,41 @@ with tab9:
                         stk_prev  = stk_actual_dict.get((nom, dep), 0.0)
                         dif_inc   = stk_nuevo - stk_prev
                         if abs(dif_inc) < 0.001: continue
-                        cod = safe_str(row.get("codigo",""))
-                        uni = safe_str(row.get("unidad_medida","U"))
-                        lot = safe_str(row.get("lote","S/L"))
-                        conn.execute("INSERT OR IGNORE INTO productos (nombre,unidad,codigo) VALUES (?,?,?)",
-                                     (nom,uni,cod))
-                        id_p = conn.execute("SELECT id_producto FROM productos WHERE nombre=?", (nom,)).fetchone()[0]
-                        tipo_aj = "Entrada" if dif_inc > 0 else "Salida"
-                        conn.execute("""INSERT INTO movimientos
-                            (fecha_hora,tipo_movimiento,id_producto,cantidad,lote,referencia,deposito,origen,usuario)
-                            VALUES (?,?,?,?,?,?,?,?,?)""",
-                            (datetime.now().strftime("%d/%m/%Y %H:%M"), tipo_aj, id_p,
-                             abs(dif_inc), lot, "Ajuste Incremental MacroGest", dep, "excel",
-                             usuario_actual()))
-                        ajustes += 1
+                        ajustes_raw.append({
+                            "nom": nom, "dep": dep,
+                            "cod": safe_str(row.get("codigo","")),
+                            "uni": safe_str(row.get("unidad_medida","U")) or "U",
+                            "lot": safe_str(row.get("lote","S/L")) or "S/L",
+                            "dif": dif_inc,
+                        })
+                    # Batch insert productos nuevos
+                    if ajustes_raw:
+                        prod_inc = list({r["nom"]: (r["nom"],r["uni"],r["cod"]) for r in ajustes_raw}.values())
+                        conn.cursor().executemany(
+                            "INSERT OR IGNORE INTO productos (nombre,unidad,codigo) VALUES (?,?,?)",
+                            prod_inc)
+                        conn.commit()
+                        # Obtener IDs de una vez
+                        noms_inc = [r["nom"] for r in ajustes_raw]
+                        ph_inc = ",".join(["?"] * len(set(noms_inc)))
+                        id_rows_inc = conn.execute(
+                            f"SELECT id_producto,nombre FROM productos WHERE nombre IN ({ph_inc})",
+                            list(set(noms_inc))).fetchall()
+                        id_map_inc = {r[1]: r[0] for r in id_rows_inc}
+                        _ts_inc = datetime.now().strftime("%d/%m/%Y %H:%M")
+                        _usu_inc = usuario_actual()
+                        mov_inc_batch = [
+                            (_ts_inc, "Entrada" if r["dif"] > 0 else "Salida",
+                             id_map_inc[r["nom"]], abs(r["dif"]),
+                             r["lot"], "Ajuste Incremental MacroGest",
+                             r["dep"], "excel", _usu_inc)
+                            for r in ajustes_raw if r["nom"] in id_map_inc
+                        ]
+                        conn.cursor().executemany("""INSERT INTO movimientos
+                            (fecha_hora,tipo_movimiento,id_producto,cantidad,lote,
+                             referencia,deposito,origen,usuario)
+                            VALUES (?,?,?,?,?,?,?,?,?)""", mov_inc_batch)
+                    ajustes = len(ajustes_raw)
                     conn.commit(); conn.close()
                     guardar_metadata("ultima_importacion", datetime.now().strftime("%d/%m/%Y %H:%M"))
                     limpiar_cache()
@@ -3051,29 +3118,33 @@ Cada vendedor debe:
                                          (vend_mg, CAMPANA_ACTUAL))
                             conn.execute("DELETE FROM ventas_detalle WHERE vendedor=? AND campana=?",
                                          (vend_mg, CAMPANA_ACTUAL))
-                        # Insertar cartera
-                        for _, r in df_car_prev.iterrows():
-                            conn.execute("""INSERT OR REPLACE INTO cartera_clientes
-                                (vendedor,cliente,tipo,superficie_ha,potencial_facturacion,
-                                 field_view,ultima_compra,estado,observaciones,campana)
-                                VALUES (?,?,?,?,?,?,?,?,?,?)""",
-                                (r["vendedor"],r["cliente"],r["tipo"],0,
-                                 r["potencial_facturacion"],0,r["ultima_compra"],
-                                 "activo",r["observaciones"],r["campana"]))
-                        # Insertar ventas detalle
-                        for _, r in df_ven_prev.iterrows():
-                            conn.execute("""INSERT INTO ventas_detalle
-                                (campana,vendedor,cuenta,cliente,cuit,articulo,descripcion,
-                                 precio,cantidad,entregada,importe_total,fecha,fecha_entrega,
-                                 localidad,observaciones,numero_pedido)
-                                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                                (r["campana"],r["vendedor"],r["cuenta"],r["cliente"],r["cuit"],
-                                 r["articulo"],r["descripcion"],r["precio"],r["cantidad"],
-                                 r["entregada"],r["importe_total"],r["fecha"],r["fecha_entrega"],
-                                 r["localidad"],r["observaciones"],r["numero_pedido"]))
+                        # Batch insert cartera
+                        cart_batch = [
+                            (r["vendedor"],r["cliente"],r["tipo"],0,
+                             r["potencial_facturacion"],0,r["ultima_compra"],
+                             "activo",r["observaciones"],r["campana"])
+                            for _, r in df_car_prev.iterrows()
+                        ]
+                        conn.cursor().executemany("""INSERT OR REPLACE INTO cartera_clientes
+                            (vendedor,cliente,tipo,superficie_ha,potencial_facturacion,
+                             field_view,ultima_compra,estado,observaciones,campana)
+                            VALUES (?,?,?,?,?,?,?,?,?,?)""", cart_batch)
+                        # Batch insert ventas detalle
+                        ven_batch = [
+                            (r["campana"],r["vendedor"],r["cuenta"],r["cliente"],r["cuit"],
+                             r["articulo"],r["descripcion"],r["precio"],r["cantidad"],
+                             r["entregada"],r["importe_total"],r["fecha"],r["fecha_entrega"],
+                             r["localidad"],r["observaciones"],r["numero_pedido"])
+                            for _, r in df_ven_prev.iterrows()
+                        ]
+                        conn.cursor().executemany("""INSERT INTO ventas_detalle
+                            (campana,vendedor,cuenta,cliente,cuit,articulo,descripcion,
+                             precio,cantidad,entregada,importe_total,fecha,fecha_entrega,
+                             localidad,observaciones,numero_pedido)
+                            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", ven_batch)
                         conn.commit(); conn.close()
                         limpiar_cache()
-                        st.success(f"✅ {len(df_car_prev)} clientes y {len(df_ven_prev)} líneas de venta importadas para {vend_mg}.")
+                        st.success(f"✅ {len(cart_batch)} clientes y {len(ven_batch)} líneas de venta importadas para {vend_mg}.")
                         st.rerun()
 
         # ── Importar cartera genérica ───────────────────────────────────────
@@ -3085,26 +3156,24 @@ Cada vendedor debe:
                 try:
                     df_ci = pd.read_csv(arch_cart) if arch_cart.name.endswith(".csv") else pd.read_excel(arch_cart)
                     df_ci.columns = [c.strip().lower() for c in df_ci.columns]
-                    conn = conectar_db(); ok_ci = 0
-                    for _, r in df_ci.iterrows():
-                        cli_i = safe_str(r.get("cliente",""))
-                        if not cli_i: continue
-                        conn.execute("""INSERT OR REPLACE INTO cartera_clientes
-                            (vendedor,cliente,tipo,superficie_ha,potencial_facturacion,
-                             field_view,ultima_compra,estado,observaciones,campana)
-                            VALUES (?,?,?,?,?,?,?,?,?,?)""",
-                            (safe_str(r.get("vendedor","")), cli_i,
-                             safe_str(r.get("tipo","activo")),
-                             safe_float(r.get("superficie_ha",0)),
-                             safe_float(r.get("potencial_facturacion",0)),
-                             int(safe_float(r.get("field_view",0))),
-                             safe_str(r.get("ultima_compra","")),
-                             "activo", safe_str(r.get("observaciones","")),
-                             CAMPANA_ACTUAL))
-                        ok_ci += 1
+                    ci_batch = [
+                        (safe_str(r.get("vendedor","")), safe_str(r.get("cliente","")),
+                         safe_str(r.get("tipo","activo")),
+                         safe_float(r.get("superficie_ha",0)),
+                         safe_float(r.get("potencial_facturacion",0)),
+                         int(safe_float(r.get("field_view",0))),
+                         safe_str(r.get("ultima_compra","")),
+                         "activo", safe_str(r.get("observaciones","")), CAMPANA_ACTUAL)
+                        for _, r in df_ci.iterrows() if safe_str(r.get("cliente",""))
+                    ]
+                    conn = conectar_db()
+                    conn.cursor().executemany("""INSERT OR REPLACE INTO cartera_clientes
+                        (vendedor,cliente,tipo,superficie_ha,potencial_facturacion,
+                         field_view,ultima_compra,estado,observaciones,campana)
+                        VALUES (?,?,?,?,?,?,?,?,?,?)""", ci_batch)
                     conn.commit(); conn.close()
                     limpiar_cache()
-                    st.success(f"✅ {ok_ci} clientes importados.")
+                    st.success(f"✅ {len(ci_batch)} clientes importados.")
                     st.rerun()
                 except Exception as ex:
                     st.error(f"Error: {ex}")
@@ -3260,22 +3329,18 @@ with tab11:
                     conn = conectar_db()
                     if mg_reemplazar:
                         conn.execute("DELETE FROM entregas WHERE hoja='MACROGEST'")
-                    ok_mg = 0
-                    for _, r in df_prev_mg.iterrows():
-                        conn.execute("""
-                            INSERT INTO entregas
-                            (hoja,rto,dia_recibido,cliente,deposito,
-                             cantidad_comprada,producto,lote,
-                             cant_entregada,pendiente,estado,vendedor)
-                            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-                        """, (
-                            "MACROGEST", r["rto"], r["dia_recibido"],
-                            r["cliente"], r["deposito"],
-                            r["cantidad_comprada"], r["producto"], r["lote"],
-                            r["cant_entregada"], r["pendiente"],
-                            r["estado"], r["vendedor"],
-                        ))
-                        ok_mg += 1
+                    mg_batch = [
+                        ("MACROGEST", r["rto"], r["dia_recibido"],
+                         r["cliente"], r["deposito"], r["cantidad_comprada"],
+                         r["producto"], r["lote"], r["cant_entregada"],
+                         r["pendiente"], r["estado"], r["vendedor"])
+                        for _, r in df_prev_mg.iterrows()
+                    ]
+                    conn.cursor().executemany("""INSERT INTO entregas
+                        (hoja,rto,dia_recibido,cliente,deposito,cantidad_comprada,
+                         producto,lote,cant_entregada,pendiente,estado,vendedor)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""", mg_batch)
+                    ok_mg = len(mg_batch)
                     conn.commit(); conn.close()
                     guardar_metadata("ultima_importacion_mg",
                                      datetime.now().strftime("%d/%m/%Y %H:%M"))
