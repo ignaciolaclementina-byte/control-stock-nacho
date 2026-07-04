@@ -303,6 +303,16 @@ def inicializar_db():
             moneda      TEXT DEFAULT 'USD',
             usuario     TEXT
         )""",
+        f"""CREATE TABLE IF NOT EXISTS lista_precios (
+            id_precio_lista {_pk},
+            rubro           TEXT,
+            producto        TEXT NOT NULL,
+            um              TEXT,
+            precio_contado  REAL DEFAULT 0,
+            precio_vta      REAL DEFAULT 0,
+            financiacion    TEXT,
+            fecha_carga     TEXT
+        )""",
         f"""CREATE TABLE IF NOT EXISTS metas_campana (
             id_meta          {_pk},
             campana          TEXT NOT NULL DEFAULT '2026-2027',
@@ -473,6 +483,13 @@ def obtener_historial_movimientos():
         ORDER BY m.id_movimiento DESC
     """
     df = _rsql(query, conn)
+    conn.close()
+    return df
+
+@st.cache_data(ttl=60)
+def obtener_lista_precios():
+    conn = conectar_db()
+    df = _rsql("SELECT * FROM lista_precios ORDER BY rubro, producto", conn)
     conn.close()
     return df
 
@@ -2151,6 +2168,126 @@ with tab7:
             if st.button("💾 Guardar TC"):
                 guardar_metadata("tipo_cambio", str(tipo_cambio))
                 st.success("Tipo de cambio actualizado.")
+
+        st.markdown("---")
+        # ── Lista de Precios MacroGest ─────────────────────────────────────────
+        st.write("### 📋 Lista de Precios 2026")
+        st.caption("Importá la lista de precios de MacroGest. Los precios quedan guardados y se pueden mapear automáticamente al stock.")
+
+        with st.expander("📂 Importar Lista de Precios (.xlsx)", expanded=obtener_lista_precios().empty):
+            arch_lp = st.file_uploader("Archivo lista de precios", type=["xlsx","xls","csv"], key="up_lista_precios")
+            if arch_lp:
+                try:
+                    _df_lp = pd.read_excel(arch_lp) if not arch_lp.name.endswith(".csv") else pd.read_csv(arch_lp)
+                    _df_lp.columns = [str(c).strip() for c in _df_lp.columns]
+                    # Mapeo flexible de columnas
+                    _col_map_lp = {
+                        "Rubro":"rubro","RUBRO":"rubro",
+                        "Producto":"producto","PRODUCTO":"producto","Descripcion":"producto",
+                        "UM":"um","Unidad":"um","U.M.":"um",
+                        "Contado":"precio_contado","CONTADO":"precio_contado","Precio Contado":"precio_contado",
+                        "P Vta":"precio_vta","Precio Vta":"precio_vta","P. VTA":"precio_vta","PVta":"precio_vta",
+                        "Financiación":"financiacion","Financiacion":"financiacion","FINANCIACION":"financiacion",
+                    }
+                    _df_lp.rename(columns={k:v for k,v in _col_map_lp.items() if k in _df_lp.columns}, inplace=True)
+                    for _req in ["producto","precio_contado"]:
+                        if _req not in _df_lp.columns:
+                            st.error(f"Columna requerida no encontrada: `{_req}`. Columnas disponibles: {list(_df_lp.columns)}")
+                            st.stop()
+                    _df_lp = _df_lp[_df_lp["producto"].apply(lambda x: bool(safe_str(x)))]
+                    # Preview
+                    st.markdown(f"**{len(_df_lp)} productos** · {_df_lp.get('rubro', pd.Series()).nunique() if 'rubro' in _df_lp.columns else '?'} rubros")
+                    st.dataframe(_df_lp.head(15), use_container_width=True, hide_index=True)
+                    st.caption("Preview — primeros 15 registros")
+                    if st.button("✅ Confirmar importación lista de precios", type="primary", key="conf_lp"):
+                        _ts_lp = datetime.now().strftime("%d/%m/%Y %H:%M")
+                        lp_batch = [
+                            (safe_str(r.get("rubro","")),
+                             safe_str(r.get("producto","")),
+                             safe_str(r.get("um","")),
+                             safe_float(r.get("precio_contado",0)),
+                             safe_float(r.get("precio_vta",0)),
+                             safe_str(r.get("financiacion","")),
+                             _ts_lp)
+                            for _, r in _df_lp.iterrows() if safe_str(r.get("producto",""))
+                        ]
+                        conn = conectar_db()
+                        conn.execute("DELETE FROM lista_precios")
+                        conn.cursor().executemany("""INSERT INTO lista_precios
+                            (rubro,producto,um,precio_contado,precio_vta,financiacion,fecha_carga)
+                            VALUES (?,?,?,?,?,?,?)""", lp_batch)
+                        conn.commit(); conn.close()
+                        limpiar_cache()
+                        st.success(f"✅ {len(lp_batch)} precios importados.")
+                        st.rerun()
+                except Exception as _ex_lp:
+                    st.error(f"Error: {_ex_lp}")
+
+        df_lp = obtener_lista_precios()
+        if not df_lp.empty:
+            _lp_ult = df_lp["fecha_carga"].iloc[0] if "fecha_carga" in df_lp.columns else ""
+            if _lp_ult: st.caption(f"🕐 Última carga: **{_lp_ult}**")
+
+            # Filtros
+            _lf1, _lf2 = st.columns(2)
+            with _lf1:
+                rubros_lp = ["Todos"] + sorted(df_lp["rubro"].dropna().unique().tolist())
+                f_rubro_lp = st.selectbox("Rubro", rubros_lp, key="f_rubro_lp")
+            with _lf2:
+                busq_lp = st.text_input("🔍 Buscar producto", key="busq_lp")
+            df_lp_f = df_lp.copy()
+            if f_rubro_lp != "Todos": df_lp_f = df_lp_f[df_lp_f["rubro"] == f_rubro_lp]
+            if busq_lp: df_lp_f = df_lp_f[df_lp_f["producto"].str.contains(busq_lp, case=False, na=False)]
+
+            st.dataframe(
+                df_lp_f[["rubro","producto","um","precio_contado","precio_vta","financiacion"]]
+                .rename(columns={
+                    "rubro":"Rubro","producto":"Producto","um":"UM",
+                    "precio_contado":"Contado USD","precio_vta":"P.Vta USD","financiacion":"Financiación"
+                }),
+                use_container_width=True, hide_index=True
+            )
+
+            # KPIs rápidos
+            _lk1, _lk2, _lk3 = st.columns(3)
+            with _lk1: st.metric("Productos en lista", len(df_lp))
+            with _lk2: st.metric("Rubros", df_lp["rubro"].nunique())
+            with _lk3: st.metric("Precio promedio USD", f"{df_lp['precio_contado'].mean():.2f}")
+
+            st.download_button("📥 Exportar lista de precios",
+                               data=to_excel_bytes(df_lp_f.drop(columns=["id_precio_lista","fecha_carga"], errors="ignore"), "Lista_Precios"),
+                               file_name=f"lista_precios_{datetime.now().strftime('%Y%m%d')}.xlsx")
+
+            # ── Auto-mapeo al stock ───────────────────────────────────────────
+            st.markdown("---")
+            st.write("#### 🔗 Mapear precios al stock automáticamente")
+            st.caption("Busca coincidencias por nombre entre la lista de precios y los productos en stock, y actualiza el precio unitario.")
+            if st.button("🔗 Ejecutar mapeo automático", key="btn_mapeo_lp"):
+                prod_db = obtener_productos_completo()
+                if prod_db.empty:
+                    st.warning("Sin productos en stock para mapear.")
+                else:
+                    conn = conectar_db()
+                    mapeados = sin_match = 0
+                    for _, lp_row in df_lp.iterrows():
+                        nom_lp = safe_str(lp_row["producto"]).upper().strip()
+                        # Búsqueda exacta primero, luego parcial
+                        match = prod_db[prod_db["nombre"].str.upper().str.strip() == nom_lp]
+                        if match.empty:
+                            match = prod_db[prod_db["nombre"].str.upper().str.contains(
+                                nom_lp[:15], na=False)] if len(nom_lp) >= 5 else pd.DataFrame()
+                        if not match.empty:
+                            conn.execute("""UPDATE productos SET precio_unitario=?, moneda_precio='USD'
+                                WHERE nombre=?""", (float(lp_row["precio_contado"]), match.iloc[0]["nombre"]))
+                            mapeados += 1
+                        else:
+                            sin_match += 1
+                    conn.commit(); conn.close()
+                    limpiar_cache()
+                    st.success(f"✅ {mapeados} productos mapeados. {sin_match} sin coincidencia.")
+                    if sin_match > 0:
+                        st.caption("Los productos sin coincidencia se pueden actualizar manualmente en la tabla de abajo.")
+                    st.rerun()
 
         st.markdown("---")
         st.write("### 🏷️ Actualizar Precios por Producto")
