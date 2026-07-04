@@ -1250,7 +1250,59 @@ if auth_enabled and st.session_state.get("authenticated"):
             st.rerun()
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 13. TABS PRINCIPALES
+# 13. SIDEBAR CON ALERTAS Y NAVEGACIÓN
+# ─────────────────────────────────────────────────────────────────────────────
+with st.sidebar:
+    st.markdown("## 🧪 La Clementina S.A.")
+    st.caption(f"👤 {st.session_state.get('user_nombre','') or 'Invitado'} — {st.session_state.get('user_rol','operador')}")
+    st.markdown("---")
+
+    # Cargar datos para alertas (usa cache, no genera carga extra)
+    _sb_stock = obtener_stock_con_compromisos()
+    _sb_ent   = obtener_entregas()
+    _sb_U     = st.session_state.umbral_alerta
+
+    if not _sb_stock.empty:
+        _neg  = int((_sb_stock["Stock Actual"] < 0).sum())
+        _bajo = int(((_sb_stock["Stock Actual"] >= 0) & (_sb_stock["Stock Actual"] < _sb_U)).sum())
+        _comp = int((_sb_stock["Disponible Neto"] < 0).sum())
+        _pend30 = 0
+        if not _sb_ent.empty:
+            _dias_p = _sb_ent["dia_recibido"].apply(dias_desde)
+            _pend30 = int(((_sb_ent["pendiente"] > 0) & (_dias_p > 30)).sum())
+
+        st.markdown("### 🚦 Estado actual")
+        if _neg > 0:
+            st.error(f"🔴 **{_neg}** producto{'s' if _neg>1 else ''} en negativo")
+        if _bajo > 0:
+            st.warning(f"🟡 **{_bajo}** bajo umbral (<{_sb_U})")
+        if _comp > 0:
+            st.warning(f"🟠 **{_comp}** comprometido{'s' if _comp>1 else ''} sin cobertura")
+        if _pend30 > 0:
+            st.warning(f"⏳ **{_pend30}** entrega{'s' if _pend30>1 else ''} con +30 días")
+        if _neg == 0 and _bajo == 0 and _comp == 0 and _pend30 == 0:
+            st.success("✅ Todo en orden")
+
+        st.markdown("---")
+        st.markdown("### 📊 Resumen rápido")
+        st.metric("Productos",    _sb_stock["Producto"].nunique())
+        st.metric("Depósitos",    _sb_stock["Deposito"].nunique())
+        if not _sb_ent.empty:
+            _pend_tot = _sb_ent[_sb_ent["pendiente"] > 0]["pendiente"].sum()
+            st.metric("Pendiente entregar", f"{_pend_tot:,.0f}")
+
+    st.markdown("---")
+    _ult_imp = obtener_metadata("ultima_importacion")
+    _ult_mg  = obtener_metadata("ultima_importacion_mg")
+    if _ult_imp: st.caption(f"📦 Stock: **{_ult_imp}**")
+    if _ult_mg:  st.caption(f"🔄 MG: **{_ult_mg}**")
+
+    if st.button("🔄 Actualizar datos", use_container_width=True):
+        limpiar_cache()
+        st.rerun()
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 14. TABS PRINCIPALES
 # ─────────────────────────────────────────────────────────────────────────────
 st.title("🧪 Control de Depósito Inteligente")
 
@@ -1279,12 +1331,17 @@ with tab1:
         st.caption("Para empezar, andá a ⚙️ Configuración → Importar Stock desde MacroGest y subí el archivo de saldos.")
     else:
         U = st.session_state.umbral_alerta
-        for meta, caption in [
-            ("ultima_importacion",          "🕐 Última importación stock"),
-            ("ultima_importacion_entregas",  "📦 Última importación entregas"),
-        ]:
-            val = obtener_metadata(meta)
-            if val: st.caption(f"{caption}: **{val}**")
+        # Barra de estado con timestamps
+        _ts_cols = st.columns(3)
+        with _ts_cols[0]:
+            _v = obtener_metadata("ultima_importacion")
+            st.caption(f"🕐 Stock: **{_v or 'sin datos'}**")
+        with _ts_cols[1]:
+            _v2 = obtener_metadata("ultima_importacion_entregas")
+            st.caption(f"📦 Entregas: **{_v2 or 'sin datos'}**")
+        with _ts_cols[2]:
+            _v3 = obtener_metadata("ultima_importacion_mg")
+            st.caption(f"🔄 MG: **{_v3 or 'sin datos'}**")
 
         # KPIs
         neg_n  = len(stock_df[stock_df["Stock Actual"] < 0])
@@ -1702,6 +1759,9 @@ def mostrar_tab_entregas(hoja_nombre, titulo):
                     st.error(f"Error: {ex}")
 
     df_h = obtener_entregas(hoja_nombre)
+    _ult_ent = obtener_metadata("ultima_importacion_entregas")
+    if _ult_ent: st.caption(f"🕐 Última importación: **{_ult_ent}**")
+
     if df_h.empty:
         st.info("Sin datos. Importá en 'LC / LCAGRO'.")
         return
@@ -1844,15 +1904,30 @@ with tab5:
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab6:
     st.subheader("📜 Historial de Movimientos")
+    _ult_h = obtener_metadata("ultima_importacion")
+    if _ult_h: st.caption(f"🕐 Última importación de stock: **{_ult_h}**")
     hist_df = obtener_historial_movimientos()
 
     if hist_df.empty:
         st.info("Sin movimientos registrados.")
     else:
-        ch1, ch2, ch3 = st.columns(3)
+        # KPIs rápidos
+        _hk1, _hk2, _hk3, _hk4 = st.columns(4)
+        with _hk1: st.metric("Total movimientos", len(hist_df))
+        with _hk2: st.metric("Entradas", int((hist_df["Tipo"]=="Entrada").sum()))
+        with _hk3: st.metric("Salidas",  int((hist_df["Tipo"]=="Salida").sum()))
+        with _hk4:
+            _usu_list = hist_df["Usuario"].replace("","sistema").unique()
+            st.metric("Operadores", len(_usu_list))
+        st.markdown("---")
+
+        ch1, ch2, ch3, ch4 = st.columns(4)
         with ch1: f_tipo_h = st.selectbox("Tipo", ["Todos","Entrada","Salida"])
         with ch2: f_orig_h = st.selectbox("Origen", ["Todos","excel","manual","entrega"])
-        with ch3: f_bus_h  = st.text_input("🔍 Buscar")
+        with ch3: f_bus_h  = st.text_input("🔍 Buscar producto/lote")
+        with ch4:
+            usu_opts = ["Todos"] + sorted(hist_df["Usuario"].replace("","sistema").unique().tolist())
+            f_usu_h  = st.selectbox("Operador", usu_opts)
         cd1, cd2, cd3 = st.columns(3)
         with cd1:
             f_desde = st.date_input("Desde", value=datetime.now().date()-timedelta(days=30))
@@ -1864,6 +1939,7 @@ with tab6:
         df_hf = hist_df.copy()
         if f_tipo_h != "Todos": df_hf = df_hf[df_hf["Tipo"] == f_tipo_h]
         if f_orig_h != "Todos": df_hf = df_hf[df_hf["Origen"] == f_orig_h]
+        if f_usu_h  != "Todos": df_hf = df_hf[df_hf["Usuario"].replace("","sistema") == f_usu_h]
         if f_bus_h:
             df_hf = df_hf[
                 df_hf["Producto"].str.contains(f_bus_h, case=False, na=False) |
@@ -1879,12 +1955,28 @@ with tab6:
         df_hf["_fdt"] = df_hf["Fecha"].apply(parse_fh)
         df_hf = df_hf[(df_hf["_fdt"] >= f_desde) & (df_hf["_fdt"] <= f_hasta)].drop(columns=["_fdt"])
 
-        st.markdown(f"**{len(df_hf)} filas**")
+        st.markdown(f"**{len(df_hf)} movimientos** en el período seleccionado")
         st.dataframe(df_hf, use_container_width=True, hide_index=True)
 
         if not df_hf.empty:
-            st.download_button("📥 Exportar historial", data=to_excel_bytes(df_hf, "Historial"),
-                               file_name="historial.xlsx")
+            _dh1, _dh2 = st.columns(2)
+            with _dh1:
+                st.download_button("📥 Exportar historial (.xlsx)",
+                                   data=to_excel_bytes(df_hf, "Historial"),
+                                   file_name=f"historial_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                                   use_container_width=True)
+            with _dh2:
+                # Mini gráfico de actividad por día
+                if len(df_hf) > 1:
+                    df_hf["_fdt2"] = df_hf["Fecha"].apply(parse_fh)
+                    act_g = df_hf.groupby(["_fdt2","Tipo"]).size().reset_index(name="N")
+                    act_g["_fdt2"] = act_g["_fdt2"].astype(str)
+                    fig_act = px.bar(act_g, x="_fdt2", y="N", color="Tipo",
+                                     color_discrete_map={"Entrada":"#28a745","Salida":"#dc3545"},
+                                     title="Actividad diaria", barmode="group")
+                    fig_act.update_layout(height=220, margin=dict(l=0,r=0,t=30,b=0),
+                                          xaxis_title="", yaxis_title="Movimientos")
+                    st.plotly_chart(fig_act, use_container_width=True)
 
         # Anular movimiento
         if es_admin():
@@ -1933,15 +2025,23 @@ with tab6:
         if not df_tr.empty:
             st.markdown("---")
             st.subheader("↔️ Historial de Transferencias")
+            st.caption(f"{len(df_tr)} transferencias registradas")
             st.dataframe(df_tr, use_container_width=True, hide_index=True)
+            st.download_button("📥 Exportar transferencias (.xlsx)",
+                               data=to_excel_bytes(df_tr, "Transferencias"),
+                               file_name=f"transferencias_{datetime.now().strftime('%Y%m%d')}.xlsx")
 
         if not df_inv_h.empty:
             st.markdown("---")
             st.subheader("📋 Auditorías de Inventario")
-            st.dataframe(df_inv_h.rename(columns={
+            df_inv_show = df_inv_h.rename(columns={
                 "fecha_conteo":"Fecha","codigo":"Código","producto":"Producto","deposito":"Depósito",
                 "stock_sistema":"Sistema","conteo_fisico":"Conteo","diferencia":"Dif","observaciones":"Notas"
-            }), use_container_width=True, hide_index=True)
+            })
+            st.dataframe(df_inv_show, use_container_width=True, hide_index=True)
+            st.download_button("📥 Exportar auditorías (.xlsx)",
+                               data=to_excel_bytes(df_inv_show, "Auditorias"),
+                               file_name=f"auditorias_{datetime.now().strftime('%Y%m%d')}.xlsx")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
