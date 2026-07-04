@@ -1250,59 +1250,7 @@ if auth_enabled and st.session_state.get("authenticated"):
             st.rerun()
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 13. SIDEBAR CON ALERTAS Y NAVEGACIÓN
-# ─────────────────────────────────────────────────────────────────────────────
-with st.sidebar:
-    st.markdown("## 🧪 La Clementina S.A.")
-    st.caption(f"👤 {st.session_state.get('user_nombre','') or 'Invitado'} — {st.session_state.get('user_rol','operador')}")
-    st.markdown("---")
-
-    # Cargar datos para alertas (usa cache, no genera carga extra)
-    _sb_stock = obtener_stock_con_compromisos()
-    _sb_ent   = obtener_entregas()
-    _sb_U     = st.session_state.umbral_alerta
-
-    if not _sb_stock.empty:
-        _neg  = int((_sb_stock["Stock Actual"] < 0).sum())
-        _bajo = int(((_sb_stock["Stock Actual"] >= 0) & (_sb_stock["Stock Actual"] < _sb_U)).sum())
-        _comp = int((_sb_stock["Disponible Neto"] < 0).sum())
-        _pend30 = 0
-        if not _sb_ent.empty:
-            _dias_p = _sb_ent["dia_recibido"].apply(dias_desde)
-            _pend30 = int(((_sb_ent["pendiente"] > 0) & (_dias_p > 30)).sum())
-
-        st.markdown("### 🚦 Estado actual")
-        if _neg > 0:
-            st.error(f"🔴 **{_neg}** producto{'s' if _neg>1 else ''} en negativo")
-        if _bajo > 0:
-            st.warning(f"🟡 **{_bajo}** bajo umbral (<{_sb_U})")
-        if _comp > 0:
-            st.warning(f"🟠 **{_comp}** comprometido{'s' if _comp>1 else ''} sin cobertura")
-        if _pend30 > 0:
-            st.warning(f"⏳ **{_pend30}** entrega{'s' if _pend30>1 else ''} con +30 días")
-        if _neg == 0 and _bajo == 0 and _comp == 0 and _pend30 == 0:
-            st.success("✅ Todo en orden")
-
-        st.markdown("---")
-        st.markdown("### 📊 Resumen rápido")
-        st.metric("Productos",    _sb_stock["Producto"].nunique())
-        st.metric("Depósitos",    _sb_stock["Deposito"].nunique())
-        if not _sb_ent.empty:
-            _pend_tot = _sb_ent[_sb_ent["pendiente"] > 0]["pendiente"].sum()
-            st.metric("Pendiente entregar", f"{_pend_tot:,.0f}")
-
-    st.markdown("---")
-    _ult_imp = obtener_metadata("ultima_importacion")
-    _ult_mg  = obtener_metadata("ultima_importacion_mg")
-    if _ult_imp: st.caption(f"📦 Stock: **{_ult_imp}**")
-    if _ult_mg:  st.caption(f"🔄 MG: **{_ult_mg}**")
-
-    if st.button("🔄 Actualizar datos", use_container_width=True):
-        limpiar_cache()
-        st.rerun()
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 14. TABS PRINCIPALES
+# 13. TABS PRINCIPALES
 # ─────────────────────────────────────────────────────────────────────────────
 st.title("🧪 Control de Depósito Inteligente")
 
@@ -1331,17 +1279,13 @@ with tab1:
         st.caption("Para empezar, andá a ⚙️ Configuración → Importar Stock desde MacroGest y subí el archivo de saldos.")
     else:
         U = st.session_state.umbral_alerta
-        # Barra de estado con timestamps
-        _ts_cols = st.columns(3)
-        with _ts_cols[0]:
-            _v = obtener_metadata("ultima_importacion")
-            st.caption(f"🕐 Stock: **{_v or 'sin datos'}**")
-        with _ts_cols[1]:
-            _v2 = obtener_metadata("ultima_importacion_entregas")
-            st.caption(f"📦 Entregas: **{_v2 or 'sin datos'}**")
-        with _ts_cols[2]:
-            _v3 = obtener_metadata("ultima_importacion_mg")
-            st.caption(f"🔄 MG: **{_v3 or 'sin datos'}**")
+        for meta, caption in [
+            ("ultima_importacion",          "🕐 Última importación stock"),
+            ("ultima_importacion_entregas",  "📦 Última importación entregas"),
+            ("ultima_importacion_mg",        "🔄 Última importación MacroGest"),
+        ]:
+            val = obtener_metadata(meta)
+            if val: st.caption(f"{caption}: **{val}**")
 
         # KPIs
         neg_n  = len(stock_df[stock_df["Stock Actual"] < 0])
@@ -1376,34 +1320,176 @@ with tab1:
         st.markdown("---")
 
         # Gráficos
-        with st.expander("📊 Gráficos", expanded=False):
-            cg1, cg2 = st.columns(2)
-            with cg1:
-                dep_g = stock_df.groupby("Deposito")["Stock Actual"].sum().reset_index()
-                fig   = px.bar(dep_g.sort_values("Stock Actual"), x="Stock Actual", y="Deposito",
-                               orientation="h", title="Stock por Depósito", color="Stock Actual",
-                               color_continuous_scale="Blues")
-                fig.update_layout(height=300, showlegend=False, margin=dict(l=0,r=0,t=40,b=0))
-                st.plotly_chart(fig, use_container_width=True)
-            with cg2:
+        with st.expander("📊 Gráficos y Comparativas", expanded=False):
+            _gtabs = st.tabs(["📦 Por Depósito", "🏆 Top Productos", "⚖️ Stock vs Compromisos", "📈 Evolución", "🔤 Clasificación ABC"])
+
+            with _gtabs[0]:
+                cg1, cg2 = st.columns(2)
+                with cg1:
+                    dep_g = stock_df.groupby("Deposito")["Stock Actual"].sum().reset_index()
+                    fig   = px.bar(dep_g.sort_values("Stock Actual"), x="Stock Actual", y="Deposito",
+                                   orientation="h", title="Stock por Depósito", color="Stock Actual",
+                                   color_continuous_scale="Blues")
+                    fig.update_layout(height=300, showlegend=False, margin=dict(l=0,r=0,t=40,b=0))
+                    st.plotly_chart(fig, use_container_width=True)
+                with cg2:
+                    if not ent_panel.empty:
+                        est_g = ent_panel.groupby("estado").size().reset_index(name="N")
+                        est_g = est_g[est_g["estado"].str.strip() != ""]
+                        if not est_g.empty:
+                            fig3 = px.pie(est_g, names="estado", values="N",
+                                          title="Estado de Entregas", hole=0.4)
+                            fig3.update_layout(height=280, margin=dict(l=0,r=0,t=40,b=0))
+                            st.plotly_chart(fig3, use_container_width=True)
+
+            with _gtabs[1]:
                 top = (stock_df.groupby("Producto")["Stock Actual"].sum()
                        .reset_index().sort_values("Stock Actual", ascending=False).head(15))
                 fig2 = px.bar(top.sort_values("Stock Actual"), x="Stock Actual", y="Producto",
-                              orientation="h", title="Top 15 Productos", color="Stock Actual",
-                              color_continuous_scale="Greens")
-                fig2.update_layout(height=400, showlegend=False, margin=dict(l=0,r=0,t=40,b=0))
+                              orientation="h", title="Top 15 Productos por Stock",
+                              color="Stock Actual", color_continuous_scale="Greens")
+                fig2.update_layout(height=420, showlegend=False, margin=dict(l=0,r=0,t=40,b=0))
                 st.plotly_chart(fig2, use_container_width=True)
 
-            if not ent_panel.empty:
-                est_g = ent_panel.groupby("estado").size().reset_index(name="N")
-                est_g = est_g[est_g["estado"].str.strip() != ""]
-                if not est_g.empty:
-                    fig3 = px.pie(est_g, names="estado", values="N",
-                                  title="Estado Entregas", hole=0.4)
-                    fig3.update_layout(height=280, margin=dict(l=0,r=0,t=40,b=0))
-                    st.plotly_chart(fig3, use_container_width=True)
+            with _gtabs[2]:
+                # Stock vs Compromisos por depósito
+                st.caption("Compara el stock disponible contra los compromisos pendientes de entrega en cada depósito.")
+                _dep_comp = stock_df.groupby("Deposito").agg(
+                    Stock=("Stock Actual","sum"),
+                    Comprometido=("Comprometido","sum")
+                ).reset_index()
+                _dep_comp["Disponible"] = (_dep_comp["Stock"] - _dep_comp["Comprometido"]).clip(lower=0)
+                _dep_comp = _dep_comp.sort_values("Stock", ascending=False)
+                fig_comp = px.bar(_dep_comp, x="Deposito", y=["Disponible","Comprometido"],
+                                  barmode="stack", title="Stock Disponible vs Comprometido por Depósito",
+                                  color_discrete_map={"Disponible":"#28a745","Comprometido":"#fd7e14"},
+                                  labels={"value":"Unidades","variable":""})
+                fig_comp.update_layout(height=350, margin=dict(l=0,r=0,t=40,b=0))
+                st.plotly_chart(fig_comp, use_container_width=True)
+                st.dataframe(
+                    _dep_comp.rename(columns={"Stock":"Stock Total","Disponible":"Disponible Neto"}),
+                    use_container_width=True, hide_index=True
+                )
+
+            with _gtabs[3]:
+                # Evolución del stock de un producto
+                st.caption("Seleccioná un producto para ver cómo evolucionó su stock en el tiempo.")
+                hist_evo = obtener_historial_movimientos()
+                if hist_evo.empty:
+                    st.info("Sin historial de movimientos.")
+                else:
+                    prod_evo = st.selectbox("Producto", sorted(stock_df["Producto"].unique()), key="evo_prod")
+                    df_evo = hist_evo[hist_evo["Producto"] == prod_evo].copy()
+                    if df_evo.empty:
+                        st.info("Sin movimientos para este producto.")
+                    else:
+                        df_evo = df_evo[df_evo["Anulado"] == 0].copy()
+                        def _parse_dt(s):
+                            try: return datetime.strptime(str(s)[:16], "%d/%m/%Y %H:%M")
+                            except: return None
+                        df_evo["_dt"] = df_evo["Fecha"].apply(_parse_dt)
+                        df_evo = df_evo.dropna(subset=["_dt"]).sort_values("_dt")
+                        df_evo["Delta"] = df_evo.apply(
+                            lambda r: r["Cantidad"] if r["Tipo"]=="Entrada" else -r["Cantidad"], axis=1)
+                        df_evo["Stock Acumulado"] = df_evo["Delta"].cumsum()
+                        df_evo["Fecha Mov"] = df_evo["_dt"].dt.strftime("%d/%m/%Y")
+                        fig_evo = px.area(df_evo, x="_dt", y="Stock Acumulado",
+                                          title=f"Evolución de stock — {prod_evo}",
+                                          color_discrete_sequence=["#007bff"],
+                                          labels={"_dt":"Fecha","Stock Acumulado":"Unidades"})
+                        fig_evo.add_scatter(x=df_evo["_dt"], y=df_evo["Stock Acumulado"],
+                                            mode="markers",
+                                            marker=dict(color=df_evo["Tipo"].map(
+                                                {"Entrada":"#28a745","Salida":"#dc3545"})),
+                                            name="Movimientos",
+                                            hovertemplate="%{customdata}<br>Stock: %{y:,.1f}<extra></extra>",
+                                            customdata=df_evo["Tipo"] + " " + df_evo["Cantidad"].astype(str))
+                        fig_evo.update_layout(height=350, margin=dict(l=0,r=0,t=40,b=0))
+                        st.plotly_chart(fig_evo, use_container_width=True)
+                        st.caption(f"Verde = Entrada · Rojo = Salida · {len(df_evo)} movimientos registrados")
+
+            with _gtabs[4]:
+                # Clasificación ABC por valor de stock
+                st.caption("ABC: A = productos que concentran el 80% del stock (los más críticos), B = 15%, C = el resto.")
+                _abc = stock_df.groupby("Producto")["Stock Actual"].sum().reset_index()
+                _abc = _abc[_abc["Stock Actual"] > 0].sort_values("Stock Actual", ascending=False)
+                if _abc.empty:
+                    st.info("Sin stock positivo para clasificar.")
+                else:
+                    _abc["Acum %"] = _abc["Stock Actual"].cumsum() / _abc["Stock Actual"].sum() * 100
+                    _abc["Clase"] = _abc["Acum %"].apply(
+                        lambda x: "A — Crítico" if x <= 80 else ("B — Importante" if x <= 95 else "C — Bajo impacto"))
+                    _col_abc1, _col_abc2 = st.columns(2)
+                    with _col_abc1:
+                        abc_res = _abc.groupby("Clase").agg(
+                            Productos=("Producto","count"),
+                            Stock_Total=("Stock Actual","sum")
+                        ).reset_index()
+                        fig_abc = px.pie(abc_res, names="Clase", values="Productos",
+                                         title="Distribución ABC (por cantidad de productos)",
+                                         color="Clase",
+                                         color_discrete_map={
+                                             "A — Crítico":"#dc3545",
+                                             "B — Importante":"#ffc107",
+                                             "C — Bajo impacto":"#28a745"})
+                        fig_abc.update_layout(height=300, margin=dict(l=0,r=0,t=40,b=0))
+                        st.plotly_chart(fig_abc, use_container_width=True)
+                    with _col_abc2:
+                        st.dataframe(abc_res.rename(columns={"Stock_Total":"Stock Total"}),
+                                     use_container_width=True, hide_index=True)
+                    st.dataframe(
+                        _abc[["Producto","Stock Actual","Acum %","Clase"]].rename(
+                            columns={"Stock Actual":"Stock","Acum %":"% Acumulado"}
+                        ).round(1),
+                        use_container_width=True, hide_index=True
+                    )
+                    st.download_button("📥 Exportar clasificación ABC",
+                                       data=to_excel_bytes(_abc, "ABC"),
+                                       file_name=f"abc_{datetime.now().strftime('%Y%m%d')}.xlsx")
 
         st.markdown("---")
+
+        # ── Buscador Global ───────────────────────────────────────────────────
+        with st.expander("🔎 Buscador Global", expanded=False):
+            st.caption("Busca simultáneamente en stock, entregas y pedidos Sin Entregar MacroGest.")
+            q_glob = st.text_input("Buscar producto o cliente...", key="busq_global",
+                                   placeholder="ej: Round Up, BELTRAMO, glifosato...")
+            if q_glob and len(q_glob) >= 2:
+                _bg_cols = st.columns(3)
+                with _bg_cols[0]:
+                    st.markdown("**📦 En Stock**")
+                    _bg_stk = stock_df[
+                        stock_df["Producto"].str.contains(q_glob, case=False, na=False) |
+                        stock_df["Código"].astype(str).str.contains(q_glob, case=False, na=False)
+                    ][["Producto","Deposito","Stock Actual","Comprometido","Disponible Neto"]]
+                    if _bg_stk.empty: st.info("Sin resultados.")
+                    else: st.dataframe(_bg_stk, use_container_width=True, hide_index=True)
+
+                with _bg_cols[1]:
+                    st.markdown("**📋 En Entregas**")
+                    if not ent_panel.empty:
+                        _bg_ent = ent_panel[
+                            ent_panel["producto"].str.contains(q_glob, case=False, na=False) |
+                            ent_panel["cliente"].str.contains(q_glob, case=False, na=False)
+                        ][["hoja","cliente","producto","pendiente","estado"]].head(20)
+                        if _bg_ent.empty: st.info("Sin resultados.")
+                        else: st.dataframe(_bg_ent, use_container_width=True, hide_index=True)
+                    else:
+                        st.info("Sin datos de entregas.")
+
+                with _bg_cols[2]:
+                    st.markdown("**🔄 En Sin Entregar MG**")
+                    _bg_mg = obtener_entregas("MACROGEST")
+                    if not _bg_mg.empty:
+                        _bg_mg_f = _bg_mg[
+                            _bg_mg["producto"].str.contains(q_glob, case=False, na=False) |
+                            _bg_mg["cliente"].str.contains(q_glob, case=False, na=False)
+                        ][["cliente","producto","pendiente","deposito","dia_recibido"]].head(20)
+                        if _bg_mg_f.empty: st.info("Sin resultados.")
+                        else: st.dataframe(_bg_mg_f, use_container_width=True, hide_index=True)
+                    else:
+                        st.info("Sin datos MacroGest.")
+
         st.subheader("🔍 Filtros")
 
         search_q = st.text_input("⌨️ Buscar por nombre o código", placeholder="Escribí aquí...", key="search_p1")
@@ -2189,11 +2275,12 @@ with tab7:
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab8:
     st.subheader("📈 Reportes y Análisis")
-    r_tab1, r_tab2, r_tab3, r_tab4 = st.tabs([
+    r_tab1, r_tab2, r_tab3, r_tab4, r_tab5 = st.tabs([
         "👥 Dashboard Vendedores",
         "🔄 Rotación de Stock",
         "⏰ Vencimientos",
-        "📄 Reporte Mensual"
+        "📄 Reporte Mensual",
+        "📊 Resumen Ejecutivo",
     ])
 
     # ── Vendedores ────────────────────────────────────────────────────────────
@@ -2316,6 +2403,86 @@ with tab8:
                     }),
                     use_container_width=True, hide_index=True
                 )
+
+    # ── Resumen Ejecutivo ─────────────────────────────────────────────────────
+    with r_tab5:
+        st.write("### 📊 Resumen Ejecutivo")
+        st.caption(f"Generado el {datetime.now().strftime('%d/%m/%Y %H:%M')} · La Clementina S.A.")
+        _re_stock = obtener_stock_con_compromisos()
+        _re_ent   = obtener_entregas()
+        _re_mg    = obtener_entregas("MACROGEST")
+        _re_U     = st.session_state.umbral_alerta
+
+        if not _re_stock.empty:
+            # KPIs principales
+            st.markdown("#### 📦 Stock")
+            _ek1,_ek2,_ek3,_ek4,_ek5,_ek6 = st.columns(6)
+            with _ek1: st.metric("Productos",     _re_stock["Producto"].nunique())
+            with _ek2: st.metric("Depósitos",     _re_stock["Deposito"].nunique())
+            with _ek3: st.metric("Vol. Total",    f"{_re_stock['Stock Actual'].sum():,.0f}")
+            with _ek4: st.metric("Bajo umbral 🟡", int((_re_stock["Stock Actual"].between(0, _re_U, inclusive="left")).sum()))
+            with _ek5: st.metric("Negativo 🔴",   int((_re_stock["Stock Actual"] < 0).sum()))
+            with _ek6: st.metric("Comprometido 🟠", int((_re_stock["Disponible Neto"] < 0).sum()))
+
+            # Stock crítico
+            _crit = _re_stock[_re_stock["Stock Actual"] < _re_U].sort_values("Stock Actual").head(10)
+            if not _crit.empty:
+                st.markdown("**🚨 Productos críticos (bajo umbral o negativos)**")
+                st.dataframe(_crit[["Producto","Deposito","Stock Actual","Comprometido","Disponible Neto"]],
+                             use_container_width=True, hide_index=True)
+
+        if not _re_ent.empty:
+            st.markdown("---")
+            st.markdown("#### 📋 Entregas")
+            _ee_pend = _re_ent[_re_ent["pendiente"] > 0]
+            _ee_dias = _ee_pend["dia_recibido"].apply(dias_desde)
+            _ee1,_ee2,_ee3,_ee4 = st.columns(4)
+            with _ee1: st.metric("Registros pendientes", len(_ee_pend))
+            with _ee2: st.metric("Clientes",             _ee_pend["cliente"].nunique())
+            with _ee3: st.metric("Vol. pendiente",       f"{_ee_pend['pendiente'].sum():,.0f}")
+            with _ee4: st.metric("+30 días ⏳",           int((_ee_dias > 30).sum()))
+
+        if not _re_mg.empty:
+            st.markdown("---")
+            st.markdown("#### 🔄 Sin Entregar MacroGest")
+            _em_pend = _re_mg[_re_mg["pendiente"] > 0]
+            _em1,_em2,_em3 = st.columns(3)
+            with _em1: st.metric("Pedidos pendientes", len(_em_pend))
+            with _em2: st.metric("Clientes",           _em_pend["cliente"].nunique())
+            with _em3: st.metric("Vol. pendiente",     f"{_em_pend['pendiente'].sum():,.0f}")
+
+        # Descarga todo en un solo Excel
+        st.markdown("---")
+        if st.button("📥 Generar Reporte Ejecutivo Completo (.xlsx)", type="primary"):
+            _out_ej = io.BytesIO()
+            with pd.ExcelWriter(_out_ej, engine="openpyxl") as _w:
+                if not _re_stock.empty:
+                    _re_stock.to_excel(_w, index=False, sheet_name="Stock_Actual")
+                    _crit_all = _re_stock[_re_stock["Stock Actual"] < _re_U]
+                    if not _crit_all.empty:
+                        _crit_all.to_excel(_w, index=False, sheet_name="Stock_Critico")
+                if not _re_ent.empty:
+                    _re_ent[_re_ent["pendiente"] > 0].to_excel(_w, index=False, sheet_name="Entregas_Pendientes")
+                if not _re_mg.empty:
+                    _re_mg[_re_mg["pendiente"] > 0].to_excel(_w, index=False, sheet_name="SinEntregar_MG")
+                _kpi_ej = pd.DataFrame({
+                    "Indicador": ["Fecha","Productos","Depósitos","Stock Negativo","Bajo Umbral",
+                                  "Pendientes Entregas","Pendientes MG"],
+                    "Valor": [
+                        datetime.now().strftime("%d/%m/%Y %H:%M"),
+                        _re_stock["Producto"].nunique() if not _re_stock.empty else 0,
+                        _re_stock["Deposito"].nunique() if not _re_stock.empty else 0,
+                        int((_re_stock["Stock Actual"] < 0).sum()) if not _re_stock.empty else 0,
+                        int((_re_stock["Stock Actual"].between(0,_re_U,inclusive="left")).sum()) if not _re_stock.empty else 0,
+                        len(_re_ent[_re_ent["pendiente"]>0]) if not _re_ent.empty else 0,
+                        len(_re_mg[_re_mg["pendiente"]>0])  if not _re_mg.empty  else 0,
+                    ]
+                })
+                _kpi_ej.to_excel(_w, index=False, sheet_name="KPIs")
+            st.download_button("⬇️ Descargar ahora",
+                               data=_out_ej.getvalue(),
+                               file_name=f"ejecutivo_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
     # ── Reporte Mensual ───────────────────────────────────────────────────────
     with r_tab4:
@@ -3536,6 +3703,51 @@ with tab11:
                 st.info("💡 Para ver el valor monetario pendiente, importá ventas desde "
                         "**Plan Comercial → Cartera de Clientes → Importar desde MacroGest**.")
             st.dataframe(resumen_mg, use_container_width=True, hide_index=True)
+
+            # ── Comparativa por Vendedor ──────────────────────────────────────
+            st.markdown("---")
+            st.markdown("#### 👤 Comparativa por Vendedor")
+            st.caption("Entregado vs pendiente para cada vendedor según los filtros activos.")
+            _vend_mg = df_f_mg.groupby("vendedor").agg(
+                Clientes=("cliente","nunique"),
+                Comprado=("cantidad_comprada","sum"),
+                Entregado=("cant_entregada","sum"),
+                Pendiente=("pendiente","sum"),
+            ).reset_index().rename(columns={"vendedor":"Vendedor"})
+            _vend_mg["% Entregado"] = (_vend_mg["Entregado"] / _vend_mg["Comprado"].replace(0,1) * 100).round(1)
+            _vend_mg = _vend_mg.sort_values("Pendiente", ascending=False)
+            _vg1, _vg2 = st.columns(2)
+            with _vg1:
+                st.dataframe(_vend_mg, use_container_width=True, hide_index=True)
+            with _vg2:
+                if len(_vend_mg) > 0:
+                    fig_vm = px.bar(_vend_mg, x="Vendedor", y=["Entregado","Pendiente"],
+                                    barmode="stack", title="Entregado vs Pendiente",
+                                    color_discrete_map={"Entregado":"#28a745","Pendiente":"#dc3545"},
+                                    labels={"value":"Unidades","variable":""})
+                    fig_vm.update_layout(height=280, margin=dict(l=0,r=0,t=40,b=0))
+                    st.plotly_chart(fig_vm, use_container_width=True)
+
+            # ── Tabla cruzada Cliente × Producto ─────────────────────────────
+            st.markdown("---")
+            with st.expander("🗂️ Tabla cruzada: Cliente × Producto (pendiente)", expanded=False):
+                st.caption("Muestra cuánto le falta entregar a cada cliente por producto. Útil para planificar despachos.")
+                _cross = df_f_mg[df_f_mg["pendiente"] > 0].pivot_table(
+                    index="cliente", columns="producto", values="pendiente",
+                    aggfunc="sum", fill_value=0
+                )
+                if _cross.empty:
+                    st.info("Sin pendientes con los filtros actuales.")
+                else:
+                    _cross["TOTAL"] = _cross.sum(axis=1)
+                    _cross = _cross.sort_values("TOTAL", ascending=False)
+                    st.dataframe(_cross.style.format("{:,.0f}").background_gradient(
+                        cmap="Reds", subset=[c for c in _cross.columns if c != "TOTAL"]),
+                        use_container_width=True)
+                    st.download_button("📥 Exportar tabla cruzada",
+                                       data=to_excel_bytes(_cross.reset_index(), "Cliente_x_Producto"),
+                                       file_name=f"cruzada_{datetime.now().strftime('%Y%m%d')}.xlsx")
+
             st.markdown("---")
             cols_mg = ["dia_recibido","cliente","deposito","producto","cantidad_comprada",
                        "cant_entregada","pendiente","estado","vendedor","rto"]
