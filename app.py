@@ -69,6 +69,11 @@ st.markdown("""
     padding:1px 6px;border-radius:8px;font-weight:bold;margin-left:4px;vertical-align:middle}
 .login-box   {max-width:400px;margin:80px auto;padding:30px;background:white;
     border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,.1)}
+.semaforo-verde   {background:#d4edda;border-left:6px solid #28a745;padding:8px 14px;border-radius:6px;margin:3px 0}
+.semaforo-amarillo{background:#fff3cd;border-left:6px solid #ffc107;padding:8px 14px;border-radius:6px;margin:3px 0}
+.semaforo-rojo    {background:#f8d7da;border-left:6px solid #dc3545;padding:8px 14px;border-radius:6px;margin:3px 0}
+.semaforo-label   {font-weight:700;font-size:.85rem}
+.projeccion-card  {background:#f8f9fa;border:1px solid #dee2e6;border-radius:8px;padding:12px;margin:4px 0}
 </style>
 """, unsafe_allow_html=True)
 
@@ -393,6 +398,7 @@ def inicializar_db():
             "ALTER TABLE productos ADD COLUMN precio_unitario REAL DEFAULT 0",
             "ALTER TABLE productos ADD COLUMN moneda_precio TEXT DEFAULT 'USD'",
             "ALTER TABLE productos ADD COLUMN proveedor TEXT DEFAULT 'Bayer/Monsanto'",
+            "ALTER TABLE productos ADD COLUMN stock_minimo REAL DEFAULT 0",
             "ALTER TABLE movimientos ADD COLUMN origen TEXT",
             "ALTER TABLE movimientos ADD COLUMN anulado INTEGER DEFAULT 0",
             "ALTER TABLE movimientos ADD COLUMN usuario TEXT DEFAULT ''",
@@ -402,6 +408,19 @@ def inicializar_db():
         ]:
             try:  c.execute(m)
             except: pass
+
+    # Índices para acelerar queries sobre tablas grandes
+    for idx_sql in [
+        "CREATE INDEX IF NOT EXISTS idx_mov_producto ON movimientos(id_producto)",
+        "CREATE INDEX IF NOT EXISTS idx_mov_origen   ON movimientos(origen)",
+        "CREATE INDEX IF NOT EXISTS idx_mov_anulado  ON movimientos(anulado)",
+        "CREATE INDEX IF NOT EXISTS idx_mov_fecha    ON movimientos(fecha_hora)",
+        "CREATE INDEX IF NOT EXISTS idx_ent_hoja     ON entregas(hoja)",
+        "CREATE INDEX IF NOT EXISTS idx_ent_pend     ON entregas(pendiente)",
+        "CREATE INDEX IF NOT EXISTS idx_lp_producto  ON lista_precios(producto)",
+    ]:
+        try: c.execute(idx_sql)
+        except: pass
 
     # Usuario admin por defecto
     row = c.execute("SELECT COUNT(*) FROM usuarios").fetchone()
@@ -1257,15 +1276,32 @@ if auth_enabled and not st.session_state.get("authenticated"):
     mostrar_login()
     st.stop()
 
-# Header con usuario logueado
-if auth_enabled and st.session_state.get("authenticated"):
-    c_head1, c_head2 = st.columns([6, 1])
-    with c_head2:
-        st.caption(f"👤 {st.session_state.user_nombre} ({st.session_state.user_rol})")
+# Header con usuario logueado + modo oscuro
+_head_cols = st.columns([5, 1, 1])
+with _head_cols[1]:
+    if "dark_mode" not in st.session_state:
+        st.session_state.dark_mode = False
+    if st.toggle("🌙", value=st.session_state.dark_mode, key="dark_toggle", help="Modo oscuro"):
+        st.session_state.dark_mode = True
+        st.markdown("""<style>
+        .main{background:#1a1c21!important;color:#e0e0e0!important}
+        .stApp{background:#1a1c21!important}
+        .stock-card{background:#2d2f36!important;border-color:#444!important;color:#e0e0e0!important}
+        .stock-title{color:#e0e0e0!important}
+        .stock-info{color:#aaa!important}
+        section[data-testid="stSidebar"]{background:#111!important}
+        </style>""", unsafe_allow_html=True)
+    else:
+        st.session_state.dark_mode = False
+with _head_cols[2]:
+    if auth_enabled and st.session_state.get("authenticated"):
+        st.caption(f"👤 {st.session_state.user_nombre}")
         if st.button("Salir", key="logout_btn"):
             for k in ("authenticated","user_rol","user_nombre","username"):
                 st.session_state[k] = "" if k != "authenticated" else False
             st.rerun()
+if auth_enabled and st.session_state.get("authenticated"):
+    pass  # ya manejado arriba
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 13. TABS PRINCIPALES
@@ -1337,6 +1373,71 @@ with tab1:
                            f"https://wa.me/{wa}?text={urllib.parse.quote(chr(10).join(lineas))}")
 
         st.markdown("---")
+
+        # Semáforos por producto
+        with st.expander("🚦 Semáforos de Stock por Producto", expanded=False):
+            st.caption("Verde = OK · Amarillo = bajo umbral global · Rojo = negativo o bajo mínimo individual")
+            _prod_comp = obtener_productos_completo()
+            _stk_sem = stock_df.groupby("Producto")["Stock Actual"].sum().reset_index()
+            if not _prod_comp.empty and "stock_minimo" in _prod_comp.columns:
+                _stk_sem = _stk_sem.merge(
+                    _prod_comp[["nombre","stock_minimo"]].rename(columns={"nombre":"Producto"}),
+                    on="Producto", how="left"
+                )
+                _stk_sem["stock_minimo"] = _stk_sem["stock_minimo"].fillna(0)
+            else:
+                _stk_sem["stock_minimo"] = 0
+            _s1, _s2 = st.columns(2)
+            _col_sem = _s1
+            for i, row_sem in _stk_sem.sort_values("Stock Actual").iterrows():
+                _umbral_prod = row_sem["stock_minimo"] if row_sem["stock_minimo"] > 0 else U
+                if row_sem["Stock Actual"] < 0:
+                    _cls = "semaforo-rojo"; _ico = "🔴"
+                elif row_sem["Stock Actual"] < _umbral_prod:
+                    _cls = "semaforo-amarillo"; _ico = "🟡"
+                else:
+                    _cls = "semaforo-verde"; _ico = "🟢"
+                _col_sem = _s1 if i % 2 == 0 else _s2
+                _col_sem.markdown(
+                    f'<div class="{_cls}"><span class="semaforo-label">{_ico} {row_sem["Producto"]}</span>'
+                    f' — <span style="font-size:.9rem">{row_sem["Stock Actual"]:,.1f}</span>'
+                    f'<span style="font-size:.75rem;color:#6c757d"> (mín: {_umbral_prod:.0f})</span></div>',
+                    unsafe_allow_html=True
+                )
+
+        # Proyección de agotamiento
+        with st.expander("📅 Proyección de Agotamiento", expanded=False):
+            st.caption("Estimación de días de cobertura por producto basada en salidas de los últimos 90 días.")
+            _rot = calcular_rotacion_stock(90)
+            if _rot.empty:
+                st.info("Sin historial de movimientos para calcular proyección.")
+            else:
+                _rot_show = _rot[_rot["Días_Cobertura"].notna()].copy()
+                _rot_show["Alerta"] = _rot_show["Días_Cobertura"].apply(
+                    lambda d: "🔴 Crítico (<15d)" if d < 15 else ("🟡 Bajo (<45d)" if d < 45 else "🟢 OK")
+                )
+                _rp1, _rp2 = st.columns([2, 1])
+                with _rp1:
+                    fig_rot = px.bar(
+                        _rot_show.sort_values("Días_Cobertura").head(20),
+                        x="Días_Cobertura", y="Producto", orientation="h",
+                        color="Días_Cobertura",
+                        color_continuous_scale=["#dc3545","#ffc107","#28a745"],
+                        title="Días de cobertura — Top 20 productos más críticos",
+                        labels={"Días_Cobertura": "Días"}
+                    )
+                    fig_rot.update_layout(height=420, showlegend=False, margin=dict(l=0,r=0,t=40,b=0))
+                    st.plotly_chart(fig_rot, use_container_width=True)
+                with _rp2:
+                    st.dataframe(
+                        _rot_show[["Producto","Stock Actual","Sal_Diarias","Días_Cobertura","Alerta"]]
+                        .rename(columns={"Stock Actual":"Stock","Sal_Diarias":"Sal/día","Días_Cobertura":"Días"})
+                        .round(1),
+                        use_container_width=True, hide_index=True
+                    )
+                st.download_button("📥 Exportar Proyección (.xlsx)",
+                                   data=to_excel_bytes(_rot_show, "Proyeccion"),
+                                   file_name="proyeccion_agotamiento.xlsx")
 
         # Gráficos
         with st.expander("📊 Gráficos y Comparativas", expanded=False):
@@ -2060,13 +2161,24 @@ with tab6:
         df_hf["_fdt"] = df_hf["Fecha"].apply(parse_fh)
         df_hf = df_hf[(df_hf["_fdt"] >= f_desde) & (df_hf["_fdt"] <= f_hasta)].drop(columns=["_fdt"])
 
-        st.markdown(f"**{len(df_hf)} movimientos** en el período seleccionado")
-        st.dataframe(df_hf, use_container_width=True, hide_index=True)
+        _PAGE_H = 150
+        _total_h = len(df_hf)
+        _total_pages_h = max(1, (_total_h + _PAGE_H - 1) // _PAGE_H)
+        _ph1, _ph2, _ph3 = st.columns([1, 2, 1])
+        with _ph1:
+            st.markdown(f"**{_total_h} movimientos** · {_total_pages_h} páginas")
+        with _ph2:
+            _page_h = st.number_input("Página", min_value=1, max_value=_total_pages_h,
+                                      value=1, step=1, key="hist_page", label_visibility="collapsed")
+        with _ph3:
+            st.caption(f"pág {_page_h}/{_total_pages_h}")
+        df_hf_page = df_hf.iloc[(_page_h - 1) * _PAGE_H : _page_h * _PAGE_H]
+        st.dataframe(df_hf_page, use_container_width=True, hide_index=True)
 
         if not df_hf.empty:
             _dh1, _dh2 = st.columns(2)
             with _dh1:
-                st.download_button("📥 Exportar historial (.xlsx)",
+                st.download_button("📥 Exportar historial completo (.xlsx)",
                                    data=to_excel_bytes(df_hf, "Historial"),
                                    file_name=f"historial_{datetime.now().strftime('%Y%m%d')}.xlsx",
                                    use_container_width=True)
@@ -2114,6 +2226,34 @@ with tab6:
                         st.error(f"ID {id_an} no encontrado.")
                     conn.close()
                     st.rerun()
+
+        # Trazabilidad por lote
+        st.markdown("---")
+        with st.expander("🔍 Trazabilidad por Lote"):
+            st.caption("Buscá un número de lote y ves todos sus movimientos: de dónde vino y a dónde fue.")
+            _lote_q = st.text_input("Número de lote", key="trz_lote_input",
+                                    placeholder="ej: L2024-001, LOTE3...")
+            if _lote_q and len(_lote_q) >= 2:
+                _df_trz = hist_df[
+                    hist_df["Lote"].astype(str).str.contains(_lote_q, case=False, na=False)
+                ].copy()
+                if _df_trz.empty:
+                    st.info(f"Sin movimientos para el lote '{_lote_q}'.")
+                else:
+                    _trz_ent = _df_trz[_df_trz["Tipo"] == "Entrada"]["Cantidad"].sum()
+                    _trz_sal = _df_trz[_df_trz["Tipo"] == "Salida"]["Cantidad"].sum()
+                    _tc1, _tc2, _tc3, _tc4 = st.columns(4)
+                    _tc1.metric("Movimientos",      len(_df_trz))
+                    _tc2.metric("Entradas totales", f"{_trz_ent:,.1f}")
+                    _tc3.metric("Salidas totales",  f"{_trz_sal:,.1f}")
+                    _tc4.metric("Stock neto",       f"{_trz_ent - _trz_sal:,.1f}")
+                    st.dataframe(
+                        _df_trz[["Fecha","Tipo","Producto","Cantidad","Unidad","Lote","Depósito","Referencia","Usuario","Anulado"]],
+                        use_container_width=True, hide_index=True
+                    )
+                    st.download_button("📥 Exportar trazabilidad (.xlsx)",
+                                       data=to_excel_bytes(_df_trz, "Trazabilidad"),
+                                       file_name=f"trz_lote_{_lote_q}.xlsx")
 
         # Historial de transferencias
         conn = conectar_db()
@@ -2253,6 +2393,64 @@ with tab7:
             st.download_button("📥 Exportar Valorización",
                                data=to_excel_bytes(df_show, "Valorización"),
                                file_name="valorizacion_stock.xlsx")
+
+        st.markdown("---")
+        st.write("### 💹 Margen Bruto por Producto")
+        st.caption("Cruza el precio de costo (valorización) con el precio de venta (lista 2026) para estimar margen bruto.")
+        lp_mg = obtener_lista_precios()
+        if lp_mg.empty:
+            st.info("Cargá la Lista de Precios 2026 en la pestaña 🏷️ Lista de Precios para ver el margen.")
+        elif not prod_refr.empty:
+            _stk_mg = stk_full.groupby(["Producto","Unidad"])["Stock Actual"].sum().reset_index()
+            _stk_mg = _stk_mg.merge(
+                prod_refr[["nombre","precio_unitario","moneda_precio"]].rename(columns={"nombre":"Producto"}),
+                on="Producto", how="left"
+            )
+            _lp_map = lp_mg.groupby("producto")["precio_vta"].mean().reset_index()
+            _lp_map.columns = ["Producto", "precio_vta"]
+            _stk_mg = _stk_mg.merge(_lp_map, on="Producto", how="left")
+            _tc_mg = float(obtener_metadata("tipo_cambio") or 1000)
+            _stk_mg["Costo_USD"] = _stk_mg.apply(
+                lambda r: r["precio_unitario"] if r.get("moneda_precio","USD")=="USD"
+                          else (r["precio_unitario"] / _tc_mg), axis=1
+            ).fillna(0)
+            _stk_mg["Venta_ARS"]  = _stk_mg["precio_vta"].fillna(0)
+            _stk_mg["Venta_USD"]  = _stk_mg["Venta_ARS"] / _tc_mg
+            _stk_mg["Margen_USD"] = (_stk_mg["Venta_USD"] - _stk_mg["Costo_USD"]).round(2)
+            _stk_mg["Margen_%"]   = _stk_mg.apply(
+                lambda r: round((r["Margen_USD"] / r["Costo_USD"]) * 100, 1) if r["Costo_USD"] > 0 else None, axis=1
+            )
+            _stk_mg["Stock_Valor_USD"] = _stk_mg["Stock Actual"] * _stk_mg["Costo_USD"]
+            _stk_mg_show = _stk_mg[_stk_mg["Costo_USD"] > 0].sort_values("Margen_%", ascending=False)
+            if _stk_mg_show.empty:
+                st.info("Asigná precios de costo en 'Actualizar Precios por Producto' para ver el margen.")
+            else:
+                _mg1, _mg2 = st.columns(2)
+                with _mg1:
+                    _avg_margin = _stk_mg_show["Margen_%"].mean()
+                    st.metric("Margen promedio", f"{_avg_margin:.1f}%")
+                with _mg2:
+                    _productos_sin_vta = len(_stk_mg[_stk_mg["precio_vta"].isna() | (_stk_mg["precio_vta"] == 0)])
+                    st.metric("Sin precio de venta", _productos_sin_vta)
+                fig_mg = px.bar(
+                    _stk_mg_show.head(20).sort_values("Margen_%"),
+                    x="Margen_%", y="Producto", orientation="h",
+                    color="Margen_%", color_continuous_scale=["#dc3545","#ffc107","#28a745"],
+                    title="Margen Bruto % por Producto",
+                    labels={"Margen_%":"Margen %"}
+                )
+                fig_mg.update_layout(height=400, showlegend=False, margin=dict(l=0,r=0,t=40,b=0))
+                st.plotly_chart(fig_mg, use_container_width=True)
+                st.dataframe(
+                    _stk_mg_show[["Producto","Stock Actual","Costo_USD","Venta_USD","Margen_USD","Margen_%"]]
+                    .rename(columns={"Stock Actual":"Stock","Costo_USD":"Costo USD",
+                                     "Venta_USD":"PVta USD","Margen_USD":"Margen USD","Margen_%":"Margen %"})
+                    .round(2),
+                    use_container_width=True, hide_index=True
+                )
+                st.download_button("📥 Exportar Margen Bruto (.xlsx)",
+                                   data=to_excel_bytes(_stk_mg_show, "Margen"),
+                                   file_name="margen_bruto.xlsx")
 
         st.markdown("---")
         st.write("### 🛒 Orden de Reposición Sugerida")
@@ -2784,8 +2982,9 @@ with tab9:
     # ── Parámetros & Sistema ──────────────────────────────────────────────────
     with cfg2:
         st.write("### 🚨 Parámetros Operativos")
-        new_umbral = st.number_input("Umbral de Stock Bajo", min_value=1,
-                                     value=int(st.session_state.umbral_alerta))
+        new_umbral = st.number_input("Umbral de Stock Bajo (global)", min_value=1,
+                                     value=int(st.session_state.umbral_alerta),
+                                     help="Nivel de stock a partir del cual se dispara la alerta amarilla (global).")
         new_wa     = st.text_input("WhatsApp (5493XXXXXXXXX)", value=st.session_state.wa_numero)
         cod_sup_cfg = st.text_input("Código de supervisor (para transferencias)",
             value=obtener_metadata("codigo_supervisor") or "1234",
@@ -2798,6 +2997,40 @@ with tab9:
             guardar_metadata("wa_numero",     new_wa)
             guardar_metadata("codigo_supervisor", cod_sup_cfg)
             st.success("Guardado.")
+
+        st.markdown("---")
+        st.write("### 📊 Stock Mínimo por Producto")
+        st.caption("Definí el stock mínimo individual de cada producto. Si es 0, se usa el umbral global.")
+        _prod_cfg = obtener_productos_completo()
+        if _prod_cfg.empty:
+            st.info("Sin productos cargados.")
+        else:
+            _cols_sm = ["nombre","stock_minimo"] if "stock_minimo" in _prod_cfg.columns else ["nombre"]
+            _df_sm = _prod_cfg[_cols_sm].copy().rename(columns={"nombre":"Producto","stock_minimo":"Stock Mínimo"})
+            if "Stock Mínimo" not in _df_sm.columns:
+                _df_sm["Stock Mínimo"] = 0.0
+            _edited_sm = st.data_editor(
+                _df_sm,
+                column_config={
+                    "Producto":      st.column_config.TextColumn("Producto", disabled=True),
+                    "Stock Mínimo":  st.column_config.NumberColumn("Stock Mínimo", min_value=0.0, format="%.0f",
+                                     help="0 = usar umbral global"),
+                },
+                hide_index=True, use_container_width=True, key="editor_stock_min"
+            )
+            if st.button("💾 Guardar Stocks Mínimos", type="primary", key="save_stock_min"):
+                _conn_sm = conectar_db()
+                for _, _r in _edited_sm.iterrows():
+                    try:
+                        _conn_sm.execute(
+                            "UPDATE productos SET stock_minimo=? WHERE nombre=?",
+                            (float(_r["Stock Mínimo"]), _r["Producto"])
+                        )
+                    except: pass
+                _conn_sm.commit(); _conn_sm.close()
+                limpiar_cache()
+                st.success("✅ Stocks mínimos guardados.")
+                st.rerun()
 
         st.markdown("---")
         st.write("### 📧 Configuración de Email")
