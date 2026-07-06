@@ -445,7 +445,7 @@ def borrar_solo_importacion():
 # ─────────────────────────────────────────────────────────────────────────────
 # 4. QUERIES CON CACHÉ
 # ─────────────────────────────────────────────────────────────────────────────
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=300, show_spinner=False)
 def obtener_stock_con_lote():
     conn  = conectar_db()
     query = """
@@ -464,13 +464,13 @@ def obtener_stock_con_lote():
     return (df.groupby(["Producto","Código","Unidad","Lote","Deposito"])["neta"]
               .sum().reset_index().rename(columns={"neta":"Stock Actual"}))
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=300, show_spinner=False)
 def obtener_stock_full():
     df = obtener_stock_con_lote()
     if df.empty: return df
     return df.groupby(["Producto","Código","Unidad","Deposito"])["Stock Actual"].sum().reset_index()
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=300, show_spinner=False)
 def obtener_historial_movimientos():
     conn  = conectar_db()
     query = """
@@ -481,19 +481,20 @@ def obtener_historial_movimientos():
                COALESCE(m.anulado,0) "Anulado", COALESCE(m.usuario,'') "Usuario"
         FROM movimientos m JOIN productos p ON m.id_producto=p.id_producto
         ORDER BY m.id_movimiento DESC
+        LIMIT 2000
     """
     df = _rsql(query, conn)
     conn.close()
     return df
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=300, show_spinner=False)
 def obtener_lista_precios():
     conn = conectar_db()
     df = _rsql("SELECT * FROM lista_precios ORDER BY rubro, producto", conn)
     conn.close()
     return df
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=300, show_spinner=False)
 def obtener_entregas(hoja=None):
     conn = conectar_db()
     if hoja and hoja != "Todas":
@@ -503,14 +504,14 @@ def obtener_entregas(hoja=None):
     conn.close()
     return df
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=300, show_spinner=False)
 def obtener_productos_completo():
     conn = conectar_db()
     df = _rsql("SELECT * FROM productos ORDER BY nombre", conn)
     conn.close()
     return df
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=300, show_spinner=False)
 def calcular_rotacion_stock(dias=90):
     conn           = conectar_db()
     fecha_corte_dt = datetime.now() - timedelta(days=dias)
@@ -970,14 +971,14 @@ DISTRIBUCION_OBJETIVO = {
     "Otros / Servicios":   10,
 }
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=300, show_spinner=False)
 def obtener_metas_campana(campana=CAMPANA_ACTUAL):
     conn = conectar_db()
     df = _rsql("SELECT * FROM metas_campana WHERE campana=?", conn, params=(campana,))
     conn.close()
     return df
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=300, show_spinner=False)
 def obtener_cartera(vendedor=None, campana=CAMPANA_ACTUAL):
     conn = conectar_db()
     if vendedor:
@@ -989,7 +990,7 @@ def obtener_cartera(vendedor=None, campana=CAMPANA_ACTUAL):
     conn.close()
     return df
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=300, show_spinner=False)
 def obtener_reportes(vendedor=None, campana=CAMPANA_ACTUAL):
     conn = conectar_db()
     if vendedor:
@@ -1001,7 +1002,7 @@ def obtener_reportes(vendedor=None, campana=CAMPANA_ACTUAL):
     conn.close()
     return df
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=300, show_spinner=False)
 def obtener_productos_foco(campana=CAMPANA_ACTUAL):
     conn = conectar_db()
     df = _rsql("SELECT * FROM productos_foco WHERE campana=? ORDER BY prioridad", conn, params=(campana,))
@@ -1019,7 +1020,7 @@ def obtener_productos_foco(campana=CAMPANA_ACTUAL):
         conn3.close()
     return df
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=300, show_spinner=False)
 def obtener_ventas_detalle(vendedor=None, campana=CAMPANA_ACTUAL):
     conn = conectar_db()
     if vendedor:
@@ -1791,7 +1792,7 @@ with tab1:
 def mostrar_tab_entregas(hoja_nombre, titulo):
     st.subheader(titulo)
     if hoja_nombre == "LA CLEMENTINA S.A":
-        with st.expander("📂 Importar TODAS las hojas", expanded=obtener_entregas().empty):
+        with st.expander("📂 Importar TODAS las hojas", expanded=False):
             st.info("Subí el archivo completo de entregas Monsanto/Bayer (4 hojas).")
             arch = st.file_uploader("Archivo entregas (.xlsx)", type=["xlsx","xls"],
                                     key="uploader_entregas_global")
@@ -3562,7 +3563,7 @@ with tab11:
     st.subheader("🔄 Pedidos Sin Entregar — MacroGest")
     st.caption("Importá el reporte de MacroGest con los pedidos pendientes de entrega. Los datos quedan guardados y se actualizan con cada importación.")
 
-    with st.expander("📂 Importar archivo Sin Entregar", expanded=obtener_entregas("MACROGEST").empty):
+    with st.expander("📂 Importar archivo Sin Entregar", expanded=False):
         mg_col1, mg_col2 = st.columns(2)
         with mg_col1:
             mg_vendedor = st.text_input(
@@ -3854,7 +3855,7 @@ with tab12:
     st.caption("Importá la lista de precios de MacroGest. Los precios quedan guardados y se pueden mapear automáticamente al stock para valorizar el inventario.")
 
     # ── Importar ──────────────────────────────────────────────────────────────
-    with st.expander("📂 Importar Lista de Precios (.xlsx)", expanded=obtener_lista_precios().empty):
+    with st.expander("📂 Importar Lista de Precios (.xlsx)", expanded=False):
         arch_lp = st.file_uploader("Archivo lista de precios", type=["xlsx","xls","csv"], key="up_lista_precios")
         if arch_lp:
             try:
