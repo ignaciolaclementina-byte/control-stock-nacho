@@ -1221,8 +1221,9 @@ def generar_ejecutivo_pdf() -> bytes:
         _mg_p = mg[mg["pendiente"] > 0]
         if not _mg_p.empty:
             elems.append(Paragraph(f"Sin Entregar MacroGest — {len(_mg_p)} pendientes", styles["Heading2"]))
+            _id_col_mg = "rto" if "rto" in _mg_p.columns else (_mg_p.columns[0] if len(_mg_p.columns) else "pendiente")
             _mg_top = (_mg_p.groupby("cliente")
-                       .agg(Items=("rto","nunique"), Pendiente=("pendiente","sum"))
+                       .agg(Items=(_id_col_mg,"nunique"), Pendiente=("pendiente","sum"))
                        .reset_index().sort_values("Pendiente", ascending=False).head(10))
             _rm = [["Cliente","Remitos","Pendiente"]]
             for _, r in _mg_top.iterrows():
@@ -3665,7 +3666,9 @@ with tab8:
             st.markdown("---")
             st.markdown("#### 📋 Entregas")
             _ee_pend = _re_ent[_re_ent["pendiente"] > 0]
-            _ee_dias = _ee_pend["dia_recibido"].apply(dias_desde)
+            _ee_dias = (_ee_pend["dia_recibido"].apply(dias_desde)
+                        if "dia_recibido" in _ee_pend.columns
+                        else pd.Series(0, index=_ee_pend.index))
             _ee1,_ee2,_ee3,_ee4 = st.columns(4)
             with _ee1: st.metric("Registros pendientes", len(_ee_pend))
             with _ee2: st.metric("Clientes",             _ee_pend["cliente"].nunique())
@@ -3856,9 +3859,10 @@ with tab8:
             # Tiempo en cola por vendedor
             if "vendedor" in _ent_ef.columns and "dia_recibido" in _ent_ef.columns:
                 _ent_ef["dias_espera"] = _ent_ef["dia_recibido"].apply(dias_desde)
+                _id_col_ef = "rto" if "rto" in _ent_ef.columns else "pendiente"
                 _by_vend = (_ent_ef[_ent_ef["pendiente"] > 0]
                             .groupby("vendedor")
-                            .agg(Pedidos=("rto","nunique"),
+                            .agg(Pedidos=(_id_col_ef,"nunique"),
                                  Volumen=("pendiente","sum"),
                                  DiasPromedio=("dias_espera","mean"))
                             .reset_index().sort_values("DiasPromedio", ascending=False))
@@ -3882,7 +3886,7 @@ with tab8:
             if "producto" in _ent_ef.columns and "dia_recibido" in _ent_ef.columns:
                 _by_prod_ef = (_ent_ef[_ent_ef["pendiente"] > 0]
                                .groupby("producto")
-                               .agg(Pedidos=("rto","nunique"),
+                               .agg(Pedidos=(_id_col_ef,"nunique"),
                                     Volumen=("pendiente","sum"),
                                     DiasPromedio=("dias_espera","mean"))
                                .reset_index().sort_values("Volumen", ascending=False).head(15))
@@ -3904,36 +3908,36 @@ with tab8:
         if _ent_rk.empty:
             st.info("Sin datos de entregas.")
         else:
+            # Columnas presentes en el DataFrame
+            _agg_rk = {"Pendiente": ("pendiente", "sum")}
+            if "rto"      in _ent_rk.columns: _agg_rk["Remitos"]  = ("rto",      "nunique")
+            if "cantidad" in _ent_rk.columns: _agg_rk["Vol. Total"] = ("cantidad", "sum")
+            if "producto" in _ent_rk.columns: _agg_rk["Productos"] = ("producto", "nunique")
             _rk = (_ent_rk.groupby("cliente")
-                   .agg(Remitos=("rto","nunique"),
-                        VolTotal=("cantidad","sum"),
-                        Pendiente=("pendiente","sum"),
-                        Productos=("producto","nunique"))
+                   .agg(**_agg_rk)
                    .reset_index()
-                   .rename(columns={"cliente":"Cliente","VolTotal":"Vol. Total"})
-                   .sort_values("Vol. Total", ascending=False)
+                   .rename(columns={"cliente": "Cliente"})
+                   .sort_values("Pendiente", ascending=False)
                    .reset_index(drop=True))
             _rk.index = _rk.index + 1  # ranking 1-based
 
             _rk_top = _rk.head(5)
-            st.markdown("**Top 5 clientes por volumen**")
+            st.markdown("**Top 5 clientes por pendiente**")
             _rc = st.columns(min(5, len(_rk_top)))
-            for _ci, (___, _row) in enumerate(zip(_rc, _rk_top.itertuples())):
-                _rc[_ci].metric(
-                    f"#{___ + 1} {_row.Cliente[:15]}",
-                    f"{_row._4:,.0f}",   # Vol. Total
-                    f"{_row.Remitos} remitos"
-                )
+            for _ci, _row in enumerate(_rk_top.itertuples()):
+                _val_lbl = f"{_row.Pendiente:,.0f}"
+                _sub_lbl = f"{_row.Remitos} remitos" if hasattr(_row, "Remitos") else ""
+                _rc[_ci].metric(f"#{_ci+1} {str(_row.Cliente)[:15]}", _val_lbl, _sub_lbl)
 
             st.markdown("---")
-            _n_rk = st.slider("Mostrar top N clientes", 10, 100, 25, key="rk_n")
-            fig_rk = px.bar(
+            _n_rk   = st.slider("Mostrar top N clientes", 10, 100, 25, key="rk_n")
+            _y_col  = "Vol. Total" if "Vol. Total" in _rk.columns else "Pendiente"
+            fig_rk  = px.bar(
                 _rk.head(_n_rk),
-                x="Cliente", y="Vol. Total",
+                x="Cliente", y=_y_col,
                 color="Pendiente",
                 color_continuous_scale=["#3D4E6B","#F5A800","#dc3545"],
-                labels={"Vol. Total":"Volumen Total","Pendiente":"Pend."},
-                title=f"Top {_n_rk} clientes por volumen total"
+                title=f"Top {_n_rk} clientes"
             )
             fig_rk.update_layout(height=380, margin=dict(l=0,r=0,t=40,b=0), xaxis_tickangle=-40)
             st.plotly_chart(fig_rk, use_container_width=True)
