@@ -1519,11 +1519,10 @@ with tab1:
 
         st.markdown("---")
 
-        # Semáforos por producto
-        with st.expander("🚦 Semáforos de Stock por Producto", expanded=False):
-            st.caption("Verde = OK · Amarillo = bajo umbral global · Rojo = negativo o bajo mínimo individual")
+        # Semáforos por producto — tabla compacta y filtrable
+        with st.expander("🚦 Estado de Stock por Producto", expanded=False):
             _prod_comp = obtener_productos_completo()
-            _stk_sem = stock_df.groupby("Producto")["Stock Actual"].sum().reset_index()
+            _stk_sem = stock_df.groupby(["Producto","Unidad"])["Stock Actual"].sum().reset_index()
             if not _prod_comp.empty and "stock_minimo" in _prod_comp.columns:
                 _stk_sem = _stk_sem.merge(
                     _prod_comp[["nombre","stock_minimo"]].rename(columns={"nombre":"Producto"}),
@@ -1532,23 +1531,49 @@ with tab1:
                 _stk_sem["stock_minimo"] = _stk_sem["stock_minimo"].fillna(0)
             else:
                 _stk_sem["stock_minimo"] = 0
-            _s1, _s2 = st.columns(2)
-            _col_sem = _s1
-            for i, row_sem in _stk_sem.sort_values("Stock Actual").iterrows():
-                _umbral_prod = row_sem["stock_minimo"] if row_sem["stock_minimo"] > 0 else U
-                if row_sem["Stock Actual"] < 0:
-                    _cls = "semaforo-rojo"; _ico = "🔴"
-                elif row_sem["Stock Actual"] < _umbral_prod:
-                    _cls = "semaforo-amarillo"; _ico = "🟡"
-                else:
-                    _cls = "semaforo-verde"; _ico = "🟢"
-                _col_sem = _s1 if i % 2 == 0 else _s2
-                _col_sem.markdown(
-                    f'<div class="{_cls}"><span class="semaforo-label">{_ico} {row_sem["Producto"]}</span>'
-                    f' — <span style="font-size:.9rem">{row_sem["Stock Actual"]:,.1f}</span>'
-                    f'<span style="font-size:.75rem;color:#6c757d"> (mín: {_umbral_prod:.0f})</span></div>',
-                    unsafe_allow_html=True
-                )
+
+            def _estado_sem(row):
+                _u = row["stock_minimo"] if row["stock_minimo"] > 0 else U
+                if row["Stock Actual"] < 0:        return "🔴 Negativo"
+                elif row["Stock Actual"] < _u:     return "🟡 Bajo umbral"
+                else:                              return "🟢 OK"
+
+            _stk_sem["Estado"]  = _stk_sem.apply(_estado_sem, axis=1)
+            _stk_sem["Mínimo"]  = _stk_sem["stock_minimo"].apply(lambda x: int(x) if x > 0 else f"global ({U})")
+            _stk_sem = _stk_sem.sort_values(
+                "Estado", key=lambda s: s.map({"🔴 Negativo": 0, "🟡 Bajo umbral": 1, "🟢 OK": 2})
+            )
+
+            # Resumen por estado
+            _cnt = _stk_sem["Estado"].value_counts()
+            _sa, _sb, _sc = st.columns(3)
+            _sa.metric("🔴 Negativos",    _cnt.get("🔴 Negativo", 0))
+            _sb.metric("🟡 Bajo umbral",  _cnt.get("🟡 Bajo umbral", 0))
+            _sc.metric("🟢 OK",           _cnt.get("🟢 OK", 0))
+
+            st.markdown("---")
+            # Filtro por estado
+            _fil_est = st.radio("Mostrar", ["Todos", "🔴 Negativos", "🟡 Bajo umbral", "🟢 OK"],
+                                horizontal=True, key="sem_filtro")
+            _df_sem_show = _stk_sem.copy()
+            if _fil_est == "🔴 Negativos":    _df_sem_show = _df_sem_show[_df_sem_show["Estado"] == "🔴 Negativo"]
+            elif _fil_est == "🟡 Bajo umbral": _df_sem_show = _df_sem_show[_df_sem_show["Estado"] == "🟡 Bajo umbral"]
+            elif _fil_est == "🟢 OK":          _df_sem_show = _df_sem_show[_df_sem_show["Estado"] == "🟢 OK"]
+
+            st.dataframe(
+                _df_sem_show[["Estado","Producto","Unidad","Stock Actual","Mínimo"]]
+                .rename(columns={"Stock Actual":"Stock"}),
+                use_container_width=True, hide_index=True,
+                column_config={
+                    "Estado":  st.column_config.TextColumn("Estado", width="small"),
+                    "Stock":   st.column_config.NumberColumn("Stock", format="%.1f"),
+                }
+            )
+            if not _df_sem_show.empty:
+                st.download_button("📥 Exportar estado de stock",
+                                   data=to_excel_bytes(_df_sem_show[["Estado","Producto","Unidad","Stock Actual","Mínimo"]], "Estado_Stock"),
+                                   file_name=f"estado_stock_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                                   key="dl_sem")
 
         # Proyección de agotamiento
         with st.expander("📅 Proyección de Agotamiento", expanded=False):
