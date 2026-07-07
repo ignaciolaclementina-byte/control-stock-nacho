@@ -56,176 +56,81 @@ _LC_LIGHT  = "#FFF8E7"
 
 st.markdown(f"""
 <style>
-/* ── Dark mode forzado LC ── */
-:root {{
-    --lc-yellow: {_LC_YELLOW};
-    --lc-navy:   {_LC_NAVY};
-    --lc-light:  #1C2333;
-    --bg-main:   #0E1117;
-    --bg-card:   #1C2333;
-    --bg-card2:  #252D3D;
-    --text-main: #FAFAFA;
-    --text-muted:#A0AEC0;
-    --border:    #2D3748;
-}}
-/* Fondo principal */
-.stApp, .main, [data-testid="stAppViewContainer"] {{
-    background-color: #0E1117 !important;
-    color: #FAFAFA !important;
-}}
-[data-testid="stHeader"] {{background-color:#0E1117!important}}
-[data-testid="stToolbar"] {{background-color:#0E1117!important}}
-section[data-testid="stSidebar"] {{background-color:#1C2333!important}}
+/* ── Solo elementos HTML custom — el dark mode lo maneja config.toml ── */
 
-/* Inputs, selects, textareas */
-input, textarea, select,
-[data-baseweb="input"] input,
-[data-baseweb="textarea"] textarea,
-[data-baseweb="select"] div {{
-    background-color:#1C2333!important;
-    color:#FAFAFA!important;
-    border-color:#2D3748!important;
-}}
-[data-baseweb="select"] {{background-color:#1C2333!important}}
-[data-baseweb="popover"] {{background-color:#1C2333!important;color:#FAFAFA!important}}
-
-/* Expanders */
-[data-testid="stExpander"] {{
-    background-color:#1C2333!important;
-    border:1px solid #2D3748!important;
-    border-radius:8px!important;
-}}
-
-/* Dataframes / tablas — fondo oscuro con texto legible */
-[data-testid="stDataFrame"] {{background-color:#1C2333!important}}
-[data-testid="stDataFrame"] * {{color:#FAFAFA!important}}
-.dvn-scroller {{background-color:#1C2333!important}}
-.dvn-scroller * {{color:#FAFAFA!important}}
-/* Celdas internas del dataframe */
-[data-testid="stDataFrame"] canvas {{filter: invert(0)!important}}
-.glideDataEditor {{background:#1C2333!important;color:#FAFAFA!important}}
-.wzg1l8q {{background:#1C2333!important}}
-/* Header de columnas */
-[class*="headerCell"] {{background:#252D3D!important;color:{_LC_YELLOW}!important;font-weight:700!important}}
-/* Filas alternas */
-[class*="gdg-style"] {{background:#1C2333!important;color:#FAFAFA!important}}
-/* Texto general dentro de cualquier contenedor */
-.element-container p, .element-container span, .element-container div {{color:#FAFAFA}}
-/* Markdown */
-.stMarkdown, .stMarkdown p, .stMarkdown li {{color:#E2E8F0!important}}
-/* Captions */
-.stCaption, [data-testid="stCaptionContainer"] {{color:#A0AEC0!important}}
-/* Info/warning/error boxes — mantener colores pero fondo oscuro */
-[data-testid="stAlert"] {{border-radius:8px!important}}
-/* Selectbox dropdown lista */
-[data-baseweb="menu"] {{background-color:#1C2333!important}}
-[data-baseweb="menu"] li {{color:#FAFAFA!important}}
-[data-baseweb="menu"] li:hover {{background-color:#252D3D!important}}
-/* Number input, text input */
-[data-baseweb="base-input"] {{background-color:#1C2333!important;color:#FAFAFA!important}}
-/* Slider */
-[data-testid="stSlider"] [data-testid="stTickBar"] {{color:#A0AEC0!important}}
-/* Radio buttons */
-[data-testid="stRadio"] label {{color:#E2E8F0!important}}
-/* Checkboxes */
-[data-testid="stCheckbox"] label {{color:#E2E8F0!important}}
-/* File uploader */
-[data-testid="stFileUploader"] {{background:#1C2333!important;border:1px solid #2D3748!important;border-radius:8px!important}}
-[data-testid="stFileUploader"] * {{color:#E2E8F0!important}}
-
-/* Métricas */
-[data-testid="metric-container"] {{
-    background-color:#1C2333!important;
-    border:1px solid #2D3748!important;
-    border-radius:8px!important;
-    padding:12px!important;
-}}
-[data-testid="stMetricValue"] {{color:#FAFAFA!important}}
-[data-testid="stMetricLabel"] {{color:#A0AEC0!important}}
-
-/* Botones */
+/* Botones LC */
 .stButton>button{{
     width:100%;border-radius:8px;font-weight:bold;height:3em;
-    background:{_LC_NAVY};color:white;border:1px solid #2D3748;
+    background:{_LC_NAVY};color:white;border:none;
 }}
-.stButton>button:hover{{background:{_LC_YELLOW};color:{_LC_NAVY};border-color:{_LC_YELLOW}}}
+.stButton>button:hover{{background:{_LC_YELLOW};color:{_LC_NAVY}}}
 
-/* Tabs */
-.stTabs [data-baseweb="tab-list"] {{
-    border-bottom:3px solid {_LC_YELLOW}!important;
-    background-color:#0E1117!important;
-}}
-.stTabs [data-baseweb="tab"] {{
-    background-color:#0E1117!important;
-    color:#A0AEC0!important;
-}}
-.stTabs [aria-selected="true"] {{
-    color:{_LC_YELLOW}!important;
-    font-weight:700!important;
-    background-color:#1C2333!important;
-}}
+/* Tabs acento LC */
+.stTabs [data-baseweb="tab-list"] {{border-bottom:3px solid {_LC_YELLOW}!important}}
+.stTabs [aria-selected="true"]    {{color:{_LC_YELLOW}!important;font-weight:700!important}}
 
-/* ── Header LC ── */
+/* Header LC */
 .lc-header {{
     background:linear-gradient(135deg,{_LC_NAVY} 0%,#1a2540 100%);
     padding:14px 24px;border-radius:12px;margin-bottom:16px;
     display:flex;align-items:center;gap:18px;
-    box-shadow:0 4px 20px rgba(0,0,0,.4);
-    border:1px solid #2D3748;
+    box-shadow:0 4px 20px rgba(0,0,0,.4);border:1px solid #2D3748;
 }}
-.lc-header-title {{color:white;font-size:1.35rem;font-weight:800;margin:0;letter-spacing:.3px}}
+.lc-header-title {{color:white;font-size:1.35rem;font-weight:800;margin:0}}
 .lc-header-sub   {{color:{_LC_YELLOW};font-size:.82rem;font-weight:600;margin:2px 0 0}}
-.lc-badge {{
-    background:{_LC_YELLOW};color:{_LC_NAVY};font-weight:800;
-    padding:4px 10px;border-radius:6px;font-size:.75rem;
-}}
+.lc-badge        {{background:{_LC_YELLOW};color:{_LC_NAVY};font-weight:800;
+                   padding:4px 10px;border-radius:6px;font-size:.75rem}}
 
-/* ── Cards de stock ── */
-.stock-card{{
-    background:#1C2333;padding:18px;border-radius:12px;
-    box-shadow:0 4px 15px rgba(0,0,0,.3);margin-bottom:12px;
-    border:1px solid #2D3748;position:relative;
-}}
-.card-normal {{border-left:8px solid #38a169}}
-.card-low    {{border-left:8px solid {_LC_YELLOW}}}
-.card-warning{{border-left:8px solid #e53e3e}}
-.stock-title {{font-size:.95rem;color:#E2E8F0;font-weight:700;margin-bottom:8px;
-    line-height:1.2;min-height:2.4em}}
-.stock-value {{font-size:1.5rem;color:#FAFAFA;font-weight:800;display:block}}
-.stock-unit  {{font-size:.8rem;color:#A0AEC0;font-weight:400}}
-.stock-info  {{margin-top:10px;padding-top:8px;border-top:1px solid #2D3748;
-    font-size:.8rem;color:#A0AEC0}}
-.label-blue  {{background:#1a365d;color:#90cdf4;padding:2px 6px;border-radius:4px;font-weight:bold}}
-.label-orange{{background:#2d1e0a;color:{_LC_YELLOW};padding:2px 6px;border-radius:4px;font-weight:bold}}
-.neg-badge   {{display:inline-block;background:#e53e3e;color:white;font-size:.65rem;
-    padding:1px 6px;border-radius:8px;font-weight:bold;margin-left:4px;vertical-align:middle}}
-.comp-badge  {{display:inline-block;background:{_LC_YELLOW};color:{_LC_NAVY};font-size:.65rem;
-    padding:1px 6px;border-radius:8px;font-weight:bold;margin-left:4px;vertical-align:middle}}
-.venc-badge  {{display:inline-block;background:#6b46c1;color:white;font-size:.65rem;
-    padding:1px 6px;border-radius:8px;font-weight:bold;margin-left:4px;vertical-align:middle}}
-.login-box   {{max-width:400px;margin:80px auto;padding:30px;background:#1C2333;
-    border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,.4);border:1px solid #2D3748}}
-.semaforo-verde   {{background:#1a2e1a;border-left:6px solid #38a169;padding:8px 14px;border-radius:6px;margin:3px 0}}
-.semaforo-amarillo{{background:#2d2010;border-left:6px solid {_LC_YELLOW};padding:8px 14px;border-radius:6px;margin:3px 0}}
-.semaforo-rojo    {{background:#2d1212;border-left:6px solid #e53e3e;padding:8px 14px;border-radius:6px;margin:3px 0}}
-.semaforo-label   {{font-weight:700;font-size:.85rem;color:#FAFAFA}}
-.projeccion-card  {{background:#1C2333;border:1px solid #2D3748;border-radius:8px;padding:12px;margin:4px 0}}
-.remito-box {{background:#1C2333;border:2px solid {_LC_NAVY};border-radius:10px;padding:20px;}}
-.seccion-titulo {{color:{_LC_YELLOW};font-weight:800;border-bottom:3px solid {_LC_YELLOW};
-    padding-bottom:4px;margin-bottom:12px;}}
+/* Cards de stock */
+.stock-card   {{background:#1C2333;padding:18px;border-radius:12px;
+                box-shadow:0 4px 15px rgba(0,0,0,.3);margin-bottom:12px;
+                border:1px solid #2D3748;position:relative}}
+.card-normal  {{border-left:8px solid #38a169}}
+.card-low     {{border-left:8px solid {_LC_YELLOW}}}
+.card-warning {{border-left:8px solid #e53e3e}}
+.stock-title  {{font-size:.95rem;color:#E2E8F0;font-weight:700;margin-bottom:8px;
+                line-height:1.2;min-height:2.4em}}
+.stock-value  {{font-size:1.5rem;color:#FAFAFA;font-weight:800;display:block}}
+.stock-unit   {{font-size:.8rem;color:#A0AEC0}}
+.stock-info   {{margin-top:10px;padding-top:8px;border-top:1px solid #2D3748;
+                font-size:.8rem;color:#A0AEC0}}
+.label-blue   {{background:#1a365d;color:#90cdf4;padding:2px 6px;border-radius:4px;font-weight:bold}}
+.label-orange {{background:#2d1e0a;color:{_LC_YELLOW};padding:2px 6px;border-radius:4px;font-weight:bold}}
+
+/* Badges */
+.neg-badge  {{display:inline-block;background:#e53e3e;color:white;font-size:.65rem;
+              padding:1px 6px;border-radius:8px;font-weight:bold;margin-left:4px;vertical-align:middle}}
+.comp-badge {{display:inline-block;background:{_LC_YELLOW};color:{_LC_NAVY};font-size:.65rem;
+              padding:1px 6px;border-radius:8px;font-weight:bold;margin-left:4px;vertical-align:middle}}
+.venc-badge {{display:inline-block;background:#6b46c1;color:white;font-size:.65rem;
+              padding:1px 6px;border-radius:8px;font-weight:bold;margin-left:4px;vertical-align:middle}}
+
+/* Login */
+.login-box {{max-width:400px;margin:80px auto;padding:30px;background:#1C2333;
+             border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,.4);border:1px solid #2D3748}}
+
+/* Semáforos */
+.semaforo-verde    {{background:#1a2e1a;border-left:6px solid #38a169;padding:8px 14px;border-radius:6px;margin:3px 0}}
+.semaforo-amarillo {{background:#2d2010;border-left:6px solid {_LC_YELLOW};padding:8px 14px;border-radius:6px;margin:3px 0}}
+.semaforo-rojo     {{background:#2d1212;border-left:6px solid #e53e3e;padding:8px 14px;border-radius:6px;margin:3px 0}}
+.semaforo-label    {{font-weight:700;font-size:.85rem;color:#FAFAFA}}
+
+/* Otros */
+.projeccion-card {{background:#1C2333;border:1px solid #2D3748;border-radius:8px;padding:12px;margin:4px 0}}
+.remito-box      {{background:#1C2333;border:2px solid {_LC_NAVY};border-radius:10px;padding:20px}}
+.seccion-titulo  {{color:{_LC_YELLOW};font-weight:800;border-bottom:3px solid {_LC_YELLOW};
+                   padding-bottom:4px;margin-bottom:12px}}
 .presupuesto-item {{background:#1C2333;border-left:4px solid {_LC_YELLOW};
-    padding:8px 12px;margin:4px 0;border-radius:4px;font-size:.9rem;color:#FAFAFA}}
+                    padding:8px 12px;margin:4px 0;border-radius:4px;font-size:.9rem;color:#FAFAFA}}
 
-/* ── Mobile responsive ── */
-@media (max-width: 768px) {{
+/* Mobile */
+@media (max-width:768px) {{
     .stock-card {{padding:12px;margin-bottom:8px}}
     .stock-title {{font-size:.85rem;min-height:auto}}
     .stock-value {{font-size:1.3rem}}
-    .lc-header  {{padding:10px 14px}}
+    .lc-header   {{padding:10px 14px}}
     .lc-header-title {{font-size:1.1rem}}
-    section[data-testid="stSidebar"] {{display:none}}
     .stTabs [data-baseweb="tab-list"] {{flex-wrap:wrap}}
-    [data-testid="metric-container"] {{min-width:45%}}
 }}
 </style>
 """, unsafe_allow_html=True)
