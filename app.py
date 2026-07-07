@@ -43,6 +43,30 @@ except ImportError:
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. CONFIGURACIÓN DE PÁGINA Y CSS
 # ─────────────────────────────────────────────────────────────────────────────
+
+# Escribir config.toml con dark mode LC si no existe o está desactualizado
+_cfg_dir  = os.path.join(os.path.dirname(__file__), ".streamlit")
+_cfg_file = os.path.join(_cfg_dir, "config.toml")
+_cfg_content = """[theme]
+base = "dark"
+primaryColor = "#F5A800"
+backgroundColor = "#0E1117"
+secondaryBackgroundColor = "#1C2333"
+textColor = "#FAFAFA"
+font = "sans serif"
+"""
+try:
+    os.makedirs(_cfg_dir, exist_ok=True)
+    _write_cfg = True
+    if os.path.exists(_cfg_file):
+        with open(_cfg_file, "r", encoding="utf-8") as _f:
+            _write_cfg = _f.read().strip() != _cfg_content.strip()
+    if _write_cfg:
+        with open(_cfg_file, "w", encoding="utf-8") as _f:
+            _f.write(_cfg_content)
+except Exception:
+    pass
+
 st.set_page_config(
     page_title="La Clementina — Control de Depósito",
     page_icon="🌿",
@@ -56,7 +80,32 @@ _LC_LIGHT  = "#FFF8E7"
 
 st.markdown(f"""
 <style>
-/* ── Solo elementos HTML custom — el dark mode lo maneja config.toml ── */
+/* ── Forzar dark mode en toda la app ── */
+html, body, [data-testid="stAppViewContainer"],
+[data-testid="stHeader"], .main, .block-container {{
+    background-color: #0E1117 !important;
+    color: #FAFAFA !important;
+}}
+[data-testid="stToolbar"]  {{ background-color: #0E1117 !important; }}
+[data-testid="stDecoration"] {{ display: none; }}
+section[data-testid="stSidebar"] {{ background-color: #1C2333 !important; }}
+
+/* Expanders */
+details, [data-testid="stExpander"] > div:first-child {{
+    background-color: #1C2333 !important;
+    border: 1px solid #2D3748 !important;
+    border-radius: 8px !important;
+}}
+
+/* Métricas */
+[data-testid="metric-container"] {{
+    background-color: #1C2333 !important;
+    border: 1px solid #2D3748 !important;
+    border-radius: 8px !important;
+    padding: 12px !important;
+}}
+
+/* ── Solo elementos HTML custom — */
 
 /* Botones LC */
 .stButton>button{{
