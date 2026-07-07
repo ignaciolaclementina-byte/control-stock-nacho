@@ -360,6 +360,27 @@ def inicializar_db():
             financiacion    TEXT,
             fecha_carga     TEXT
         )""",
+        f"""CREATE TABLE IF NOT EXISTS remitos (
+            id_remito    {_pk},
+            numero       TEXT NOT NULL,
+            fecha_hora   TEXT NOT NULL,
+            cliente      TEXT,
+            deposito     TEXT,
+            usuario      TEXT,
+            observaciones TEXT,
+            items_json   TEXT,
+            tipo         TEXT DEFAULT 'manual'
+        )""",
+        f"""CREATE TABLE IF NOT EXISTS importaciones_log (
+            id_log      {_pk},
+            fecha_hora  TEXT NOT NULL,
+            tipo        TEXT NOT NULL,
+            archivo     TEXT,
+            filas       INTEGER DEFAULT 0,
+            usuario     TEXT,
+            hash        TEXT,
+            resultado   TEXT
+        )""",
         f"""CREATE TABLE IF NOT EXISTS metas_campana (
             id_meta          {_pk},
             campana          TEXT NOT NULL DEFAULT '2026-2027',
@@ -739,6 +760,108 @@ def to_excel_bytes(df, sheet_name="Hoja1"):
 def hash_dataframe(df: pd.DataFrame) -> str:
     """SHA1 del contenido del DataFrame para detectar reimportaciones."""
     return hashlib.sha1(pd.util.hash_pandas_object(df, index=True).values.tobytes()).hexdigest()[:12]
+
+def siguiente_numero_remito() -> str:
+    """Genera el próximo número correlativo de remito: R-00001, R-00002..."""
+    conn = conectar_db()
+    try:
+        row = conn.execute("SELECT COUNT(*) FROM remitos").fetchone()
+        n   = (row[0] if row else 0) + 1
+    except Exception:
+        n = 1
+    conn.close()
+    return f"R-{n:05d}"
+
+def registrar_remito(numero, cliente, deposito, items, usuario, observaciones="", tipo="manual"):
+    import json as _json
+    conn = conectar_db()
+    conn.execute("""INSERT INTO remitos (numero,fecha_hora,cliente,deposito,usuario,observaciones,items_json,tipo)
+                    VALUES (?,?,?,?,?,?,?,?)""",
+                 (numero, datetime.now().strftime("%d/%m/%Y %H:%M"),
+                  cliente, deposito, usuario, observaciones,
+                  _json.dumps(items, ensure_ascii=False), tipo))
+    conn.commit(); conn.close()
+
+def registrar_importacion_log(tipo, archivo, filas, hash_val="", resultado="ok"):
+    conn = conectar_db()
+    try:
+        conn.execute("""INSERT INTO importaciones_log (fecha_hora,tipo,archivo,filas,usuario,hash,resultado)
+                        VALUES (?,?,?,?,?,?,?)""",
+                     (datetime.now().strftime("%d/%m/%Y %H:%M"), tipo, archivo,
+                      filas, usuario_actual(), hash_val, resultado))
+        conn.commit()
+    except Exception:
+        pass
+    conn.close()
+
+def backup_db_bytes() -> bytes:
+    """Exporta la DB SQLite completa como bytes para descarga (solo SQLite local)."""
+    if IS_POSTGRES:
+        return b""
+    db_path = os.path.join(os.path.dirname(__file__), "stock.db")
+    if not os.path.exists(db_path):
+        return b""
+    with open(db_path, "rb") as f:
+        return f.read()
+
+def generar_orden_compra_pdf(productos_bajo: pd.DataFrame, proveedor="Bayer CropScience / Monsanto-Bayer") -> bytes:
+    """PDF de orden de compra sugerida para productos bajo umbral."""
+    if not PDF_AVAILABLE or productos_bajo.empty:
+        return b""
+    buf    = io.BytesIO()
+    doc    = SimpleDocTemplate(buf, pagesize=A4,
+                               rightMargin=1.5*cm, leftMargin=1.5*cm,
+                               topMargin=2*cm, bottomMargin=2*cm)
+    styles = getSampleStyleSheet()
+    elems  = []
+
+    elems.append(Paragraph("<b>La Clementina S.A.</b> — Orden de Compra Sugerida", styles["Title"]))
+    elems.append(Paragraph(
+        f"Fecha: <b>{datetime.now().strftime('%d/%m/%Y')}</b> &nbsp;&nbsp; "
+        f"Proveedor: <b>{proveedor}</b> &nbsp;&nbsp; "
+        f"Operador: <b>{usuario_actual()}</b>",
+        styles["Normal"]
+    ))
+    elems.append(Spacer(1, .5*cm))
+
+    cols = [c for c in ["Producto","Unidad","Stock Actual","Sugerido_30d","proveedor"] if c in productos_bajo.columns]
+    _hdr = [["#"] + [c.replace("_"," ").replace("Sugerido 30d","Cant. Sugerida") for c in cols]]
+    _rows = [[str(i+1)] + [str(round(productos_bajo.iloc[i][c],1)) if isinstance(productos_bajo.iloc[i][c], float)
+                            else str(productos_bajo.iloc[i][c]) for c in cols]
+             for i in range(len(productos_bajo))]
+    _tbl = Table(_hdr + _rows, repeatRows=1)
+    _tbl.setStyle(TableStyle([
+        ("BACKGROUND",    (0,0), (-1,0),  rl_colors.HexColor("#3D4E6B")),
+        ("TEXTCOLOR",     (0,0), (-1,0),  rl_colors.white),
+        ("FONTNAME",      (0,0), (-1,0),  "Helvetica-Bold"),
+        ("FONTSIZE",      (0,0), (-1,-1), 8),
+        ("ROWBACKGROUNDS",(0,1), (-1,-1), [rl_colors.white, rl_colors.HexColor("#FFF8E7")]),
+        ("GRID",          (0,0), (-1,-1), .4, rl_colors.grey),
+    ]))
+    elems.append(_tbl)
+    elems.append(Spacer(1, 1*cm))
+    elems.append(Paragraph(
+        f"<font size=7 color=grey>Generado automáticamente — La Clementina S.A. · {datetime.now().strftime('%d/%m/%Y %H:%M')}</font>",
+        styles["Normal"]
+    ))
+    doc.build(elems)
+    return buf.getvalue()
+
+def calcular_forecast(dias_proyeccion=30) -> pd.DataFrame:
+    """Proyecta cuánto se necesita comprar en los próximos N días según consumo histórico."""
+    rot = calcular_rotacion_stock(90)
+    stk = obtener_stock_full()
+    if rot.empty or stk.empty:
+        return pd.DataFrame()
+    stk_sum = stk.groupby(["Producto","Unidad"])["Stock Actual"].sum().reset_index()
+    rot_sum  = rot[["Producto","Sal_Diarias"]].groupby("Producto")["Sal_Diarias"].mean().reset_index()
+    df_fc = stk_sum.merge(rot_sum, on="Producto", how="left").fillna(0)
+    df_fc["Consumo_Proyectado"] = (df_fc["Sal_Diarias"] * dias_proyeccion).round(1)
+    df_fc["Necesidad_Compra"]   = (df_fc["Consumo_Proyectado"] - df_fc["Stock Actual"]).clip(lower=0).round(1)
+    df_fc["Días_Cobertura"]     = df_fc.apply(
+        lambda r: round(r["Stock Actual"] / r["Sal_Diarias"]) if r["Sal_Diarias"] > 0 else None, axis=1
+    )
+    return df_fc[df_fc["Necesidad_Compra"] > 0].sort_values("Necesidad_Compra", ascending=False)
 
 def generar_remito_pdf(numero: str, cliente: str, deposito: str,
                        items: list, usuario: str, observaciones: str = "") -> bytes:
@@ -1498,14 +1621,31 @@ with tab1:
             ent_panel["dias_p"] = ent_panel["dia_recibido"].apply(dias_desde)
             venc30 = len(ent_panel[(ent_panel["pendiente"] > 0) & (ent_panel["dias_p"] > 30)])
 
+        # Alerta inmediata si hay stock negativo
+        if neg_n > 0:
+            _neg_prods = stock_df[stock_df["Stock Actual"] < 0]["Producto"].unique()
+            st.error(
+                f"🚨 **{neg_n} productos con stock negativo:** "
+                + " · ".join(_neg_prods[:8])
+                + (" ..." if len(_neg_prods) > 8 else ""),
+                icon="🚨"
+            )
+
         c1, c2, c3, c4, c5, c6, c7 = st.columns(7)
-        with c1: st.metric("Productos",      stock_df["Producto"].nunique())
-        with c2: st.metric("Volumen Total",  f"{stock_df['Stock Actual'].sum():,.0f}")
-        with c3: st.metric("Stock Bajo",     bajo_n,  delta=-bajo_n,  delta_color="inverse")
-        with c4: st.metric("Negativo ⚠️",    neg_n,   delta=-neg_n,   delta_color="inverse")
-        with c5: st.metric("Comprometido",   comp_n,  delta=-comp_n,  delta_color="inverse")
-        with c6: st.metric("Depósitos",      stock_df["Deposito"].nunique())
-        with c7: st.metric("Pend. +30d ⏳",  venc30,  delta=-venc30,  delta_color="inverse")
+        with c1: st.metric("Productos",     stock_df["Producto"].nunique(),
+                            help="Total de productos distintos con movimientos registrados")
+        with c2: st.metric("Volumen Total", f"{stock_df['Stock Actual'].sum():,.0f}",
+                            help="Suma de stock actual de todos los productos y depósitos")
+        with c3: st.metric("Stock Bajo",    bajo_n,  delta=-bajo_n,  delta_color="inverse",
+                            help=f"Productos con stock entre 0 y el umbral ({U}). Atención pero no crítico.")
+        with c4: st.metric("Negativo ⚠️",   neg_n,   delta=-neg_n,   delta_color="inverse",
+                            help="Productos con stock menor a 0. Requiere corrección inmediata.")
+        with c5: st.metric("Comprometido",  comp_n,  delta=-comp_n,  delta_color="inverse",
+                            help="Productos donde el stock disponible neto es negativo (stock < compromisos pendientes)")
+        with c6: st.metric("Depósitos",     stock_df["Deposito"].nunique(),
+                            help="Cantidad de depósitos/ubicaciones con stock registrado")
+        with c7: st.metric("Pend. +30d ⏳", venc30,  delta=-venc30,  delta_color="inverse",
+                            help="Pedidos de entrega con más de 30 días de antigüedad sin completar")
 
         # Alerta WhatsApp
         wa = st.session_state.wa_numero
@@ -1738,6 +1878,81 @@ with tab1:
                                        file_name=f"abc_{datetime.now().strftime('%Y%m%d')}.xlsx")
 
         st.markdown("---")
+
+        # ── Novedades del día ─────────────────────────────────────────────────
+        with st.expander("📅 Novedades del día", expanded=False):
+            _hoy_str = datetime.now().strftime("%d/%m/%Y")
+            _hist_hoy = obtener_historial_movimientos()
+            if not _hist_hoy.empty:
+                _hoy_df = _hist_hoy[
+                    _hist_hoy["Fecha"].astype(str).str.startswith(_hoy_str) &
+                    (_hist_hoy["Anulado"] == 0)
+                ]
+                if _hoy_df.empty:
+                    st.info(f"Sin movimientos registrados hoy ({_hoy_str}).")
+                else:
+                    _nd1, _nd2, _nd3 = st.columns(3)
+                    _nd1.metric("Movimientos hoy",  len(_hoy_df))
+                    _nd2.metric("Entradas",  int((_hoy_df["Tipo"]=="Entrada").sum()))
+                    _nd3.metric("Salidas",   int((_hoy_df["Tipo"]=="Salida").sum()))
+                    st.dataframe(
+                        _hoy_df[["Fecha","Tipo","Producto","Cantidad","Unidad","Lote","Depósito","Referencia","Usuario"]]
+                        .head(50),
+                        use_container_width=True, hide_index=True
+                    )
+            else:
+                st.info("Sin historial registrado.")
+
+        # ── Tendencias mes a mes ──────────────────────────────────────────────
+        with st.expander("📈 Tendencias Mensuales", expanded=False):
+            st.caption("Compara el volumen de movimientos mes a mes para detectar tendencias de consumo.")
+            _hist_tend = obtener_historial_movimientos()
+            if _hist_tend.empty:
+                st.info("Sin historial para mostrar tendencias.")
+            else:
+                def _mes_tend(s):
+                    try: return datetime.strptime(str(s)[:10], "%d/%m/%Y").strftime("%Y-%m")
+                    except: return None
+                _hist_tend["Mes"] = _hist_tend["Fecha"].apply(_mes_tend)
+                _tend_df = (
+                    _hist_tend[_hist_tend["Anulado"] == 0]
+                    .dropna(subset=["Mes"])
+                    .groupby(["Mes","Tipo"])["Cantidad"].sum()
+                    .reset_index()
+                    .sort_values("Mes")
+                )
+                if not _tend_df.empty:
+                    fig_tend = px.bar(
+                        _tend_df, x="Mes", y="Cantidad", color="Tipo",
+                        barmode="group",
+                        color_discrete_map={"Entrada":"#3D4E6B","Salida":"#F5A800"},
+                        title="Volumen de Entradas y Salidas por Mes",
+                        labels={"Cantidad":"Unidades","Mes":"Mes"}
+                    )
+                    fig_tend.update_layout(height=320, margin=dict(l=0,r=0,t=40,b=0))
+                    st.plotly_chart(fig_tend, use_container_width=True)
+
+                    # Estacionalidad: top productos por mes
+                    st.markdown("**Estacionalidad por Producto**")
+                    _prod_tend = st.selectbox("Producto", ["Todos"] + sorted(stock_df["Producto"].unique().tolist()),
+                                              key="tend_prod")
+                    _hist_t2 = _hist_tend[_hist_tend["Anulado"] == 0].copy()
+                    if _prod_tend != "Todos":
+                        _hist_t2 = _hist_t2[_hist_t2["Producto"] == _prod_tend]
+                    _sal_mes = (
+                        _hist_t2[_hist_t2["Tipo"]=="Salida"]
+                        .dropna(subset=["Mes"])
+                        .groupby("Mes")["Cantidad"].sum()
+                        .reset_index().sort_values("Mes")
+                    )
+                    if not _sal_mes.empty:
+                        fig_est = px.area(
+                            _sal_mes, x="Mes", y="Cantidad",
+                            title=f"Salidas mensuales — {'Todos los productos' if _prod_tend=='Todos' else _prod_tend}",
+                            color_discrete_sequence=["#F5A800"]
+                        )
+                        fig_est.update_layout(height=260, margin=dict(l=0,r=0,t=40,b=0))
+                        st.plotly_chart(fig_est, use_container_width=True)
 
         # ── Buscador Global ───────────────────────────────────────────────────
         with st.expander("🔎 Buscador Global", expanded=False):
@@ -1983,22 +2198,27 @@ with tab1:
                                  p["deposito"], "manual", usuario_actual(), p.get("observaciones","")))
                             conn.commit()
                             # Generar remito PDF si es salida
-                            if p["tipo"] == "Salida" and PDF_AVAILABLE:
-                                _nro_remito = f"R-{datetime.now().strftime('%Y%m%d-%H%M')}"
+                            if p["tipo"] == "Salida":
+                                _nro_remito = siguiente_numero_remito()
                                 _prod_rem   = obtener_productos_completo()
                                 _uni_rem    = ""
                                 if not _prod_rem.empty:
                                     _row_uni = _prod_rem[_prod_rem["nombre"]==p["producto"]]
                                     _uni_rem = _row_uni.iloc[0]["unidad"] if not _row_uni.empty else ""
-                                _remito_bytes = generar_remito_pdf(
-                                    numero=_nro_remito,
-                                    cliente=p.get("cliente","---"),
-                                    deposito=p["deposito"],
-                                    items=[{"producto":p["producto"],"lote":p["lote"],
-                                            "cantidad":p["cantidad"],"unidad":_uni_rem}],
-                                    usuario=usuario_actual(),
-                                    observaciones=p.get("observaciones","")
-                                )
+                                _items_rem = [{"producto":p["producto"],"lote":p["lote"],
+                                               "cantidad":p["cantidad"],"unidad":_uni_rem}]
+                                registrar_remito(_nro_remito, p.get("cliente","---"),
+                                                 p["deposito"], _items_rem,
+                                                 usuario_actual(), p.get("observaciones",""))
+                                if PDF_AVAILABLE:
+                                    _remito_bytes = generar_remito_pdf(
+                                        numero=_nro_remito,
+                                        cliente=p.get("cliente","---"),
+                                        deposito=p["deposito"],
+                                        items=_items_rem,
+                                        usuario=usuario_actual(),
+                                        observaciones=p.get("observaciones","")
+                                    )
                         conn.close()
                         limpiar_cache()
                         st.session_state.mov_pendiente = None
@@ -2657,15 +2877,60 @@ with tab7:
                                    file_name="margen_bruto.xlsx")
 
         st.markdown("---")
-        st.write("### 🛒 Orden de Reposición Sugerida")
+        st.write("### 🛒 Orden de Reposición y Forecast")
         U_rep = st.session_state.umbral_alerta
         consumo_df = calcular_rotacion_stock()
         orden_bin  = generar_orden_reposicion(stk_full, U_rep, consumo_df)
         bajo_n_rep = len(stk_full[stk_full["Stock Actual"] < U_rep])
-        st.info(f"{bajo_n_rep} productos con stock bajo umbral ({U_rep}). "
-                "El Excel incluye la cantidad sugerida basada en consumo de los últimos 90 días.")
-        st.download_button("📥 Descargar Orden de Reposición (.xlsx)",
-                           data=orden_bin, file_name="orden_reposicion.xlsx")
+
+        _fc1, _fc2, _fc3 = st.columns(3)
+        with _fc1:
+            dias_fc = st.selectbox("Horizonte de forecast", [15, 30, 60, 90], index=1,
+                                   help="Días hacia adelante para proyectar la necesidad de compra")
+        with _fc2:
+            st.metric("Productos bajo umbral", bajo_n_rep,
+                       help=f"Tienen menos de {U_rep} unidades en stock")
+        with _fc3:
+            df_fc_now = calcular_forecast(dias_fc)
+            st.metric("Necesitan reposición", len(df_fc_now),
+                       help=f"Productos que se agotarían en los próximos {dias_fc} días")
+
+        if not df_fc_now.empty:
+            fig_fc = px.bar(
+                df_fc_now.head(20).sort_values("Necesidad_Compra", ascending=True),
+                x="Necesidad_Compra", y="Producto", orientation="h",
+                title=f"Necesidad de compra — próximos {dias_fc} días",
+                color="Necesidad_Compra", color_continuous_scale=["#ffc107","#dc3545"],
+                labels={"Necesidad_Compra":"Unidades a reponer"}
+            )
+            fig_fc.update_layout(height=380, showlegend=False, margin=dict(l=0,r=0,t=40,b=0))
+            st.plotly_chart(fig_fc, use_container_width=True)
+            st.dataframe(
+                df_fc_now[["Producto","Unidad","Stock Actual","Consumo_Proyectado","Necesidad_Compra","Días_Cobertura"]]
+                .rename(columns={"Stock Actual":"Stock","Consumo_Proyectado":f"Consumo {dias_fc}d",
+                                  "Necesidad_Compra":"A Reponer","Días_Cobertura":"Días Cob."}),
+                use_container_width=True, hide_index=True
+            )
+
+        _or1, _or2, _or3 = st.columns(3)
+        with _or1:
+            st.download_button("📥 Orden de Reposición (.xlsx)",
+                               data=orden_bin, file_name="orden_reposicion.xlsx",
+                               use_container_width=True)
+        with _or2:
+            _oc_pdf = generar_orden_compra_pdf(
+                df_fc_now if not df_fc_now.empty else pd.DataFrame(),
+                proveedor="Bayer CropScience / Monsanto-Bayer"
+            )
+            if _oc_pdf:
+                st.download_button("🖨️ Orden de Compra PDF",
+                                   data=_oc_pdf, file_name="orden_compra.pdf",
+                                   mime="application/pdf", use_container_width=True)
+        with _or3:
+            st.download_button("📥 Forecast (.xlsx)",
+                               data=to_excel_bytes(df_fc_now, "Forecast") if not df_fc_now.empty else b"",
+                               file_name=f"forecast_{dias_fc}d.xlsx",
+                               use_container_width=True)
 
         # Historial de precios
         st.markdown("---")
@@ -3139,6 +3404,7 @@ with tab9:
                     _prog.progress(100, "¡Listo!")
                     guardar_metadata("ultima_importacion", datetime.now().strftime("%d/%m/%Y %H:%M"))
                     guardar_metadata("ultimo_hash_stock", _file_hash)
+                    registrar_importacion_log("Stock Completo", arch_s.name, mo, _file_hash)
                     limpiar_cache()
                     st.session_state["stock_imp_ok"] = (
                         f"✅ Stock importado: {pa} productos nuevos, {mo} líneas "
@@ -3378,7 +3644,7 @@ with tab9:
 
         st.markdown("---")
         st.write("### ⚠️ Mantenimiento de Datos")
-        col_b1, col_b2 = st.columns(2)
+        col_b1, col_b2, col_b3 = st.columns(3)
         with col_b1:
             if st.button("🗑️ Borrar solo datos importados"):
                 borrar_solo_importacion()
@@ -3392,9 +3658,54 @@ with tab9:
                 borrar_datos_totales()
                 st.success("Base vaciada.")
                 st.rerun()
+        with col_b3:
+            _bk = backup_db_bytes()
+            if _bk:
+                st.download_button("💾 Backup DB (.sqlite)",
+                                   data=_bk,
+                                   file_name=f"backup_lc_{datetime.now().strftime('%Y%m%d_%H%M')}.sqlite",
+                                   help="Descarga una copia completa de la base de datos local",
+                                   use_container_width=True)
+            else:
+                st.caption("Backup disponible solo en modo local (SQLite).")
+
+        # ── Historial de Importaciones ────────────────────────────────────────
+        st.markdown("---")
+        st.write("### 📋 Historial de Importaciones")
+        st.caption("Registro automático de cada importación realizada en la app.")
+        conn_log = conectar_db()
+        df_log = _rsql("""SELECT fecha_hora "Fecha", tipo "Tipo", archivo "Archivo",
+                                  filas "Filas", usuario "Usuario", resultado "Resultado"
+                           FROM importaciones_log ORDER BY id_log DESC LIMIT 100""", conn_log)
+        conn_log.close()
+        if df_log.empty:
+            st.info("Sin importaciones registradas aún.")
+        else:
+            st.dataframe(df_log, use_container_width=True, hide_index=True)
+            st.download_button("📥 Exportar log (.xlsx)",
+                               data=to_excel_bytes(df_log, "Log_Importaciones"),
+                               file_name="log_importaciones.xlsx")
+
+        # ── Historial de Remitos ───────────────────────────────────────────────
+        st.markdown("---")
+        st.write("### 🖨️ Historial de Remitos")
+        conn_rem = conectar_db()
+        df_rem_log = _rsql("""SELECT numero "Nro", fecha_hora "Fecha", tipo "Tipo",
+                                      cliente "Cliente", deposito "Depósito",
+                                      usuario "Usuario", observaciones "Observaciones"
+                               FROM remitos ORDER BY id_remito DESC LIMIT 200""", conn_rem)
+        conn_rem.close()
+        if df_rem_log.empty:
+            st.info("Sin remitos emitidos aún.")
+        else:
+            st.metric("Total remitos emitidos", len(df_rem_log))
+            st.dataframe(df_rem_log, use_container_width=True, hide_index=True)
+            st.download_button("📥 Exportar remitos (.xlsx)",
+                               data=to_excel_bytes(df_rem_log, "Remitos"),
+                               file_name=f"remitos_{datetime.now().strftime('%Y%m%d')}.xlsx")
 
     st.markdown("---")
-    st.caption(f"La Clementina S.A. — v2.0 PRO — "
+    st.caption(f"La Clementina S.A. — v3.0 PRO — "
                f"{'PDF ✅' if PDF_AVAILABLE else 'PDF ❌ (pip install reportlab)'}")
 
 
@@ -4143,6 +4454,7 @@ with tab11:
                     conn.commit(); conn.close()
                     guardar_metadata("ultima_importacion_mg",
                                      datetime.now().strftime("%d/%m/%Y %H:%M"))
+                    registrar_importacion_log("Sin Entregar MG", arch_mg_se.name, ok_mg)
                     limpiar_cache()
                     st.success(f"✅ {ok_mg} registros importados.")
                     st.rerun()
