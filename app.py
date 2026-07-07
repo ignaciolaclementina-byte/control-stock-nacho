@@ -42,38 +42,80 @@ except ImportError:
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. CONFIGURACIÓN DE PÁGINA Y CSS
 # ─────────────────────────────────────────────────────────────────────────────
-st.set_page_config(page_title="Gestión de Agroquímicos — LC", layout="wide")
-st.markdown("""
+st.set_page_config(
+    page_title="La Clementina — Control de Depósito",
+    page_icon="🌿",
+    layout="wide"
+)
+
+# Colores corporativos LC
+_LC_YELLOW = "#F5A800"
+_LC_NAVY   = "#3D4E6B"
+_LC_LIGHT  = "#FFF8E7"
+
+st.markdown(f"""
 <style>
-.main{background-color:#f4f7f6}
-.stButton>button{width:100%;border-radius:8px;font-weight:bold;height:3em}
-.stock-card{background:white;padding:18px;border-radius:12px;
+/* ── Corporativo LC ── */
+:root {{
+    --lc-yellow: {_LC_YELLOW};
+    --lc-navy:   {_LC_NAVY};
+    --lc-light:  {_LC_LIGHT};
+}}
+.main{{background-color:#f7f8fc}}
+.lc-header {{
+    background: linear-gradient(135deg, {_LC_NAVY} 0%, #2c3a52 100%);
+    padding: 14px 24px; border-radius: 12px; margin-bottom: 16px;
+    display: flex; align-items: center; gap: 18px;
+    box-shadow: 0 4px 20px rgba(61,78,107,.25);
+}}
+.lc-header-title {{
+    color: white; font-size: 1.35rem; font-weight: 800; margin: 0;
+    letter-spacing: .3px;
+}}
+.lc-header-sub {{
+    color: {_LC_YELLOW}; font-size: .82rem; font-weight: 600; margin: 2px 0 0;
+}}
+.lc-badge {{
+    background: {_LC_YELLOW}; color: {_LC_NAVY}; font-weight: 800;
+    padding: 4px 10px; border-radius: 6px; font-size: .75rem;
+}}
+/* ── Cards ── */
+.stButton>button{{width:100%;border-radius:8px;font-weight:bold;height:3em;
+    background:{_LC_NAVY};color:white;border:none}}
+.stButton>button:hover{{background:{_LC_YELLOW};color:{_LC_NAVY}}}
+.stock-card{{background:white;padding:18px;border-radius:12px;
     box-shadow:0 4px 15px rgba(0,0,0,.05);margin-bottom:12px;
-    border:1px solid #e1e4e8;position:relative}
-.card-normal {border-left:8px solid #28a745}
-.card-low    {border-left:8px solid #ffc107}
-.card-warning{border-left:8px solid #dc3545}
-.stock-title {font-size:.95rem;color:#1a1c21;font-weight:700;margin-bottom:8px;
-    line-height:1.2;min-height:2.4em}
-.stock-value {font-size:1.5rem;color:#007bff;font-weight:800;display:block}
-.stock-unit  {font-size:.8rem;color:#6c757d;font-weight:400}
-.stock-info  {margin-top:10px;padding-top:8px;border-top:1px solid #f0f2f6;
-    font-size:.8rem;color:#495057}
-.label-blue  {background:#e7f3ff;color:#007bff;padding:2px 6px;border-radius:4px;font-weight:bold}
-.label-orange{background:#fff3cd;color:#856404;padding:2px 6px;border-radius:4px;font-weight:bold}
-.neg-badge   {display:inline-block;background:#dc3545;color:white;font-size:.65rem;
-    padding:1px 6px;border-radius:8px;font-weight:bold;margin-left:4px;vertical-align:middle}
-.comp-badge  {display:inline-block;background:#fd7e14;color:white;font-size:.65rem;
-    padding:1px 6px;border-radius:8px;font-weight:bold;margin-left:4px;vertical-align:middle}
-.venc-badge  {display:inline-block;background:#6f42c1;color:white;font-size:.65rem;
-    padding:1px 6px;border-radius:8px;font-weight:bold;margin-left:4px;vertical-align:middle}
-.login-box   {max-width:400px;margin:80px auto;padding:30px;background:white;
-    border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,.1)}
-.semaforo-verde   {background:#d4edda;border-left:6px solid #28a745;padding:8px 14px;border-radius:6px;margin:3px 0}
-.semaforo-amarillo{background:#fff3cd;border-left:6px solid #ffc107;padding:8px 14px;border-radius:6px;margin:3px 0}
-.semaforo-rojo    {background:#f8d7da;border-left:6px solid #dc3545;padding:8px 14px;border-radius:6px;margin:3px 0}
-.semaforo-label   {font-weight:700;font-size:.85rem}
-.projeccion-card  {background:#f8f9fa;border:1px solid #dee2e6;border-radius:8px;padding:12px;margin:4px 0}
+    border:1px solid #e1e4e8;position:relative}}
+.card-normal {{border-left:8px solid #28a745}}
+.card-low    {{border-left:8px solid {_LC_YELLOW}}}
+.card-warning{{border-left:8px solid #dc3545}}
+.stock-title {{font-size:.95rem;color:{_LC_NAVY};font-weight:700;margin-bottom:8px;
+    line-height:1.2;min-height:2.4em}}
+.stock-value {{font-size:1.5rem;color:{_LC_NAVY};font-weight:800;display:block}}
+.stock-unit  {{font-size:.8rem;color:#6c757d;font-weight:400}}
+.stock-info  {{margin-top:10px;padding-top:8px;border-top:1px solid #f0f2f6;
+    font-size:.8rem;color:#495057}}
+.label-blue  {{background:#e7f3ff;color:{_LC_NAVY};padding:2px 6px;border-radius:4px;font-weight:bold}}
+.label-orange{{background:{_LC_LIGHT};color:#856404;padding:2px 6px;border-radius:4px;font-weight:bold}}
+.neg-badge   {{display:inline-block;background:#dc3545;color:white;font-size:.65rem;
+    padding:1px 6px;border-radius:8px;font-weight:bold;margin-left:4px;vertical-align:middle}}
+.comp-badge  {{display:inline-block;background:{_LC_YELLOW};color:{_LC_NAVY};font-size:.65rem;
+    padding:1px 6px;border-radius:8px;font-weight:bold;margin-left:4px;vertical-align:middle}}
+.venc-badge  {{display:inline-block;background:#6f42c1;color:white;font-size:.65rem;
+    padding:1px 6px;border-radius:8px;font-weight:bold;margin-left:4px;vertical-align:middle}}
+.login-box   {{max-width:400px;margin:80px auto;padding:30px;background:white;
+    border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,.1)}}
+.semaforo-verde   {{background:#d4edda;border-left:6px solid #28a745;padding:8px 14px;border-radius:6px;margin:3px 0}}
+.semaforo-amarillo{{background:{_LC_LIGHT};border-left:6px solid {_LC_YELLOW};padding:8px 14px;border-radius:6px;margin:3px 0}}
+.semaforo-rojo    {{background:#f8d7da;border-left:6px solid #dc3545;padding:8px 14px;border-radius:6px;margin:3px 0}}
+.semaforo-label   {{font-weight:700;font-size:.85rem}}
+.projeccion-card  {{background:#f8f9fa;border:1px solid #dee2e6;border-radius:8px;padding:12px;margin:4px 0}}
+.remito-box {{background:white;border:2px solid {_LC_NAVY};border-radius:10px;padding:20px;}}
+.seccion-titulo {{color:{_LC_NAVY};font-weight:800;border-bottom:3px solid {_LC_YELLOW};
+    padding-bottom:4px;margin-bottom:12px;}}
+/* Tabs con acento LC */
+.stTabs [data-baseweb="tab-list"] {{border-bottom: 3px solid {_LC_YELLOW}!important}}
+.stTabs [aria-selected="true"] {{color:{_LC_NAVY}!important;font-weight:700!important}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -405,6 +447,10 @@ def inicializar_db():
             "ALTER TABLE entregas ADD COLUMN hoja TEXT",
             "ALTER TABLE entregas ADD COLUMN lote TEXT",
             "ALTER TABLE entregas ADD COLUMN deposito TEXT",
+            "ALTER TABLE movimientos ADD COLUMN observaciones TEXT DEFAULT ''",
+            "ALTER TABLE entregas ADD COLUMN confirmada INTEGER DEFAULT 0",
+            "ALTER TABLE entregas ADD COLUMN fecha_confirmacion TEXT",
+            "ALTER TABLE entregas ADD COLUMN usuario_confirmacion TEXT",
         ]:
             try:  c.execute(m)
             except: pass
@@ -689,6 +735,75 @@ def to_excel_bytes(df, sheet_name="Hoja1"):
     with pd.ExcelWriter(out, engine="openpyxl") as w:
         df.to_excel(w, index=False, sheet_name=sheet_name)
     return out.getvalue()
+
+def hash_dataframe(df: pd.DataFrame) -> str:
+    """SHA1 del contenido del DataFrame para detectar reimportaciones."""
+    return hashlib.sha1(pd.util.hash_pandas_object(df, index=True).values.tobytes()).hexdigest()[:12]
+
+def generar_remito_pdf(numero: str, cliente: str, deposito: str,
+                       items: list, usuario: str, observaciones: str = "") -> bytes:
+    """
+    Genera un remito de salida en PDF.
+    items: lista de dicts con keys producto, unidad, lote, cantidad.
+    """
+    if not PDF_AVAILABLE:
+        return b""
+    buf    = io.BytesIO()
+    doc    = SimpleDocTemplate(buf, pagesize=A4,
+                               rightMargin=1.5*cm, leftMargin=1.5*cm,
+                               topMargin=2*cm, bottomMargin=2*cm)
+    styles = getSampleStyleSheet()
+    elems  = []
+
+    # Encabezado
+    elems.append(Paragraph(
+        "<b>La Clementina S.A.</b> — Remito de Salida de Depósito",
+        styles["Title"]
+    ))
+    elems.append(Spacer(1, .3*cm))
+    elems.append(Paragraph(
+        f"Nro: <b>{numero}</b> &nbsp;&nbsp; Fecha: <b>{datetime.now().strftime('%d/%m/%Y %H:%M')}</b>"
+        f" &nbsp;&nbsp; Operador: <b>{usuario}</b>",
+        styles["Normal"]
+    ))
+    elems.append(Paragraph(f"Cliente: <b>{cliente}</b> &nbsp;&nbsp; Depósito: <b>{deposito}</b>",
+                            styles["Normal"]))
+    if observaciones:
+        elems.append(Paragraph(f"Observaciones: {observaciones}", styles["Normal"]))
+    elems.append(Spacer(1, .5*cm))
+
+    # Tabla de items
+    _header = [["#", "Producto", "Lote", "Cantidad", "Unidad"]]
+    _rows   = [[str(i+1), it["producto"], it.get("lote",""), f'{it["cantidad"]:,.2f}', it.get("unidad","")]
+               for i, it in enumerate(items)]
+    _tbl = Table(_header + _rows, colWidths=[1*cm, 8*cm, 3*cm, 2.5*cm, 2*cm])
+    _tbl.setStyle(TableStyle([
+        ("BACKGROUND",    (0,0), (-1,0),  rl_colors.HexColor("#3D4E6B")),
+        ("TEXTCOLOR",     (0,0), (-1,0),  rl_colors.white),
+        ("FONTNAME",      (0,0), (-1,0),  "Helvetica-Bold"),
+        ("FONTSIZE",      (0,0), (-1,-1), 9),
+        ("ROWBACKGROUNDS",(0,1), (-1,-1), [rl_colors.white, rl_colors.HexColor("#FFF8E7")]),
+        ("GRID",          (0,0), (-1,-1), .5, rl_colors.grey),
+        ("ALIGN",         (3,0), (3,-1),  "RIGHT"),
+    ]))
+    elems.append(_tbl)
+    elems.append(Spacer(1, 1.5*cm))
+
+    # Firmas
+    _firma = Table(
+        [["Entregó:", "", "Recibió:"],
+         ["_________________________", "  ", "_________________________"],
+         [usuario, "", cliente]],
+        colWidths=[6*cm, 3*cm, 6*cm]
+    )
+    elems.append(_firma)
+    elems.append(Spacer(1, .5*cm))
+    elems.append(Paragraph(
+        f"<font size=7 color=grey>Generado por Sistema de Gestión — La Clementina S.A. · {datetime.now().strftime('%d/%m/%Y %H:%M')}</font>",
+        styles["Normal"]
+    ))
+    doc.build(elems)
+    return buf.getvalue()
 
 def descargar_excel_agrupado(df):
     if df.empty: return b""
@@ -1306,7 +1421,37 @@ if auth_enabled and st.session_state.get("authenticated"):
 # ─────────────────────────────────────────────────────────────────────────────
 # 13. TABS PRINCIPALES
 # ─────────────────────────────────────────────────────────────────────────────
-st.title("🧪 Control de Depósito Inteligente")
+
+# Header corporativo con logo
+_logo_path = os.path.join(os.path.dirname(__file__), "logo.png")
+_logo_b64  = ""
+if os.path.exists(_logo_path):
+    with open(_logo_path, "rb") as _lf:
+        import base64 as _b64
+        _logo_b64 = _b64.b64encode(_lf.read()).decode()
+
+_logo_html = (
+    f'<img src="data:image/png;base64,{_logo_b64}" style="height:54px;border-radius:4px">'
+    if _logo_b64 else
+    f'<div style="background:{_LC_YELLOW};color:{_LC_NAVY};font-weight:900;font-size:1.4rem;'
+    f'padding:8px 14px;border-radius:6px;letter-spacing:1px">LC</div>'
+)
+
+_user_info = ""
+if st.session_state.get("authenticated"):
+    _user_info = (f'<span class="lc-badge">👤 {st.session_state.user_nombre}'
+                  f' &nbsp;·&nbsp; {st.session_state.user_rol}</span>')
+
+st.markdown(f"""
+<div class="lc-header">
+    {_logo_html}
+    <div style="flex:1">
+        <p class="lc-header-title">Control de Depósito — La Clementina S.A.</p>
+        <p class="lc-header-sub">Insumos Agropecuarios · Bayer CropScience / Monsanto-Bayer · San Jorge, Santa Fe</p>
+    </div>
+    {_user_info}
+</div>
+""", unsafe_allow_html=True)
 
 tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12 = st.tabs([
     "⚡ Panel",
@@ -1755,6 +1900,7 @@ with tab1:
 
         # Movimiento manual
         with st.expander("➕ Registrar movimiento manual"):
+            st.markdown('<p class="seccion-titulo">Movimiento Manual de Stock</p>', unsafe_allow_html=True)
             cm1, cm2 = st.columns(2)
             with cm1:
                 prod_m  = st.selectbox("Producto", sorted(stock_df["Producto"].unique()), key="mov_prod")
@@ -1762,8 +1908,15 @@ with tab1:
             with cm2:
                 cant_m  = st.number_input("Cantidad", min_value=0.01, step=0.5, key="mov_cant")
                 dep_m   = st.selectbox("Depósito", sorted(stock_df["Deposito"].unique()), key="mov_dep")
-            lote_m = st.text_input("Lote", value="S/L", key="mov_lote")
-            ref_m  = st.text_input("Referencia", value="", key="mov_ref")
+            cm3, cm4 = st.columns(2)
+            with cm3:
+                lote_m = st.text_input("Lote", value="S/L", key="mov_lote")
+                ref_m  = st.text_input("Referencia / Remito", value="", key="mov_ref")
+            with cm4:
+                obs_m  = st.text_area("Observaciones", value="", key="mov_obs", height=90,
+                                      placeholder="Motivo, cliente destino, etc.")
+                if tipo_m == "Salida":
+                    cliente_remito = st.text_input("Cliente (para remito)", value="", key="mov_cliente")
             # Advertencia de stock disponible en tiempo real
             if tipo_m == "Salida":
                 stk_disp = float(stock_df[
@@ -1779,7 +1932,9 @@ with tab1:
                 if st.button("📋 Preparar movimiento"):
                     st.session_state.mov_pendiente = dict(
                         producto=prod_m, tipo=tipo_m, cantidad=cant_m,
-                        deposito=dep_m, lote=lote_m, referencia=ref_m
+                        deposito=dep_m, lote=lote_m, referencia=ref_m,
+                        observaciones=obs_m,
+                        cliente=st.session_state.get("mov_cliente","") if tipo_m=="Salida" else ""
                     )
                     st.rerun()
             else:
@@ -1792,18 +1947,42 @@ with tab1:
                         conn = conectar_db()
                         id_p = conn.execute("SELECT id_producto FROM productos WHERE nombre=?",
                                             (p["producto"],)).fetchone()
+                        _remito_bytes = b""
                         if id_p:
                             conn.execute("""INSERT INTO movimientos
-                                (fecha_hora,tipo_movimiento,id_producto,cantidad,lote,referencia,deposito,origen,usuario)
-                                VALUES (?,?,?,?,?,?,?,?,?)""",
+                                (fecha_hora,tipo_movimiento,id_producto,cantidad,lote,referencia,
+                                 deposito,origen,usuario,observaciones)
+                                VALUES (?,?,?,?,?,?,?,?,?,?)""",
                                 (datetime.now().strftime("%d/%m/%Y %H:%M"), p["tipo"],
                                  id_p[0], p["cantidad"], p["lote"], p["referencia"],
-                                 p["deposito"], "manual", usuario_actual()))
+                                 p["deposito"], "manual", usuario_actual(), p.get("observaciones","")))
                             conn.commit()
+                            # Generar remito PDF si es salida
+                            if p["tipo"] == "Salida" and PDF_AVAILABLE:
+                                _nro_remito = f"R-{datetime.now().strftime('%Y%m%d-%H%M')}"
+                                _prod_rem   = obtener_productos_completo()
+                                _uni_rem    = ""
+                                if not _prod_rem.empty:
+                                    _row_uni = _prod_rem[_prod_rem["nombre"]==p["producto"]]
+                                    _uni_rem = _row_uni.iloc[0]["unidad"] if not _row_uni.empty else ""
+                                _remito_bytes = generar_remito_pdf(
+                                    numero=_nro_remito,
+                                    cliente=p.get("cliente","---"),
+                                    deposito=p["deposito"],
+                                    items=[{"producto":p["producto"],"lote":p["lote"],
+                                            "cantidad":p["cantidad"],"unidad":_uni_rem}],
+                                    usuario=usuario_actual(),
+                                    observaciones=p.get("observaciones","")
+                                )
                         conn.close()
                         limpiar_cache()
                         st.session_state.mov_pendiente = None
                         st.success("✅ Registrado.")
+                        if _remito_bytes:
+                            st.download_button("🖨️ Descargar Remito PDF",
+                                               data=_remito_bytes,
+                                               file_name=f"remito_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
+                                               mime="application/pdf")
                         st.rerun()
                 with cc2:
                     if st.button("❌ Cancelar"):
@@ -2492,12 +2671,13 @@ with tab7:
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab8:
     st.subheader("📈 Reportes y Análisis")
-    r_tab1, r_tab2, r_tab3, r_tab4, r_tab5 = st.tabs([
+    r_tab1, r_tab2, r_tab3, r_tab4, r_tab5, r_tab6 = st.tabs([
         "👥 Dashboard Vendedores",
         "🔄 Rotación de Stock",
         "⏰ Vencimientos",
         "📄 Reporte Mensual",
         "📊 Resumen Ejecutivo",
+        "⏸️ Stock Inmovilizado",
     ])
 
     # ── Vendedores ────────────────────────────────────────────────────────────
@@ -2739,6 +2919,72 @@ with tab8:
             ok_em, msg_em = enviar_email_alerta(stk_bajo, pend_30)
             st.success(msg_em) if ok_em else st.error(msg_em)
 
+    # ── Stock Inmovilizado ────────────────────────────────────────────────────
+    with r_tab6:
+        st.write("### ⏸️ Stock Inmovilizado")
+        st.caption("Productos sin ningún movimiento de salida en los últimos N días. Stock que no rota y ocupa espacio o genera costo financiero.")
+        _dias_inm = st.slider("Días sin movimiento", min_value=30, max_value=365, value=90, step=15,
+                               help="Período de análisis: si un producto no tuvo salidas en estos días, se considera inmovilizado.")
+        _hist_inm = obtener_historial_movimientos()
+        _stk_inm  = obtener_stock_full()
+        if _hist_inm.empty or _stk_inm.empty:
+            st.info("Sin datos suficientes para el análisis.")
+        else:
+            def _parse_dt_inm(s):
+                try: return datetime.strptime(str(s)[:10], "%d/%m/%Y")
+                except: return None
+            _hist_sal = _hist_inm[(_hist_inm["Tipo"] == "Salida") & (_hist_inm["Anulado"] == 0)].copy()
+            _hist_sal["_dt"] = _hist_sal["Fecha"].apply(_parse_dt_inm)
+            _corte = datetime.now() - timedelta(days=_dias_inm)
+            _recientes = set(
+                _hist_sal[_hist_sal["_dt"] >= _corte]["Producto"].unique()
+            )
+            _todos_prods = set(_stk_inm["Producto"].unique())
+            _inmovilizados = _todos_prods - _recientes
+            _stk_inm_f = _stk_inm[_stk_inm["Producto"].isin(_inmovilizados)].copy()
+            _stk_inm_f = _stk_inm_f.groupby(["Producto","Unidad"])["Stock Actual"].sum().reset_index()
+
+            # Última salida por producto
+            _ult_sal = (
+                _hist_sal.groupby("Producto")["_dt"].max().reset_index()
+                .rename(columns={"_dt":"Última Salida"})
+            )
+            _ult_sal["Última Salida"] = _ult_sal["Última Salida"].apply(
+                lambda d: d.strftime("%d/%m/%Y") if d else "Sin salidas"
+            )
+            _stk_inm_f = _stk_inm_f.merge(_ult_sal, on="Producto", how="left")
+            _stk_inm_f["Última Salida"] = _stk_inm_f["Última Salida"].fillna("Sin salidas")
+
+            _in1, _in2, _in3 = st.columns(3)
+            _in1.metric("Productos inmovilizados", len(_stk_inm_f))
+            _in2.metric("% del catálogo",
+                        f"{len(_stk_inm_f)/max(1,len(_todos_prods))*100:.1f}%")
+            _in3.metric("Stock total inmovilizado",
+                        f"{_stk_inm_f['Stock Actual'].sum():,.0f}")
+
+            if not _stk_inm_f.empty:
+                fig_inm = px.bar(
+                    _stk_inm_f.sort_values("Stock Actual", ascending=False).head(20),
+                    x="Producto", y="Stock Actual",
+                    title=f"Top 20 — Productos sin salidas en {_dias_inm} días",
+                    color="Stock Actual",
+                    color_continuous_scale=["#28a745","#ffc107","#dc3545"],
+                    labels={"Stock Actual":"Stock"}
+                )
+                fig_inm.update_layout(height=350, margin=dict(l=0,r=0,t=40,b=0),
+                                       xaxis_tickangle=-40, showlegend=False)
+                st.plotly_chart(fig_inm, use_container_width=True)
+                st.dataframe(
+                    _stk_inm_f.sort_values("Stock Actual", ascending=False)
+                    .rename(columns={"Stock Actual":"Stock"}),
+                    use_container_width=True, hide_index=True
+                )
+                st.download_button("📥 Exportar Inmovilizado (.xlsx)",
+                                   data=to_excel_bytes(_stk_inm_f, "Inmovilizado"),
+                                   file_name=f"inmovilizado_{datetime.now().strftime('%Y%m%d')}.xlsx")
+            else:
+                st.success(f"✅ Todos los productos tuvieron movimientos en los últimos {_dias_inm} días.")
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 9 — CONFIGURACIÓN
@@ -2761,6 +3007,14 @@ with tab9:
                     st.caption(f"📋 Columnas detectadas: `{'`, `'.join(str(c) for c in _df_prev.columns)}`  |  {len(_df_prev)} filas")
                 except Exception:
                     pass
+            if arch_s:
+                # Verificar duplicado por hash del archivo
+                _file_bytes = arch_s.read(); arch_s.seek(0)
+                _file_hash  = hashlib.sha1(_file_bytes).hexdigest()[:12]
+                _hash_prev  = obtener_metadata("ultimo_hash_stock")
+                if _hash_prev == _file_hash:
+                    st.warning(f"⚠️ Este archivo ya fue importado anteriormente (hash: `{_file_hash}`). "
+                               "Podés igualmente importarlo de nuevo si querés actualizar.")
             if arch_s and st.button("🚀 IMPORTAR STOCK COMPLETO", type="primary", key="btn_imp_stock"):
                 import traceback as _tb
                 _prog = st.progress(0, "Leyendo archivo...")
@@ -2859,6 +3113,7 @@ with tab9:
                     conn.close()
                     _prog.progress(100, "¡Listo!")
                     guardar_metadata("ultima_importacion", datetime.now().strftime("%d/%m/%Y %H:%M"))
+                    guardar_metadata("ultimo_hash_stock", _file_hash)
                     limpiar_cache()
                     st.session_state["stock_imp_ok"] = (
                         f"✅ Stock importado: {pa} productos nuevos, {mo} líneas "
@@ -4046,18 +4301,64 @@ with tab11:
                                     help="Ingresá la cantidad que se acaba de entregar"
                                 )
                                 if st.button("📦 Registrar entrega parcial", key="mg_btn_parcial",
-                                             help="Descuenta la cantidad del pendiente"):
+                                             help="Descuenta la cantidad del pendiente y genera movimiento en stock"):
                                     if nueva_entrega > 0:
                                         conn = conectar_db()
                                         conn.execute("""
                                             UPDATE entregas SET
                                                 cant_entregada = cant_entregada + ?,
-                                                pendiente = MAX(0, pendiente - ?)
+                                                pendiente = MAX(0, pendiente - ?),
+                                                confirmada = 1,
+                                                fecha_confirmacion = ?,
+                                                usuario_confirmacion = ?
                                             WHERE hoja='MACROGEST' AND rto=?
-                                        """, (nueva_entrega, nueva_entrega, rto_sel))
-                                        conn.commit(); conn.close()
+                                        """, (nueva_entrega, nueva_entrega,
+                                              datetime.now().strftime("%d/%m/%Y %H:%M"),
+                                              usuario_actual(), rto_sel))
+                                        # Descontar del stock
+                                        _id_prod_mg = conn.execute(
+                                            "SELECT id_producto FROM productos WHERE nombre=?",
+                                            (r0["producto"],)
+                                        ).fetchone()
+                                        if _id_prod_mg:
+                                            conn.execute("""INSERT INTO movimientos
+                                                (fecha_hora,tipo_movimiento,id_producto,cantidad,lote,
+                                                 referencia,deposito,origen,usuario,observaciones)
+                                                VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                                                (datetime.now().strftime("%d/%m/%Y %H:%M"), "Salida",
+                                                 _id_prod_mg[0], nueva_entrega,
+                                                 safe_str(r0.get("lote","S/L")) or "S/L",
+                                                 f"Entrega MG pedido {rto_sel}",
+                                                 safe_str(r0.get("deposito","")) or "",
+                                                 "entrega_mg", usuario_actual(),
+                                                 f"Cliente: {r0['cliente']}"))
+                                        conn.commit()
+                                        # Remito PDF
+                                        _rem_mg = b""
+                                        if PDF_AVAILABLE:
+                                            _prod_mg_list = obtener_productos_completo()
+                                            _uni_mg = ""
+                                            if not _prod_mg_list.empty:
+                                                _row_mg = _prod_mg_list[_prod_mg_list["nombre"]==r0["producto"]]
+                                                _uni_mg = _row_mg.iloc[0]["unidad"] if not _row_mg.empty else ""
+                                            _rem_mg = generar_remito_pdf(
+                                                numero=f"MG-{rto_sel}",
+                                                cliente=r0["cliente"],
+                                                deposito=safe_str(r0.get("deposito","")),
+                                                items=[{"producto":r0["producto"],"lote":safe_str(r0.get("lote","S/L")),
+                                                        "cantidad":nueva_entrega,"unidad":_uni_mg}],
+                                                usuario=usuario_actual(),
+                                                observaciones=f"Pedido MacroGest {rto_sel}"
+                                            )
+                                        conn.close()
                                         limpiar_cache()
-                                        st.toast(f"✅ {nueva_entrega:,.1f} unidades registradas como entregadas.")
+                                        st.toast(f"✅ {nueva_entrega:,.1f} unidades registradas y descontadas del stock.")
+                                        if _rem_mg:
+                                            st.download_button("🖨️ Descargar Remito PDF",
+                                                               data=_rem_mg,
+                                                               file_name=f"remito_mg_{rto_sel}.pdf",
+                                                               mime="application/pdf",
+                                                               key="dl_rem_mg")
                                         st.rerun()
                                     else:
                                         st.warning("Ingresá una cantidad mayor a cero.")
@@ -4067,14 +4368,34 @@ with tab11:
                                              type="primary",
                                              help="Cierra el pedido poniendo pendiente=0 y estado=ENTREGADO"):
                                     conn = conectar_db()
+                                    _pend_comp = float(r0.get("pendiente", 0))
                                     conn.execute("""
                                         UPDATE entregas SET pendiente=0, estado='ENTREGADO',
-                                            cant_entregada=cantidad_comprada
+                                            cant_entregada=cantidad_comprada,
+                                            confirmada=1, fecha_confirmacion=?, usuario_confirmacion=?
                                         WHERE hoja='MACROGEST' AND rto=?
-                                    """, (rto_sel,))
+                                    """, (datetime.now().strftime("%d/%m/%Y %H:%M"), usuario_actual(), rto_sel))
+                                    # Descontar pendiente restante del stock
+                                    if _pend_comp > 0:
+                                        _id_pc = conn.execute(
+                                            "SELECT id_producto FROM productos WHERE nombre=?",
+                                            (r0["producto"],)
+                                        ).fetchone()
+                                        if _id_pc:
+                                            conn.execute("""INSERT INTO movimientos
+                                                (fecha_hora,tipo_movimiento,id_producto,cantidad,lote,
+                                                 referencia,deposito,origen,usuario,observaciones)
+                                                VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                                                (datetime.now().strftime("%d/%m/%Y %H:%M"), "Salida",
+                                                 _id_pc[0], _pend_comp,
+                                                 safe_str(r0.get("lote","S/L")) or "S/L",
+                                                 f"Completar MG pedido {rto_sel}",
+                                                 safe_str(r0.get("deposito","")) or "",
+                                                 "entrega_mg", usuario_actual(),
+                                                 f"Completar entrega — Cliente: {r0['cliente']}"))
                                     conn.commit(); conn.close()
                                     limpiar_cache()
-                                    st.toast(f"✅ Pedido {rto_sel} marcado como completado.")
+                                    st.toast(f"✅ Pedido {rto_sel} marcado como completado y stock descontado.")
                                     st.rerun()
                     else:
                         st.info("Los registros filtrados no tienen N° de pedido asignado. "
