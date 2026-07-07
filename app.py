@@ -372,6 +372,19 @@ def inicializar_db():
             items_json   TEXT,
             tipo         TEXT DEFAULT 'manual'
         )""",
+        f"""CREATE TABLE IF NOT EXISTS lotes_vencimiento (
+            id_lote         {_pk},
+            codigo          TEXT,
+            producto        TEXT NOT NULL,
+            unidad          TEXT,
+            deposito        TEXT,
+            lote            TEXT,
+            stock           REAL DEFAULT 0,
+            fecha_vencimiento TEXT,
+            fecha_fabricacion TEXT,
+            estado          TEXT DEFAULT 'activa',
+            fecha_importacion TEXT
+        )""",
         f"""CREATE TABLE IF NOT EXISTS reservas_stock (
             id_reserva   {_pk},
             fecha_hora   TEXT NOT NULL,
@@ -1234,6 +1247,94 @@ def generar_ejecutivo_pdf() -> bytes:
     ))
     doc.build(elems)
     return buf.getvalue()
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def obtener_lotes_vencimiento() -> pd.DataFrame:
+    conn = conectar_db()
+    df = _rsql("""SELECT codigo, producto, unidad, deposito, lote,
+                         stock, fecha_vencimiento, fecha_fabricacion, estado, fecha_importacion
+                  FROM lotes_vencimiento
+                  WHERE estado = 'activa'
+                  ORDER BY fecha_vencimiento ASC""", conn)
+    conn.close()
+    return df
+
+
+def importar_lotes_vencimiento(df_raw: pd.DataFrame) -> tuple[int, int]:
+    """
+    Importa lotes desde el Excel de MacroGest (lote_vencimiento.xlsx).
+    Retorna (filas_importadas, filas_con_vencimiento).
+    Reemplaza todos los lotes activos previos.
+    """
+    from datetime import datetime as _dt
+    _ahora = _dt.now().strftime("%d/%m/%Y %H:%M")
+
+    # Normalizar columnas
+    df_raw.columns = [str(c).strip().lower() for c in df_raw.columns]
+
+    # Mapeo flexible de columnas
+    _col_map = {
+        "codigo":    next((c for c in df_raw.columns if c in ["codigo","código"]), None),
+        "producto":  next((c for c in df_raw.columns if "descripcion" in c or "descripción" in c or "producto" in c), None),
+        "unidad":    next((c for c in df_raw.columns if "unidad" in c), None),
+        "deposito":  next((c for c in df_raw.columns if "deposito" in c or "depósito" in c), None),
+        "lote":      next((c for c in df_raw.columns if c == "serie" or c == "lote"), None),
+        "stock":     next((c for c in df_raw.columns if c in ["antidad","cantidad","stock","stock_actual"]), None),
+        "venc":      next((c for c in df_raw.columns if "vencimiento" in c and "muestra" not in c), None),
+        "fabric":    next((c for c in df_raw.columns if "fabricacion" in c or "fabricación" in c), None),
+    }
+
+    if not _col_map["producto"] or not _col_map["stock"]:
+        raise ValueError(f"Columnas requeridas no encontradas. Disponibles: {list(df_raw.columns)}")
+
+    conn = conectar_db()
+    # Marcar todos los anteriores como inactivos (reemplazo completo)
+    conn.execute("UPDATE lotes_vencimiento SET estado='inactiva' WHERE estado='activa'")
+
+    filas = 0
+    con_venc = 0
+    rows_to_insert = []
+    for _, r in df_raw.iterrows():
+        _prod = safe_str(r.get(_col_map["producto"], "")).strip()
+        if not _prod:
+            continue
+        _cod   = safe_str(r.get(_col_map["codigo"], "")) if _col_map["codigo"] else ""
+        _uni   = safe_str(r.get(_col_map["unidad"], "")) if _col_map["unidad"] else ""
+        _dep   = safe_str(r.get(_col_map["deposito"], "")) if _col_map["deposito"] else ""
+        _lote  = safe_str(r.get(_col_map["lote"], "")) if _col_map["lote"] else ""
+        _stk   = safe_float(r.get(_col_map["stock"], 0))
+        _venc  = None
+        _fab   = None
+        if _col_map["venc"]:
+            _v = r.get(_col_map["venc"])
+            if pd.notna(_v):
+                try:
+                    _venc = pd.Timestamp(_v).strftime("%d/%m/%Y")
+                    con_venc += 1
+                except Exception:
+                    pass
+        if _col_map["fabric"]:
+            _f = r.get(_col_map["fabric"])
+            if pd.notna(_f):
+                try:
+                    _fab = pd.Timestamp(_f).strftime("%d/%m/%Y")
+                except Exception:
+                    pass
+        rows_to_insert.append((_cod, _prod, _uni, _dep, _lote, _stk, _venc, _fab, "activa", _ahora))
+        filas += 1
+
+    if IS_POSTGRES:
+        conn.executemany("""INSERT INTO lotes_vencimiento
+            (codigo,producto,unidad,deposito,lote,stock,fecha_vencimiento,fecha_fabricacion,estado,fecha_importacion)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""", rows_to_insert)
+    else:
+        conn.executemany("""INSERT INTO lotes_vencimiento
+            (codigo,producto,unidad,deposito,lote,stock,fecha_vencimiento,fecha_fabricacion,estado,fecha_importacion)
+            VALUES (?,?,?,?,?,?,?,?,?,?)""", rows_to_insert)
+    conn.commit()
+    conn.close()
+    return filas, con_venc
 
 
 def exportar_macrogest_format(stock_df):
@@ -3400,40 +3501,138 @@ with tab8:
                                data=to_excel_bytes(df_rot, "Rotacion"),
                                file_name="rotacion_stock.xlsx")
 
-    # ── Vencimientos ─────────────────────────────────────────────────────────
+    # ── Vencimientos por Lote ─────────────────────────────────────────────────
     with r_tab3:
-        st.write("### ⏰ Control de Vencimientos")
-        prod_venc = obtener_productos_completo()
-        if prod_venc.empty or "fecha_vencimiento" not in prod_venc.columns:
-            st.info("Sin fechas de vencimiento cargadas. Actualizalas en Valorización → Precios.")
-        else:
-            prod_venc = prod_venc[prod_venc["fecha_vencimiento"].notna() &
-                                   (prod_venc["fecha_vencimiento"] != "")]
-            if prod_venc.empty:
-                st.info("Sin fechas de vencimiento cargadas.")
-            else:
-                prod_venc["dias_hasta_venc"] = prod_venc["fecha_vencimiento"].apply(dias_hasta)
-                prod_venc["Estado_Venc"] = prod_venc["dias_hasta_venc"].apply(
-                    lambda d: "🔴 Vencido" if d < 0 else
-                              ("🟠 Crítico (<30d)" if d < 30 else
-                               ("🟡 Alerta (30-90d)" if d < 90 else "🟢 OK"))
-                )
-                dias_fil = st.slider("Mostrar vencimientos en próximos N días", 0, 365, 90, key="dias_venc")
-                df_v_fil = prod_venc[prod_venc["dias_hasta_venc"] <= dias_fil].sort_values("dias_hasta_venc")
+        st.write("### ⏰ Control de Vencimientos por Lote")
 
-                v1, v2, v3, v4 = st.columns(4)
-                with v1: st.metric("🔴 Vencidos",     len(df_v_fil[df_v_fil["dias_hasta_venc"] < 0]))
-                with v2: st.metric("🟠 Crítico <30d", len(df_v_fil[(df_v_fil["dias_hasta_venc"]>=0)  & (df_v_fil["dias_hasta_venc"]<30)]))
-                with v3: st.metric("🟡 30-90d",       len(df_v_fil[(df_v_fil["dias_hasta_venc"]>=30) & (df_v_fil["dias_hasta_venc"]<90)]))
-                with v4: st.metric("Total en ventana", len(df_v_fil))
+        df_lotes = obtener_lotes_vencimiento()
+
+        if df_lotes.empty:
+            st.info("Sin datos de lotes. Importá el archivo de lotes desde **⚙️ Configuración → Importación**.")
+        else:
+            # Calcular días restantes
+            def _dias_v(fv):
+                if not fv: return None
+                try:
+                    return (datetime.strptime(str(fv)[:10], "%d/%m/%Y") - datetime.now()).days
+                except Exception:
+                    return None
+
+            df_lotes["dias"] = df_lotes["fecha_vencimiento"].apply(_dias_v)
+
+            def _sem_v(d):
+                if d is None:   return "⚪ Sin fecha"
+                if d < 0:       return "🔴 Vencido"
+                if d < 30:      return "🟠 Crítico"
+                if d < 90:      return "🟡 Próximo"
+                return "🟢 OK"
+
+            df_lotes["Estado"] = df_lotes["dias"].apply(_sem_v)
+
+            # ── KPIs globales ─────────────────────────────────────────────────
+            _con_fecha = df_lotes[df_lotes["dias"].notna()]
+            _lv1, _lv2, _lv3, _lv4, _lv5 = st.columns(5)
+            _lv1.metric("Lotes totales",      len(df_lotes))
+            _lv2.metric("🔴 Vencidos",        int((_con_fecha["dias"] < 0).sum()))
+            _lv3.metric("🟠 Críticos (<30d)", int(((_con_fecha["dias"] >= 0) & (_con_fecha["dias"] < 30)).sum()))
+            _lv4.metric("🟡 Próximos (30-90d)",int(((_con_fecha["dias"] >= 30) & (_con_fecha["dias"] < 90)).sum()))
+            _lv5.metric("🟢 OK",              int((_con_fecha["dias"] >= 90).sum()))
+
+            # Alerta inmediata si hay vencidos con stock positivo
+            _venc_con_stock = df_lotes[(df_lotes["dias"].notna()) &
+                                       (df_lotes["dias"] < 0) &
+                                       (df_lotes["stock"] > 0)]
+            if not _venc_con_stock.empty:
+                st.error(f"🚨 **{len(_venc_con_stock)} lotes VENCIDOS con stock positivo** — "
+                         f"requieren revisión urgente. Stock total involucrado: "
+                         f"{_venc_con_stock['stock'].sum():,.1f}")
+
+            st.markdown("---")
+
+            # ── Filtros ───────────────────────────────────────────────────────
+            _fl1, _fl2, _fl3 = st.columns([2, 2, 2])
+            with _fl1:
+                _est_opts = ["Todos", "🔴 Vencido", "🟠 Crítico", "🟡 Próximo", "🟢 OK", "⚪ Sin fecha"]
+                _est_fil  = st.selectbox("Estado", _est_opts, key="venc_est_fil")
+            with _fl2:
+                _prods_v  = ["Todos"] + sorted(df_lotes["producto"].dropna().unique().tolist())
+                _prod_fil = st.selectbox("Producto", _prods_v, key="venc_prod_fil")
+            with _fl3:
+                _dias_max = st.number_input("Mostrar vencimientos en próximos N días (0 = todos)",
+                                            min_value=0, value=365, step=30, key="venc_dias_max")
+
+            df_v = df_lotes.copy()
+            if _est_fil != "Todos":
+                df_v = df_v[df_v["Estado"] == _est_fil]
+            if _prod_fil != "Todos":
+                df_v = df_v[df_v["producto"] == _prod_fil]
+            if _dias_max > 0:
+                df_v = df_v[(df_v["dias"].isna()) | (df_v["dias"] <= _dias_max)]
+
+            df_v = df_v.sort_values("dias", na_position="last")
+
+            st.caption(f"Mostrando {len(df_v):,} lotes")
+
+            # ── Vista agrupada por Producto ───────────────────────────────────
+            _vista = st.radio("Vista", ["Por Lote (detalle)", "Por Producto (resumen)"],
+                              horizontal=True, key="venc_vista")
+
+            if _vista == "Por Producto (resumen)":
+                _grp = (df_v.groupby(["producto", "unidad"])
+                        .agg(
+                            Lotes=("lote", "count"),
+                            Stock_Total=("stock", "sum"),
+                            Vencido=("dias", lambda x: int((x < 0).sum())),
+                            Critico=("dias", lambda x: int(((x >= 0) & (x < 30)).sum())),
+                            Proximo=("dias", lambda x: int(((x >= 30) & (x < 90)).sum())),
+                            Venc_Minima=("dias", "min"),
+                        )
+                        .reset_index()
+                        .rename(columns={
+                            "producto": "Producto", "unidad": "Unidad",
+                            "Stock_Total": "Stock Total", "Venc_Minima": "Días al próximo venc."
+                        }))
+
+                def _sem_row(row):
+                    if row["Vencido"] > 0:   return "🔴 Tiene vencidos"
+                    if row["Critico"] > 0:   return "🟠 Crítico"
+                    if row["Proximo"] > 0:   return "🟡 Próximo"
+                    return "🟢 OK"
+
+                _grp["Estado General"] = _grp.apply(_sem_row, axis=1)
+                _grp = _grp.sort_values("Días al próximo venc.", na_position="last")
 
                 st.dataframe(
-                    df_v_fil[["nombre","fecha_vencimiento","dias_hasta_venc","Estado_Venc","proveedor"]].rename(columns={
-                        "nombre":"Producto","fecha_vencimiento":"Vence","dias_hasta_venc":"Días",
-                        "Estado_Venc":"Estado","proveedor":"Proveedor"
-                    }),
-                    use_container_width=True, hide_index=True
+                    _grp[["Producto","Unidad","Lotes","Stock Total",
+                           "Vencido","Critico","Proximo","Días al próximo venc.","Estado General"]],
+                    use_container_width=True, hide_index=True,
+                    column_config={
+                        "Stock Total":              st.column_config.NumberColumn(format="%.1f"),
+                        "Días al próximo venc.":    st.column_config.NumberColumn(format="%d"),
+                    }
                 )
+                st.download_button("📥 Exportar resumen (.xlsx)",
+                                   data=to_excel_bytes(_grp, "Resumen_Vencimientos"),
+                                   file_name=f"venc_resumen_{datetime.now().strftime('%Y%m%d')}.xlsx")
+
+            else:  # Detalle por lote
+                _show = df_v[["producto","unidad","deposito","lote","stock",
+                               "fecha_vencimiento","fecha_fabricacion","dias","Estado"]].rename(columns={
+                    "producto":"Producto","unidad":"Unidad","deposito":"Depósito",
+                    "lote":"Lote","stock":"Stock","fecha_vencimiento":"Vence",
+                    "fecha_fabricacion":"Fabricación","dias":"Días restantes","Estado":"Estado"
+                })
+                st.dataframe(
+                    _show,
+                    use_container_width=True, hide_index=True,
+                    column_config={
+                        "Stock":           st.column_config.NumberColumn(format="%.2f"),
+                        "Días restantes":  st.column_config.NumberColumn(format="%d"),
+                    }
+                )
+                st.download_button("📥 Exportar detalle (.xlsx)",
+                                   data=to_excel_bytes(_show, "Detalle_Lotes"),
+                                   file_name=f"venc_detalle_{datetime.now().strftime('%Y%m%d')}.xlsx")
 
     # ── Resumen Ejecutivo ─────────────────────────────────────────────────────
     with r_tab5:
@@ -3907,6 +4106,50 @@ with tab9:
                         )
                     except Exception as ex:
                         st.error(f"Error al consultar DB: {ex}")
+
+        # ── Importación Lotes + Vencimientos ──────────────────────────────────
+        with st.expander("📦 Importar Lotes y Vencimientos (MacroGest)", expanded=False):
+            st.info(
+                "Subí el archivo de MacroGest con columnas: `codigo`, `descripcion_1`, "
+                "`unidad_medida`, `deposito`, `serie` (lote), `antidad` (stock), "
+                "`lote_vencimiento`, `lote_fabricacion`. "
+                "**Reemplaza todos los lotes activos anteriores.**"
+            )
+            _df_lv_prev = obtener_lotes_vencimiento()
+            if not _df_lv_prev.empty:
+                st.caption(f"Actualmente: {len(_df_lv_prev):,} lotes cargados · "
+                           f"última importación: {_df_lv_prev['fecha_importacion'].iloc[0] if 'fecha_importacion' in _df_lv_prev.columns else '—'}")
+
+            arch_lv = st.file_uploader("Archivo de lotes (.xlsx / .xls / .csv)",
+                                       type=["xlsx","xls","csv"], key="up_lotes_venc")
+            if arch_lv:
+                try:
+                    _df_lv = (pd.read_excel(arch_lv) if not arch_lv.name.endswith(".csv")
+                              else pd.read_csv(arch_lv))
+                    arch_lv.seek(0)
+                    _lv_col_venc = next((c for c in _df_lv.columns
+                                        if "vencimiento" in str(c).lower() and "muestra" not in str(c).lower()), None)
+                    _lv_con_v = int(_df_lv[_lv_col_venc].notna().sum()) if _lv_col_venc else 0
+                    st.caption(f"📋 {len(_df_lv):,} filas · {_df_lv['descripcion_1'].nunique() if 'descripcion_1' in _df_lv.columns else '?'} productos · "
+                               f"{_lv_con_v:,} lotes con fecha de vencimiento")
+                    if st.button("🚀 IMPORTAR LOTES", type="primary", key="btn_imp_lotes"):
+                        _prog_lv = st.progress(0, "Procesando...")
+                        try:
+                            arch_lv.seek(0)
+                            _df_lv2 = (pd.read_excel(arch_lv) if not arch_lv.name.endswith(".csv")
+                                       else pd.read_csv(arch_lv))
+                            _prog_lv.progress(30, "Importando lotes...")
+                            _tot, _cv = importar_lotes_vencimiento(_df_lv2)
+                            _prog_lv.progress(100, "¡Listo!")
+                            registrar_importacion_log("Lotes/Vencimientos", arch_lv.name, _tot)
+                            limpiar_cache()
+                            st.success(f"✅ {_tot:,} lotes importados · {_cv:,} con fecha de vencimiento.")
+                            st.rerun()
+                        except Exception as _ex_lv:
+                            _prog_lv.empty()
+                            st.error(f"Error: {_ex_lv}")
+                except Exception as _ex_prev:
+                    st.error(f"No se pudo leer el archivo: {_ex_prev}")
 
         # Importación incremental
         with st.expander("🔄 Importación Incremental (solo diferencias)"):
