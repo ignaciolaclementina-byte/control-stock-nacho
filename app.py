@@ -117,6 +117,20 @@ st.markdown(f"""
 /* Tabs con acento LC */
 .stTabs [data-baseweb="tab-list"] {{border-bottom: 3px solid {_LC_YELLOW}!important}}
 .stTabs [aria-selected="true"] {{color:{_LC_NAVY}!important;font-weight:700!important}}
+/* ── Vista depósito mobile ── */
+@media (max-width: 768px) {{
+    .stock-card {{padding:12px;margin-bottom:8px}}
+    .stock-title {{font-size:.85rem;min-height:auto}}
+    .stock-value {{font-size:1.3rem}}
+    .lc-header {{padding:10px 14px}}
+    .lc-header-title {{font-size:1.1rem}}
+    section[data-testid="stSidebar"] {{display:none}}
+    .stTabs [data-baseweb="tab-list"] {{flex-wrap:wrap}}
+    [data-testid="metric-container"] {{min-width:45%}}
+}}
+/* ── Presupuesto ── */
+.presupuesto-item {{background:#f8f9fa;border-left:4px solid {_LC_YELLOW};
+    padding:8px 12px;margin:4px 0;border-radius:4px;font-size:.9rem}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -1102,6 +1116,203 @@ def generar_reporte_pdf():
     doc.build(elems)
     return buf.getvalue()
 
+def registrar_cambio_precio(producto: str, precio_nuevo: float, moneda: str, usuario: str):
+    """Guarda un registro en historial_precios cada vez que cambia el precio de un producto."""
+    conn = conectar_db()
+    try:
+        conn.execute("""CREATE TABLE IF NOT EXISTS historial_precios (
+            id_precio   INTEGER PRIMARY KEY AUTOINCREMENT,
+            fecha_hora  TEXT NOT NULL,
+            producto    TEXT NOT NULL,
+            precio      REAL NOT NULL,
+            moneda      TEXT DEFAULT 'USD',
+            usuario     TEXT
+        )""")
+        conn.execute(
+            "INSERT INTO historial_precios (fecha_hora,producto,precio,moneda,usuario) VALUES (?,?,?,?,?)",
+            (datetime.now().strftime("%d/%m/%Y %H:%M"), producto, precio_nuevo, moneda, usuario)
+        )
+        conn.commit()
+    except Exception:
+        pass
+    conn.close()
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def obtener_historial_precios(producto: str = "") -> pd.DataFrame:
+    conn = conectar_db()
+    try:
+        if producto:
+            df = _rsql("SELECT * FROM historial_precios WHERE producto=? ORDER BY id_precio DESC LIMIT 200",
+                       conn, params=(producto,))
+        else:
+            df = _rsql("SELECT * FROM historial_precios ORDER BY id_precio DESC LIMIT 500", conn)
+    except Exception:
+        df = pd.DataFrame()
+    conn.close()
+    return df
+
+
+def generar_presupuesto_pdf(cliente: str, items: list, usuario: str, obs: str = "") -> bytes:
+    """
+    PDF de presupuesto con branding LC.
+    items = [{"producto": str, "cantidad": float, "precio": float, "moneda": str}, ...]
+    """
+    if not PDF_AVAILABLE: return b""
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4,
+                             rightMargin=1.5*cm, leftMargin=1.5*cm,
+                             topMargin=1.5*cm, bottomMargin=1.5*cm)
+    styles = getSampleStyleSheet()
+    elems  = []
+
+    # Header
+    _logo_path_p = os.path.join(os.path.dirname(__file__), "logo.png")
+    if os.path.exists(_logo_path_p):
+        try:
+            from reportlab.platypus import Image as RLImage
+            _img_p = RLImage(_logo_path_p, width=2*cm, height=2*cm, kind="proportional")
+            _ht = Table([[_img_p,
+                Paragraph("<font color='#3D4E6B' size=15><b>La Clementina S.A.</b></font><br/>"
+                          "<font color='#888' size=9>Insumos Agropecuarios · San Jorge, Santa Fe</font>",
+                          styles["Normal"]),
+                Paragraph(f"<font color='#888' size=9>PRESUPUESTO<br/>"
+                          f"{datetime.now().strftime('%d/%m/%Y')}</font>", styles["Normal"])
+            ]], colWidths=[2.5*cm, 11*cm, 4*cm])
+            _ht.setStyle(TableStyle([
+                ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+                ("BACKGROUND", (0,0), (-1,-1), rl_colors.HexColor("#FFF8E7")),
+                ("LINEBELOW", (0,0), (-1,-1), 2, rl_colors.HexColor("#F5A800")),
+                ("TOPPADDING", (0,0), (-1,-1), 6),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 6),
+            ]))
+            elems.append(_ht)
+        except Exception:
+            elems.append(Paragraph("La Clementina S.A. — Presupuesto", styles["Title"]))
+    elems.append(Spacer(1, 0.3*cm))
+
+    # Cliente y fecha
+    elems.append(Paragraph(f"<b>Cliente:</b> {cliente}", styles["Normal"]))
+    elems.append(Paragraph(f"<b>Fecha:</b> {datetime.now().strftime('%d/%m/%Y')}  ·  "
+                           f"<b>Elaborado por:</b> {usuario}", styles["Normal"]))
+    if obs:
+        elems.append(Paragraph(f"<b>Observaciones:</b> {obs}", styles["Normal"]))
+    elems.append(Spacer(1, 0.3*cm))
+
+    # Tabla de ítems
+    _rows = [["#", "Producto", "Cantidad", "Precio Unit.", "Moneda", "Total"]]
+    _total_usd = 0.0
+    _total_ars = 0.0
+    for i, it in enumerate(items, 1):
+        _subtotal = it["cantidad"] * it["precio"]
+        if it["moneda"] == "USD": _total_usd += _subtotal
+        else:                     _total_ars += _subtotal
+        _rows.append([
+            str(i),
+            it["producto"][:45],
+            f"{it['cantidad']:,.2f}",
+            f"{it['precio']:,.2f}",
+            it["moneda"],
+            f"{_subtotal:,.2f}",
+        ])
+    if _total_usd > 0:
+        _rows.append(["", "", "", "", "TOTAL USD", f"{_total_usd:,.2f}"])
+    if _total_ars > 0:
+        _rows.append(["", "", "", "", "TOTAL ARS", f"{_total_ars:,.2f}"])
+
+    _t = Table(_rows, colWidths=[0.8*cm, 8.5*cm, 2.2*cm, 2.5*cm, 1.8*cm, 2.2*cm])
+    _t.setStyle(TableStyle([
+        ("BACKGROUND",    (0,0), (-1,0), rl_colors.HexColor("#3D4E6B")),
+        ("TEXTCOLOR",     (0,0), (-1,0), rl_colors.white),
+        ("FONTNAME",      (0,0), (-1,0), "Helvetica-Bold"),
+        ("FONTSIZE",      (0,0), (-1,-1), 9),
+        ("GRID",          (0,0), (-1,-3), 0.4, rl_colors.grey),
+        ("ROWBACKGROUNDS",(0,1), (-1,-3), [rl_colors.white, rl_colors.HexColor("#FFF8E7")]),
+        ("BACKGROUND",    (0,-2), (-1,-1), rl_colors.HexColor("#F5A800")),
+        ("FONTNAME",      (0,-2), (-1,-1), "Helvetica-Bold"),
+        ("ALIGN",         (2,0), (-1,-1), "RIGHT"),
+        ("TOPPADDING",    (0,0), (-1,-1), 4),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+    ]))
+    elems.append(_t)
+    elems.append(Spacer(1, 0.5*cm))
+    elems.append(Paragraph(
+        "<font size=8 color='#888'>Precios expresados en la moneda indicada. "
+        "Sujeto a disponibilidad de stock. Válido por 7 días hábiles.</font>",
+        styles["Normal"]
+    ))
+    elems.append(Spacer(1, 0.3*cm))
+    elems.append(Paragraph(
+        f"<font size=8 color='#888'>La Clementina S.A. — San Jorge, Santa Fe | "
+        f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}</font>",
+        styles["Normal"]
+    ))
+    doc.build(elems)
+    return buf.getvalue()
+
+
+def generar_qr_lote(producto: str, lote: str, vencimiento: str, deposito: str) -> bytes:
+    """Genera imagen PNG de QR con datos del lote. Requiere qrcode."""
+    try:
+        import qrcode as _qr
+        _data = f"Producto: {producto}\nLote: {lote}\nVence: {vencimiento}\nDepósito: {deposito}"
+        _img  = _qr.make(_data)
+        _buf  = io.BytesIO()
+        _img.save(_buf, format="PNG")
+        return _buf.getvalue()
+    except ImportError:
+        return b""
+
+
+def conciliar_stock_vs_lotes() -> pd.DataFrame:
+    """
+    Compara stock del sistema (movimientos) con suma de lotes importados.
+    Retorna DataFrame con diferencias por producto.
+    """
+    stock_sys = obtener_stock_full()
+    lotes     = obtener_lotes_vencimiento()
+    if stock_sys.empty or lotes.empty:
+        return pd.DataFrame()
+
+    _sys = (stock_sys.groupby("Producto")["Stock Actual"]
+            .sum().reset_index().rename(columns={"Stock Actual": "Stock Sistema"}))
+    _lot = (lotes.groupby("producto")["stock"]
+            .sum().reset_index()
+            .rename(columns={"producto": "Producto", "stock": "Stock Lotes"}))
+
+    _merge = _sys.merge(_lot, on="Producto", how="outer").fillna(0)
+    _merge["Diferencia"] = _merge["Stock Sistema"] - _merge["Stock Lotes"]
+    _merge["Estado"] = _merge["Diferencia"].apply(
+        lambda d: "✅ Coincide" if abs(d) < 0.01 else
+                  ("📈 Sobrante en sistema" if d > 0 else "📉 Faltante en sistema")
+    )
+    return _merge.sort_values("Diferencia", key=abs, ascending=False)
+
+
+def generar_vencimientos_timeline() -> pd.DataFrame:
+    """Agrupa stock de lotes por mes de vencimiento para timeline."""
+    lotes = obtener_lotes_vencimiento()
+    if lotes.empty: return pd.DataFrame()
+    _df = lotes[lotes["fecha_vencimiento"].notna() & (lotes["stock"] > 0)].copy()
+    def _mes(fv):
+        try: return datetime.strptime(str(fv)[:10], "%d/%m/%Y").strftime("%Y-%m")
+        except: return None
+    _df["mes"] = _df["fecha_vencimiento"].apply(_mes)
+    _df = _df[_df["mes"].notna()]
+    return (_df.groupby(["mes","producto"])["stock"]
+            .sum().reset_index()
+            .rename(columns={"mes":"Mes","producto":"Producto","stock":"Stock"})
+            .sort_values("Mes"))
+
+
+def generar_venc_excel_baja(lotes_venc: pd.DataFrame) -> bytes:
+    """Excel con lotes vencidos para gestión de baja."""
+    _out = io.BytesIO()
+    with pd.ExcelWriter(_out, engine="openpyxl") as _w:
+        lotes_venc.to_excel(_w, index=False, sheet_name="Lotes_Para_Baja")
+    return _out.getvalue()
+
+
 def generar_ejecutivo_pdf() -> bytes:
     """Reporte ejecutivo PDF con branding LC. Retorna bytes."""
     if not PDF_AVAILABLE: return b""
@@ -1911,6 +2122,28 @@ with tab1:
                 + (" ..." if len(_neg_prods) > 8 else ""),
                 icon="🚨"
             )
+
+        # Alerta lotes vencidos con stock positivo
+        _lotes_panel = obtener_lotes_vencimiento()
+        if not _lotes_panel.empty:
+            def _dias_lote(fv):
+                try: return (datetime.strptime(str(fv)[:10], "%d/%m/%Y") - datetime.now()).days
+                except: return None
+            _lotes_panel["_dias"] = _lotes_panel["fecha_vencimiento"].apply(_dias_lote)
+            _lv_venc = _lotes_panel[(_lotes_panel["_dias"].notna()) &
+                                    (_lotes_panel["_dias"] < 0) &
+                                    (_lotes_panel["stock"] > 0)]
+            _lv_crit = _lotes_panel[(_lotes_panel["_dias"].notna()) &
+                                    (_lotes_panel["_dias"] >= 0) &
+                                    (_lotes_panel["_dias"] < 30) &
+                                    (_lotes_panel["stock"] > 0)]
+            if not _lv_venc.empty:
+                st.error(f"⚗️ **{len(_lv_venc)} lotes VENCIDOS con stock positivo** "
+                         f"({_lv_venc['stock'].sum():,.1f} unidades) — ver tab Reportes → Vencimientos",
+                         icon="⚗️")
+            elif not _lv_crit.empty:
+                st.warning(f"⏰ **{len(_lv_crit)} lotes vencen en menos de 30 días** "
+                           f"({_lv_crit['stock'].sum():,.1f} unidades) — ver Reportes → Vencimientos")
 
         c1, c2, c3, c4, c5, c6, c7 = st.columns(7)
         with c1: st.metric("Productos",     stock_df["Producto"].nunique(),
@@ -3633,6 +3866,101 @@ with tab8:
                 st.download_button("📥 Exportar detalle (.xlsx)",
                                    data=to_excel_bytes(_show, "Detalle_Lotes"),
                                    file_name=f"venc_detalle_{datetime.now().strftime('%Y%m%d')}.xlsx")
+
+            # ── Exportar lotes vencidos para baja ────────────────────────────
+            _lv_para_baja = df_v[df_v["Estado"] == "🔴 Vencido"].copy()
+            if not _lv_para_baja.empty:
+                st.markdown("---")
+                st.warning(f"**{len(_lv_para_baja)} lotes vencidos** con stock total "
+                           f"{_lv_para_baja['stock'].sum():,.1f} unidades.")
+                st.download_button("📋 Exportar lotes vencidos para gestión de baja",
+                                   data=generar_venc_excel_baja(_lv_para_baja),
+                                   file_name=f"lotes_vencidos_{datetime.now().strftime('%Y%m%d')}.xlsx")
+
+            # ── QR por lote ───────────────────────────────────────────────────
+            st.markdown("---")
+            with st.expander("🏷️ Generar QR de lote", expanded=False):
+                _qr_cols = st.columns(4)
+                with _qr_cols[0]:
+                    _qr_prod = st.selectbox("Producto", sorted(df_lotes["producto"].dropna().unique()),
+                                            key="qr_prod")
+                _lotes_del_prod = df_lotes[df_lotes["producto"] == _qr_prod]
+                with _qr_cols[1]:
+                    _qr_lote = st.selectbox("Lote", _lotes_del_prod["lote"].fillna("S/L").unique(),
+                                            key="qr_lote")
+                with _qr_cols[2]:
+                    _qr_dep  = st.text_input("Depósito", key="qr_dep")
+                with _qr_cols[3]:
+                    _qr_row  = _lotes_del_prod[_lotes_del_prod["lote"] == _qr_lote]
+                    _qr_venc = _qr_row["fecha_vencimiento"].iloc[0] if not _qr_row.empty else ""
+                    st.text_input("Vencimiento", value=str(_qr_venc), disabled=True, key="qr_venc_disp")
+                if st.button("📲 Generar QR", key="btn_qr_lote"):
+                    _qr_bytes = generar_qr_lote(_qr_prod, _qr_lote, str(_qr_venc), _qr_dep)
+                    if _qr_bytes:
+                        st.image(_qr_bytes, width=200, caption=f"{_qr_prod} · {_qr_lote}")
+                        st.download_button("⬇️ Descargar QR (.png)", data=_qr_bytes,
+                                           file_name=f"qr_{_qr_lote}.png", mime="image/png")
+                    else:
+                        st.info("Instalá `qrcode` para usar esta función: `pip install qrcode[pil]`")
+
+            # ── Timeline de vencimientos ──────────────────────────────────────
+            st.markdown("---")
+            st.write("#### 📅 Timeline: Stock que vence por mes")
+            _tl = generar_vencimientos_timeline()
+            if not _tl.empty:
+                _hoy_mes = datetime.now().strftime("%Y-%m")
+                _tl_fut  = _tl[_tl["Mes"] >= _hoy_mes]
+                _tl_grp  = _tl_fut.groupby("Mes")["Stock"].sum().reset_index()
+                if not _tl_grp.empty:
+                    _fig_tl = px.bar(_tl_grp, x="Mes", y="Stock",
+                                     title="Unidades que vencen por mes (próximos meses)",
+                                     color="Stock",
+                                     color_continuous_scale=["#28a745","#ffc107","#dc3545"],
+                                     labels={"Stock":"Unidades","Mes":"Mes"})
+                    _fig_tl.update_layout(height=300, margin=dict(l=0,r=0,t=40,b=0),
+                                          showlegend=False)
+                    st.plotly_chart(_fig_tl, use_container_width=True)
+
+                    # Top productos que más vencen en próximos 90d
+                    _90d = datetime.now()
+                    _tl_90 = _tl_fut[_tl_fut["Mes"] <= (_90d.replace(month=min(_90d.month+3,12)
+                                                         ).strftime("%Y-%m"))]
+                    if not _tl_90.empty:
+                        _top_venc = (_tl_90.groupby("Producto")["Stock"].sum()
+                                     .reset_index().sort_values("Stock", ascending=False).head(10))
+                        st.caption("**Top 10 productos con más stock venciendo en 90 días:**")
+                        st.dataframe(_top_venc, use_container_width=True, hide_index=True)
+
+            # ── Conciliación Sistema vs Lotes ─────────────────────────────────
+            st.markdown("---")
+            with st.expander("⚖️ Conciliación: Stock Sistema vs Lotes Importados", expanded=False):
+                st.caption("Compara el stock calculado por movimientos contra la suma de lotes de MacroGest.")
+                _conc = conciliar_stock_vs_lotes()
+                if _conc.empty:
+                    st.info("Necesitás tener stock y lotes importados para ver la conciliación.")
+                else:
+                    _cc1, _cc2, _cc3 = st.columns(3)
+                    _cc1.metric("Productos coinciden", int((_conc["Estado"] == "✅ Coincide").sum()))
+                    _cc2.metric("Sobrante en sistema", int((_conc["Estado"] == "📈 Sobrante en sistema").sum()))
+                    _cc3.metric("Faltante en sistema", int((_conc["Estado"] == "📉 Faltante en sistema").sum()))
+                    _conc_fil = st.radio("Filtrar", ["Todos","Solo diferencias"],
+                                         horizontal=True, key="conc_fil")
+                    _df_conc_show = (_conc if _conc_fil == "Todos"
+                                     else _conc[_conc["Estado"] != "✅ Coincide"])
+                    st.dataframe(
+                        _df_conc_show.rename(columns={
+                            "Stock Sistema":"Sistema","Stock Lotes":"Lotes"
+                        }),
+                        use_container_width=True, hide_index=True,
+                        column_config={
+                            "Sistema":    st.column_config.NumberColumn(format="%.2f"),
+                            "Lotes":      st.column_config.NumberColumn(format="%.2f"),
+                            "Diferencia": st.column_config.NumberColumn(format="%.2f"),
+                        }
+                    )
+                    st.download_button("📥 Exportar conciliación (.xlsx)",
+                                       data=to_excel_bytes(_conc, "Conciliacion"),
+                                       file_name=f"conciliacion_{datetime.now().strftime('%Y%m%d')}.xlsx")
 
     # ── Resumen Ejecutivo ─────────────────────────────────────────────────────
     with r_tab5:
@@ -5575,6 +5903,10 @@ with tab12:
                         (rubro,producto,um,precio_contado,precio_vta,financiacion,fecha_carga)
                         VALUES (?,?,?,?,?,?,?)""", lp_batch)
                     conn.commit(); conn.close()
+                    # Registrar historial de precios
+                    for _item_lp in lp_batch:
+                        if _item_lp[3] > 0:  # precio_contado
+                            registrar_cambio_precio(_item_lp[1], _item_lp[3], "USD", usuario_actual())
                     limpiar_cache()
                     st.success(f"✅ {len(lp_batch)} precios importados.")
                     st.rerun()
@@ -5684,3 +6016,86 @@ with tab12:
                         with st.expander("Ver productos sin match"):
                             st.write(no_match_list)
                     st.rerun()
+
+        # ── Historial de Precios ──────────────────────────────────────────────
+        st.markdown("---")
+        with st.expander("📈 Historial de cambios de precio por producto", expanded=False):
+            _hp_prod = st.selectbox("Producto", ["Todos"] + sorted(df_lp["producto"].dropna().unique().tolist()),
+                                    key="hp_prod_sel")
+            _df_hp = obtener_historial_precios(_hp_prod if _hp_prod != "Todos" else "")
+            if _df_hp.empty:
+                st.info("Sin historial aún. Los cambios se registran cada vez que se importa una lista.")
+            else:
+                _fig_hp = px.line(
+                    _df_hp.sort_values("fecha_hora"),
+                    x="fecha_hora", y="precio",
+                    color="producto" if _hp_prod == "Todos" else None,
+                    markers=True, title="Evolución de precio",
+                    labels={"precio":"Precio","fecha_hora":"Fecha"}
+                )
+                _fig_hp.update_layout(height=280, margin=dict(l=0,r=0,t=40,b=0))
+                st.plotly_chart(_fig_hp, use_container_width=True)
+                st.dataframe(_df_hp.rename(columns={
+                    "fecha_hora":"Fecha","producto":"Producto",
+                    "precio":"Precio","moneda":"Moneda","usuario":"Usuario"
+                }), use_container_width=True, hide_index=True)
+
+        # ── Presupuestador ────────────────────────────────────────────────────
+        st.markdown("---")
+        st.write("### 💼 Presupuestador")
+        st.caption("Armá un presupuesto para un cliente con productos y precios de lista. Generá el PDF listo para enviar.")
+        _pres_lp = obtener_lista_precios()
+        _pres_pf = obtener_productos_completo()
+        _src_prods_p = sorted(_pres_lp["producto"].dropna().unique().tolist() if not _pres_lp.empty
+                              else _pres_pf["nombre"].dropna().unique().tolist())
+
+        _pp1, _pp2 = st.columns(2)
+        with _pp1: _pres_cliente = st.text_input("Cliente", key="pres_cliente")
+        with _pp2: _pres_obs     = st.text_input("Observaciones (opcional)", key="pres_obs")
+
+        _pit1, _pit2, _pit3 = st.columns([3, 1, 1])
+        with _pit1:
+            _p_sel = st.selectbox("Producto", _src_prods_p, key="pres_item_prod")
+        with _pit2:
+            _p_cant = st.number_input("Cantidad", min_value=0.01, value=1.0, step=1.0, key="pres_item_cant")
+        with _pit3:
+            _p_sug = 0.0
+            if not _pres_lp.empty:
+                _lpm = _pres_lp[_pres_lp["producto"] == _p_sel]
+                if not _lpm.empty: _p_sug = float(_lpm.iloc[0].get("precio_contado", 0))
+            _p_precio = st.number_input("Precio USD", min_value=0.0, value=_p_sug, step=0.01, key="pres_item_precio")
+
+        if "pres_items" not in st.session_state:
+            st.session_state["pres_items"] = []
+
+        _bc1, _bc2 = st.columns(2)
+        with _bc1:
+            if st.button("➕ Agregar ítem", key="btn_pres_add"):
+                st.session_state["pres_items"].append(
+                    {"producto": _p_sel, "cantidad": _p_cant, "precio": _p_precio, "moneda": "USD"}
+                )
+                st.rerun()
+        with _bc2:
+            if st.button("🗑️ Limpiar", key="btn_pres_clear"):
+                st.session_state["pres_items"] = []
+                st.rerun()
+
+        _items_now = st.session_state.get("pres_items", [])
+        if _items_now:
+            _df_it = pd.DataFrame(_items_now)
+            _df_it["Subtotal"] = _df_it["cantidad"] * _df_it["precio"]
+            st.dataframe(_df_it.rename(columns={"producto":"Producto","cantidad":"Cantidad",
+                                                 "precio":"Precio","moneda":"Moneda","Subtotal":"Subtotal USD"}),
+                         use_container_width=True, hide_index=True)
+            st.metric("Total presupuesto (USD)", f"${_df_it['Subtotal'].sum():,.2f}")
+            if PDF_AVAILABLE:
+                if st.button("📄 Generar PDF", type="primary", key="btn_pres_pdf"):
+                    _pbytes = generar_presupuesto_pdf(_pres_cliente, _items_now, usuario_actual(), _pres_obs)
+                    if _pbytes:
+                        st.download_button("⬇️ Descargar Presupuesto PDF", data=_pbytes,
+                                           file_name=f"presupuesto_{datetime.now().strftime('%Y%m%d')}.pdf",
+                                           mime="application/pdf")
+            else:
+                st.caption("PDF: `pip install reportlab`")
+        else:
+            st.caption("Agregá productos para armar el presupuesto.")
