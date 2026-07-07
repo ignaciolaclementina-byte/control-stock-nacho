@@ -1281,13 +1281,13 @@ def importar_lotes_vencimiento(df_raw: pd.DataFrame) -> tuple[int, int]:
         "unidad":    next((c for c in df_raw.columns if "unidad" in c), None),
         "deposito":  next((c for c in df_raw.columns if "deposito" in c or "depósito" in c), None),
         "lote":      next((c for c in df_raw.columns if c == "serie" or c == "lote"), None),
-        "stock":     next((c for c in df_raw.columns if c in ["antidad","cantidad","stock","stock_actual"]), None),
+        "stock":     next((c for c in df_raw.columns if c in ["antidad","cantidad","stock","stock_actual","existencia","saldo","qty"]), None),
         "venc":      next((c for c in df_raw.columns if "vencimiento" in c and "muestra" not in c), None),
         "fabric":    next((c for c in df_raw.columns if "fabricacion" in c or "fabricación" in c), None),
     }
 
-    if not _col_map["producto"] or not _col_map["stock"]:
-        raise ValueError(f"Columnas requeridas no encontradas. Disponibles: {list(df_raw.columns)}")
+    if not _col_map["producto"]:
+        raise ValueError(f"Columna de producto no encontrada. Disponibles: {list(df_raw.columns)}")
 
     conn = conectar_db()
     # Marcar todos los anteriores como inactivos (reemplazo completo)
@@ -1304,7 +1304,7 @@ def importar_lotes_vencimiento(df_raw: pd.DataFrame) -> tuple[int, int]:
         _uni   = safe_str(r.get(_col_map["unidad"], "")) if _col_map["unidad"] else ""
         _dep   = safe_str(r.get(_col_map["deposito"], "")) if _col_map["deposito"] else ""
         _lote  = safe_str(r.get(_col_map["lote"], "")) if _col_map["lote"] else ""
-        _stk   = safe_float(r.get(_col_map["stock"], 0))
+        _stk   = safe_float(r.get(_col_map["stock"], 0)) if _col_map["stock"] else 0.0
         _venc  = None
         _fab   = None
         if _col_map["venc"]:
