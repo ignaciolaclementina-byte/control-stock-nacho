@@ -96,9 +96,42 @@ input, textarea, select,
     border-radius:8px!important;
 }}
 
-/* Dataframes / tablas */
+/* Dataframes / tablas — fondo oscuro con texto legible */
 [data-testid="stDataFrame"] {{background-color:#1C2333!important}}
+[data-testid="stDataFrame"] * {{color:#FAFAFA!important}}
 .dvn-scroller {{background-color:#1C2333!important}}
+.dvn-scroller * {{color:#FAFAFA!important}}
+/* Celdas internas del dataframe */
+[data-testid="stDataFrame"] canvas {{filter: invert(0)!important}}
+.glideDataEditor {{background:#1C2333!important;color:#FAFAFA!important}}
+.wzg1l8q {{background:#1C2333!important}}
+/* Header de columnas */
+[class*="headerCell"] {{background:#252D3D!important;color:{_LC_YELLOW}!important;font-weight:700!important}}
+/* Filas alternas */
+[class*="gdg-style"] {{background:#1C2333!important;color:#FAFAFA!important}}
+/* Texto general dentro de cualquier contenedor */
+.element-container p, .element-container span, .element-container div {{color:#FAFAFA}}
+/* Markdown */
+.stMarkdown, .stMarkdown p, .stMarkdown li {{color:#E2E8F0!important}}
+/* Captions */
+.stCaption, [data-testid="stCaptionContainer"] {{color:#A0AEC0!important}}
+/* Info/warning/error boxes — mantener colores pero fondo oscuro */
+[data-testid="stAlert"] {{border-radius:8px!important}}
+/* Selectbox dropdown lista */
+[data-baseweb="menu"] {{background-color:#1C2333!important}}
+[data-baseweb="menu"] li {{color:#FAFAFA!important}}
+[data-baseweb="menu"] li:hover {{background-color:#252D3D!important}}
+/* Number input, text input */
+[data-baseweb="base-input"] {{background-color:#1C2333!important;color:#FAFAFA!important}}
+/* Slider */
+[data-testid="stSlider"] [data-testid="stTickBar"] {{color:#A0AEC0!important}}
+/* Radio buttons */
+[data-testid="stRadio"] label {{color:#E2E8F0!important}}
+/* Checkboxes */
+[data-testid="stCheckbox"] label {{color:#E2E8F0!important}}
+/* File uploader */
+[data-testid="stFileUploader"] {{background:#1C2333!important;border:1px solid #2D3748!important;border-radius:8px!important}}
+[data-testid="stFileUploader"] * {{color:#E2E8F0!important}}
 
 /* Métricas */
 [data-testid="metric-container"] {{
