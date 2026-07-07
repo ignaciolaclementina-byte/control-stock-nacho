@@ -1325,14 +1325,13 @@ def importar_lotes_vencimiento(df_raw: pd.DataFrame) -> tuple[int, int]:
         rows_to_insert.append((_cod, _prod, _uni, _dep, _lote, _stk, _venc, _fab, "activa", _ahora))
         filas += 1
 
-    if IS_POSTGRES:
-        conn.executemany("""INSERT INTO lotes_vencimiento
-            (codigo,producto,unidad,deposito,lote,stock,fecha_vencimiento,fecha_fabricacion,estado,fecha_importacion)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""", rows_to_insert)
-    else:
-        conn.executemany("""INSERT INTO lotes_vencimiento
-            (codigo,producto,unidad,deposito,lote,stock,fecha_vencimiento,fecha_fabricacion,estado,fecha_importacion)
-            VALUES (?,?,?,?,?,?,?,?,?,?)""", rows_to_insert)
+    _ph = "%s" if IS_POSTGRES else "?"
+    _sql_lv = (
+        f"INSERT INTO lotes_vencimiento "
+        f"(codigo,producto,unidad,deposito,lote,stock,fecha_vencimiento,fecha_fabricacion,estado,fecha_importacion) "
+        f"VALUES ({','.join([_ph]*10)})"
+    )
+    conn.cursor().executemany(_sql_lv, rows_to_insert)
     conn.commit()
     conn.close()
     return filas, con_venc
