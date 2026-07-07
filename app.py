@@ -25,6 +25,7 @@ import io
 from PIL import Image
 import urllib.parse
 import hashlib
+import json
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -370,6 +371,19 @@ def inicializar_db():
             observaciones TEXT,
             items_json   TEXT,
             tipo         TEXT DEFAULT 'manual'
+        )""",
+        f"""CREATE TABLE IF NOT EXISTS reservas_stock (
+            id_reserva   {_pk},
+            fecha_hora   TEXT NOT NULL,
+            id_producto  INTEGER NOT NULL,
+            cantidad     REAL NOT NULL,
+            cliente      TEXT NOT NULL,
+            deposito     TEXT,
+            lote         TEXT,
+            referencia   TEXT,
+            estado       TEXT DEFAULT 'activa',
+            fecha_vencimiento_reserva TEXT,
+            usuario      TEXT
         )""",
         f"""CREATE TABLE IF NOT EXISTS importaciones_log (
             id_log      {_pk},
@@ -1075,6 +1089,153 @@ def generar_reporte_pdf():
     doc.build(elems)
     return buf.getvalue()
 
+def generar_ejecutivo_pdf() -> bytes:
+    """Reporte ejecutivo PDF con branding LC. Retorna bytes."""
+    if not PDF_AVAILABLE: return b""
+    stock = obtener_stock_con_compromisos()
+    ent   = obtener_entregas()
+    mg    = obtener_entregas("MACROGEST")
+    U     = int(obtener_metadata("umbral_alerta") or 20)
+    buf   = io.BytesIO()
+    doc   = SimpleDocTemplate(buf, pagesize=A4,
+                               rightMargin=1.5*cm, leftMargin=1.5*cm,
+                               topMargin=1.5*cm, bottomMargin=1.5*cm)
+    styles = getSampleStyleSheet()
+    elems  = []
+
+    # ── Header con logo ──────────────────────────────────────────────────────
+    _logo_path_ej = os.path.join(os.path.dirname(__file__), "logo.png")
+    _header_data = []
+    if os.path.exists(_logo_path_ej):
+        try:
+            from reportlab.platypus import Image as RLImage
+            _img = RLImage(_logo_path_ej, width=2.5*cm, height=2.5*cm, kind="proportional")
+            _header_data = [[_img,
+                Paragraph("<font color='#3D4E6B' size=16><b>La Clementina S.A.</b></font><br/>"
+                          "<font color='#555' size=10>Reporte Ejecutivo de Depósito</font>",
+                          styles["Normal"]),
+                Paragraph(f"<font color='#888' size=9>{datetime.now().strftime('%d/%m/%Y %H:%M')}</font>",
+                          styles["Normal"])]]
+        except Exception:
+            _header_data = None
+    if _header_data:
+        _ht = Table(_header_data, colWidths=[3*cm, 11*cm, 4*cm])
+        _ht.setStyle(TableStyle([
+            ("VALIGN",     (0,0), (-1,-1), "MIDDLE"),
+            ("BACKGROUND", (0,0), (-1,-1), rl_colors.HexColor("#FFF8E7")),
+            ("LINEBELOW",  (0,0), (-1,-1), 2, rl_colors.HexColor("#F5A800")),
+            ("TOPPADDING", (0,0), (-1,-1), 8),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 8),
+        ]))
+        elems.append(_ht)
+    else:
+        elems.append(Paragraph("La Clementina S.A. — Reporte Ejecutivo", styles["Title"]))
+        elems.append(Paragraph(datetime.now().strftime("%d/%m/%Y %H:%M"), styles["Normal"]))
+    elems.append(Spacer(1, 0.4*cm))
+
+    # ── KPIs Stock ───────────────────────────────────────────────────────────
+    if not stock.empty:
+        elems.append(Paragraph("Stock — Indicadores Clave", styles["Heading2"]))
+        _neg = int((stock["Stock Actual"] < 0).sum())
+        _bajo = int((stock["Stock Actual"].between(0, U, inclusive="left")).sum())
+        _comp = int((stock["Disponible Neto"] < 0).sum()) if "Disponible Neto" in stock.columns else 0
+        _kpi = [
+            ["Productos únicos", str(stock["Producto"].nunique()),
+             "Volumen total", f"{stock['Stock Actual'].sum():,.0f}"],
+            ["Depósitos activos", str(stock["Deposito"].nunique()),
+             "Stock negativo 🔴", str(_neg)],
+            ["Bajo umbral 🟡", str(_bajo),
+             "Comprometido sin stock", str(_comp)],
+        ]
+        _t = Table(_kpi, colWidths=[5*cm, 3*cm, 5*cm, 4*cm])
+        _t.setStyle(TableStyle([
+            ("BACKGROUND",    (0,0), (-1,-1), rl_colors.HexColor("#FFF8E7")),
+            ("BACKGROUND",    (0,0), (0,-1), rl_colors.HexColor("#3D4E6B")),
+            ("TEXTCOLOR",     (0,0), (0,-1), rl_colors.white),
+            ("BACKGROUND",    (2,0), (2,-1), rl_colors.HexColor("#3D4E6B")),
+            ("TEXTCOLOR",     (2,0), (2,-1), rl_colors.white),
+            ("FONTNAME",      (0,0), (-1,-1), "Helvetica"),
+            ("FONTSIZE",      (0,0), (-1,-1), 10),
+            ("GRID",          (0,0), (-1,-1), 0.5, rl_colors.HexColor("#ccc")),
+            ("TOPPADDING",    (0,0), (-1,-1), 5),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+        ]))
+        elems.append(_t); elems.append(Spacer(1, 0.3*cm))
+
+        # Críticos
+        _crit = stock[stock["Stock Actual"] < U].sort_values("Stock Actual").head(12)
+        if not _crit.empty:
+            elems.append(Paragraph("Productos Críticos (bajo umbral o negativos)", styles["Heading2"]))
+            _rows = [["Producto", "Depósito", "Stock", "Disponible"]]
+            for _, r in _crit.iterrows():
+                _dn = r.get("Disponible Neto", r["Stock Actual"])
+                _rows.append([r["Producto"][:40], r["Deposito"],
+                               f"{r['Stock Actual']:,.1f}", f"{_dn:,.1f}"])
+            _tc = Table(_rows, colWidths=[9*cm, 3.5*cm, 2.5*cm, 2.5*cm])
+            _tc.setStyle(TableStyle([
+                ("BACKGROUND",    (0,0), (-1,0), rl_colors.HexColor("#F5A800")),
+                ("FONTNAME",      (0,0), (-1,0), "Helvetica-Bold"),
+                ("FONTSIZE",      (0,0), (-1,-1), 9),
+                ("GRID",          (0,0), (-1,-1), 0.4, rl_colors.grey),
+                ("ROWBACKGROUNDS",(0,1), (-1,-1), [rl_colors.white, rl_colors.HexColor("#fffbf0")]),
+            ]))
+            elems.append(_tc); elems.append(Spacer(1, 0.3*cm))
+
+    # ── Entregas pendientes ──────────────────────────────────────────────────
+    if not ent.empty:
+        elems.append(Paragraph("Entregas Pendientes — Resumen por Producto", styles["Heading2"]))
+        _pend_g = (ent[ent["pendiente"] > 0]
+                   .groupby("producto")
+                   .agg(Clientes=("cliente","nunique"), Pendiente=("pendiente","sum"))
+                   .reset_index().sort_values("Pendiente", ascending=False).head(12))
+        if not _pend_g.empty:
+            _re = [["Producto","Clientes","Vol. Pendiente"]]
+            for _, r in _pend_g.iterrows():
+                _re.append([r["producto"][:45], str(r["Clientes"]), f"{r['Pendiente']:,.0f}"])
+            _te = Table(_re, colWidths=[10*cm, 3*cm, 4*cm])
+            _te.setStyle(TableStyle([
+                ("BACKGROUND",    (0,0), (-1,0), rl_colors.HexColor("#3D4E6B")),
+                ("TEXTCOLOR",     (0,0), (-1,0), rl_colors.white),
+                ("FONTNAME",      (0,0), (-1,0), "Helvetica-Bold"),
+                ("FONTSIZE",      (0,0), (-1,-1), 9),
+                ("GRID",          (0,0), (-1,-1), 0.4, rl_colors.grey),
+                ("ROWBACKGROUNDS",(0,1), (-1,-1), [rl_colors.white, rl_colors.HexColor("#f0f4f8")]),
+            ]))
+            elems.append(_te); elems.append(Spacer(1, 0.3*cm))
+
+    # ── Sin Entregar MG ──────────────────────────────────────────────────────
+    if not mg.empty:
+        _mg_p = mg[mg["pendiente"] > 0]
+        if not _mg_p.empty:
+            elems.append(Paragraph(f"Sin Entregar MacroGest — {len(_mg_p)} pendientes", styles["Heading2"]))
+            _mg_top = (_mg_p.groupby("cliente")
+                       .agg(Items=("rto","nunique"), Pendiente=("pendiente","sum"))
+                       .reset_index().sort_values("Pendiente", ascending=False).head(10))
+            _rm = [["Cliente","Remitos","Pendiente"]]
+            for _, r in _mg_top.iterrows():
+                _rm.append([r["cliente"][:40], str(r["Items"]), f"{r['Pendiente']:,.0f}"])
+            _tmg = Table(_rm, colWidths=[10*cm, 3*cm, 4*cm])
+            _tmg.setStyle(TableStyle([
+                ("BACKGROUND",    (0,0), (-1,0), rl_colors.HexColor("#3D4E6B")),
+                ("TEXTCOLOR",     (0,0), (-1,0), rl_colors.white),
+                ("FONTNAME",      (0,0), (-1,0), "Helvetica-Bold"),
+                ("FONTSIZE",      (0,0), (-1,-1), 9),
+                ("GRID",          (0,0), (-1,-1), 0.4, rl_colors.grey),
+                ("ROWBACKGROUNDS",(0,1), (-1,-1), [rl_colors.white, rl_colors.HexColor("#f0f4f8")]),
+            ]))
+            elems.append(_tmg); elems.append(Spacer(1, 0.3*cm))
+
+    # ── Footer ───────────────────────────────────────────────────────────────
+    elems.append(Spacer(1, 0.5*cm))
+    elems.append(Paragraph(
+        f"<font size=8 color='#888'>La Clementina S.A. — San Jorge, Santa Fe | "
+        f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')} | Confidencial</font>",
+        styles["Normal"]
+    ))
+    doc.build(elems)
+    return buf.getvalue()
+
+
 def exportar_macrogest_format(stock_df):
     """Excel en el formato de importación de MacroGest."""
     if stock_df.empty: return b""
@@ -1494,6 +1655,8 @@ _defaults = {
     "user_nombre":         "",
     "username":            "",
     "trans_pendiente":     None,
+    "deposito_global":     "Todos",
+    "dark_mode":           False,
 }
 for k, v in _defaults.items():
     if k not in st.session_state:
@@ -1515,8 +1678,21 @@ if auth_enabled and not st.session_state.get("authenticated"):
     st.stop()
 
 # Header con usuario logueado + modo oscuro
-_head_cols = st.columns([5, 1, 1])
+# Filtro de depósito global
+_deps_global_opts = ["Todos"]
+try:
+    _stk_deps = obtener_stock_full()
+    if not _stk_deps.empty:
+        _deps_global_opts += sorted(_stk_deps["Deposito"].unique().tolist())
+except Exception:
+    pass
+
+_head_cols = st.columns([3, 2, 1, 1])
 with _head_cols[1]:
+    _dep_sel = st.selectbox("🏭 Depósito", _deps_global_opts, key="deposito_global",
+                             label_visibility="collapsed",
+                             help="Filtro global de depósito — afecta Panel, Stock Físico e Historial")
+with _head_cols[2]:
     if "dark_mode" not in st.session_state:
         st.session_state.dark_mode = False
     if st.toggle("🌙", value=st.session_state.dark_mode, key="dark_toggle", help="Modo oscuro"):
@@ -1596,6 +1772,10 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12 = st.t
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab1:
     stock_df = obtener_stock_con_compromisos()
+    # Aplicar filtro global de depósito
+    _dep_global = st.session_state.get("deposito_global", "Todos")
+    if _dep_global != "Todos" and not stock_df.empty:
+        stock_df = stock_df[stock_df["Deposito"] == _dep_global]
 
     if stock_df.empty:
         st.warning("⚠️ Sin datos. Subí el archivo en Configuración.")
@@ -1647,15 +1827,37 @@ with tab1:
         with c7: st.metric("Pend. +30d ⏳", venc30,  delta=-venc30,  delta_color="inverse",
                             help="Pedidos de entrega con más de 30 días de antigüedad sin completar")
 
-        # Alerta WhatsApp
+        # WhatsApp: alerta crítica + resumen KPIs del día
         wa = st.session_state.wa_numero
-        if (neg_n > 0 or bajo_n > 0) and wa:
-            alertas_wa = stock_df[stock_df["Stock Actual"] < U].head(15)
-            lineas = [f"⚠️ Alerta Stock {datetime.now().strftime('%d/%m/%Y')}"]
-            for _, r in alertas_wa.iterrows():
-                lineas.append(f"• {r['Producto']}: {r['Stock Actual']:,.1f} {r['Unidad']} ({r['Deposito']})")
-            st.link_button("📱 Enviar alerta WhatsApp",
-                           f"https://wa.me/{wa}?text={urllib.parse.quote(chr(10).join(lineas))}")
+        _wa_col1, _wa_col2 = st.columns(2)
+        if wa:
+            with _wa_col1:
+                if neg_n > 0 or bajo_n > 0:
+                    alertas_wa = stock_df[stock_df["Stock Actual"] < U].head(15)
+                    lineas = [f"⚠️ *Alerta Stock* — {datetime.now().strftime('%d/%m/%Y')}",
+                              f"La Clementina S.A."]
+                    for _, r in alertas_wa.iterrows():
+                        lineas.append(f"• {r['Producto']}: {r['Stock Actual']:,.1f} {r['Unidad']} ({r['Deposito']})")
+                    st.link_button("📱 Enviar alerta WhatsApp",
+                                   f"https://wa.me/{wa}?text={urllib.parse.quote(chr(10).join(lineas))}",
+                                   use_container_width=True)
+                else:
+                    st.caption("✅ Sin alertas críticas de stock")
+            with _wa_col2:
+                _ent_wa = obtener_entregas()
+                _pend_wa = int(_ent_wa["pendiente"].sum()) if not _ent_wa.empty else 0
+                _kpi_lines = [
+                    f"📊 *Resumen LC — {datetime.now().strftime('%d/%m/%Y %H:%M')}*",
+                    f"Productos: {stock_df['Producto'].nunique()} · Vol: {stock_df['Stock Actual'].sum():,.0f}",
+                    f"🔴 Negativos: {neg_n} · 🟡 Bajo umbral: {bajo_n}",
+                    f"📦 Entregas pendientes: {_pend_wa:,}",
+                    f"_La Clementina S.A. — San Jorge_",
+                ]
+                st.link_button("📤 Compartir KPIs del día",
+                               f"https://wa.me/{wa}?text={urllib.parse.quote(chr(10).join(_kpi_lines))}",
+                               use_container_width=True)
+        else:
+            st.caption("Configurá tu número WhatsApp en ⚙️ Configuración para habilitar compartir.")
 
         st.markdown("---")
 
@@ -2483,50 +2685,190 @@ with tab4: mostrar_tab_entregas("BAYER DIRECTA",     "🚚 Facturación Directa 
 with tab5:
     st.subheader("📋 Toma de Stock Físico")
     st_df = obtener_stock_full()
-    if not st_df.empty:
-        st.download_button("📥 Descargar Planilla de Conteo (.xlsx)",
-                           data=descargar_planilla_inventario(st_df),
-                           file_name="Planilla_Toma_Stock.xlsx")
-        st.markdown("---")
-        st.write("### 📝 Registrar Ajuste Auditado")
-        ci1, ci2, ci3 = st.columns(3)
-        with ci1:
-            p_inv = st.selectbox("Producto", sorted(st_df["Producto"].unique()), key="inv_p")
-        with ci2:
-            d_inv = st.selectbox("Depósito", sorted(st_df["Deposito"].unique()), key="inv_d")
-        with ci3:
-            filt_s   = st_df[(st_df["Producto"]==p_inv) & (st_df["Deposito"]==d_inv)]
-            val_sis  = filt_s.iloc[0]["Stock Actual"] if not filt_s.empty else 0.0
-            st.metric("Stock en Sistema", f"{val_sis:,.1f}")
-        ci4, ci5 = st.columns(2)
-        with ci4:
-            val_fis = st.number_input("Conteo Físico Real", min_value=0.0, step=1.0, value=float(val_sis))
-        with ci5:
-            obs_inv = st.text_input("Observaciones / Auditor")
-        dif = val_fis - val_sis
-        st.metric("Diferencia detectada", f"{dif:,.1f}", delta=dif)
-        if st.button("💾 Guardar Auditoría"):
-            conn   = conectar_db()
-            cod_p  = safe_str(st_df[st_df["Producto"]==p_inv].iloc[0]["Código"]) if not st_df[st_df["Producto"]==p_inv].empty else "S/C"
-            conn.execute("""INSERT INTO inventario_fisico
-                (fecha_conteo,codigo,producto,deposito,stock_sistema,conteo_fisico,diferencia,observaciones)
-                VALUES (?,?,?,?,?,?,?,?)""",
-                (datetime.now().strftime("%d/%m/%Y %H:%M"), cod_p, p_inv, d_inv, val_sis, val_fis, dif, obs_inv))
+
+    _inv_tabs = st.tabs(["📝 Conteo Individual", "📋 Conteo Masivo", "↩️ Devoluciones", "📊 Historial Auditorías"])
+
+    with _inv_tabs[0]:
+        if not st_df.empty:
+            st.download_button("📥 Descargar Planilla de Conteo (.xlsx)",
+                               data=descargar_planilla_inventario(st_df),
+                               file_name="Planilla_Toma_Stock.xlsx")
+            st.markdown("---")
+            st.write("### 📝 Registrar Ajuste Auditado")
+            ci1, ci2, ci3 = st.columns(3)
+            with ci1:
+                p_inv = st.selectbox("Producto", sorted(st_df["Producto"].unique()), key="inv_p")
+            with ci2:
+                d_inv = st.selectbox("Depósito", sorted(st_df["Deposito"].unique()), key="inv_d")
+            with ci3:
+                filt_s   = st_df[(st_df["Producto"]==p_inv) & (st_df["Deposito"]==d_inv)]
+                val_sis  = filt_s.iloc[0]["Stock Actual"] if not filt_s.empty else 0.0
+                st.metric("Stock en Sistema", f"{val_sis:,.1f}")
+            ci4, ci5 = st.columns(2)
+            with ci4:
+                val_fis = st.number_input("Conteo Físico Real", min_value=0.0, step=1.0, value=float(val_sis))
+            with ci5:
+                obs_inv = st.text_input("Observaciones / Auditor")
+            dif = val_fis - val_sis
+            st.metric("Diferencia detectada", f"{dif:,.1f}", delta=dif)
             if dif != 0:
-                id_p = conn.execute("SELECT id_producto FROM productos WHERE nombre=?", (p_inv,)).fetchone()
-                if id_p:
-                    conn.execute("""INSERT INTO movimientos
-                        (fecha_hora,tipo_movimiento,id_producto,cantidad,lote,referencia,deposito,origen,usuario)
-                        VALUES (?,?,?,?,?,?,?,?,?)""",
-                        (datetime.now().strftime("%d/%m/%Y %H:%M"),
-                         "Entrada" if dif>0 else "Salida", id_p[0], abs(dif),
-                         "S/L", f"Ajuste Inventario. {obs_inv}", d_inv, "manual", usuario_actual()))
-            conn.commit(); conn.close()
-            limpiar_cache()
-            st.success("✅ Auditoría guardada.")
-            st.rerun()
-    else:
-        st.info("Sin datos de stock.")
+                if dif > 0: st.info(f"📈 Sobrante de {dif:,.1f} — se registrará una Entrada de ajuste.")
+                else:       st.warning(f"📉 Faltante de {abs(dif):,.1f} — se registrará una Salida de ajuste.")
+            if st.button("💾 Guardar Auditoría", type="primary"):
+                conn   = conectar_db()
+                cod_p  = safe_str(st_df[st_df["Producto"]==p_inv].iloc[0]["Código"]) if not st_df[st_df["Producto"]==p_inv].empty else "S/C"
+                conn.execute("""INSERT INTO inventario_fisico
+                    (fecha_conteo,codigo,producto,deposito,stock_sistema,conteo_fisico,diferencia,observaciones)
+                    VALUES (?,?,?,?,?,?,?,?)""",
+                    (datetime.now().strftime("%d/%m/%Y %H:%M"), cod_p, p_inv, d_inv, val_sis, val_fis, dif, obs_inv))
+                if dif != 0:
+                    id_p = conn.execute("SELECT id_producto FROM productos WHERE nombre=?", (p_inv,)).fetchone()
+                    if id_p:
+                        conn.execute("""INSERT INTO movimientos
+                            (fecha_hora,tipo_movimiento,id_producto,cantidad,lote,referencia,deposito,origen,usuario,observaciones)
+                            VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                            (datetime.now().strftime("%d/%m/%Y %H:%M"),
+                             "Entrada" if dif>0 else "Salida", id_p[0], abs(dif),
+                             "S/L", f"Ajuste Inventario", d_inv, "manual", usuario_actual(), obs_inv))
+                conn.commit(); conn.close()
+                registrar_importacion_log("Ajuste Inventario", f"{p_inv}/{d_inv}", 1)
+                limpiar_cache()
+                st.success("✅ Auditoría guardada.")
+                st.rerun()
+        else:
+            st.info("Sin datos de stock.")
+
+    with _inv_tabs[1]:
+        st.write("### 📋 Conteo Masivo")
+        st.caption("Subí la planilla de conteo completada para registrar todos los ajustes de una vez.")
+        if st_df.empty:
+            st.info("Sin datos de stock.")
+        else:
+            arch_conteo = st.file_uploader("Planilla de conteo (.xlsx)",
+                                           type=["xlsx","xls","csv"], key="up_conteo_masivo")
+            if arch_conteo:
+                try:
+                    _df_conteo = (pd.read_excel(arch_conteo) if not arch_conteo.name.endswith(".csv")
+                                  else pd.read_csv(arch_conteo))
+                    _df_conteo.columns = [str(c).strip() for c in _df_conteo.columns]
+                    # Buscar columnas de conteo físico
+                    _col_conteo = next((c for c in _df_conteo.columns
+                                        if "conteo" in c.lower() or "fisico" in c.lower() or "físico" in c.lower()), None)
+                    _col_prod   = next((c for c in _df_conteo.columns
+                                        if "producto" in c.lower() or "nombre" in c.lower()), None)
+                    _col_dep    = next((c for c in _df_conteo.columns
+                                        if "deposit" in c.lower() or "dep" in c.lower()), None)
+                    if not _col_conteo or not _col_prod:
+                        st.error(f"Columnas no detectadas. Disponibles: {list(_df_conteo.columns)}")
+                    else:
+                        _df_conteo = _df_conteo[_df_conteo[_col_prod].notna()].copy()
+                        st.caption(f"{len(_df_conteo)} productos en la planilla")
+                        st.dataframe(_df_conteo.head(10), use_container_width=True, hide_index=True)
+                        if st.button("✅ Importar conteo masivo", type="primary", key="btn_conteo_masivo"):
+                            conn = conectar_db()
+                            _ok_c = 0
+                            for _, _rc in _df_conteo.iterrows():
+                                _pn = safe_str(_rc.get(_col_prod,""))
+                                _dp = safe_str(_rc.get(_col_dep,"")) if _col_dep else ""
+                                _cf = safe_float(_rc.get(_col_conteo, 0))
+                                if not _pn: continue
+                                _filt = st_df[st_df["Producto"]==_pn]
+                                if _dp: _filt = _filt[_filt["Deposito"]==_dp]
+                                _vs = float(_filt["Stock Actual"].sum()) if not _filt.empty else 0.0
+                                _dif = _cf - _vs
+                                _cod = safe_str(_filt.iloc[0]["Código"]) if not _filt.empty else "S/C"
+                                conn.execute("""INSERT INTO inventario_fisico
+                                    (fecha_conteo,codigo,producto,deposito,stock_sistema,conteo_fisico,diferencia,observaciones)
+                                    VALUES (?,?,?,?,?,?,?,?)""",
+                                    (datetime.now().strftime("%d/%m/%Y %H:%M"), _cod, _pn,
+                                     _dp or "General", _vs, _cf, _dif, "Conteo masivo"))
+                                if abs(_dif) > 0.001:
+                                    _id_p = conn.execute("SELECT id_producto FROM productos WHERE nombre=?",(_pn,)).fetchone()
+                                    if _id_p:
+                                        conn.execute("""INSERT INTO movimientos
+                                            (fecha_hora,tipo_movimiento,id_producto,cantidad,lote,referencia,deposito,origen,usuario)
+                                            VALUES (?,?,?,?,?,?,?,?,?)""",
+                                            (datetime.now().strftime("%d/%m/%Y %H:%M"),
+                                             "Entrada" if _dif>0 else "Salida", _id_p[0], abs(_dif),
+                                             "S/L", "Ajuste conteo masivo", _dp or "General",
+                                             "manual", usuario_actual()))
+                                _ok_c += 1
+                            conn.commit(); conn.close()
+                            registrar_importacion_log("Conteo Masivo", arch_conteo.name, _ok_c)
+                            limpiar_cache()
+                            st.success(f"✅ {_ok_c} productos procesados.")
+                            st.rerun()
+                except Exception as _ex:
+                    st.error(f"Error: {_ex}")
+
+    with _inv_tabs[2]:
+        st.write("### ↩️ Registrar Devolución")
+        st.caption("Registra la devolución de un producto por parte de un cliente. Incrementa el stock con tipo 'Devolución'.")
+        if st_df.empty:
+            st.info("Sin datos de stock.")
+        else:
+            _dv1, _dv2 = st.columns(2)
+            with _dv1:
+                _prod_dev = st.selectbox("Producto devuelto",
+                                         sorted(obtener_productos_completo()["nombre"].tolist()
+                                                if not obtener_productos_completo().empty else []),
+                                         key="dev_prod")
+                _cant_dev = st.number_input("Cantidad devuelta", min_value=0.01, step=1.0, key="dev_cant")
+                _dep_dev  = st.selectbox("Depósito destino", sorted(st_df["Deposito"].unique()), key="dev_dep")
+            with _dv2:
+                _cli_dev  = st.text_input("Cliente que devuelve", key="dev_cli")
+                _lote_dev = st.text_input("Lote", value="S/L", key="dev_lote")
+                _obs_dev  = st.text_area("Motivo de devolución", key="dev_obs", height=80)
+            _rem_dev  = st.text_input("N° Remito original (opcional)", key="dev_rem")
+            if st.button("💾 Registrar Devolución", type="primary", key="btn_dev"):
+                if _prod_dev and _cant_dev > 0:
+                    conn = conectar_db()
+                    _id_dev = conn.execute("SELECT id_producto FROM productos WHERE nombre=?",
+                                           (_prod_dev,)).fetchone()
+                    if _id_dev:
+                        conn.execute("""INSERT INTO movimientos
+                            (fecha_hora,tipo_movimiento,id_producto,cantidad,lote,referencia,
+                             deposito,origen,usuario,observaciones)
+                            VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                            (datetime.now().strftime("%d/%m/%Y %H:%M"), "Entrada",
+                             _id_dev[0], _cant_dev, _lote_dev,
+                             f"Devolución — {_cli_dev}" + (f" / Rem: {_rem_dev}" if _rem_dev else ""),
+                             _dep_dev, "devolucion", usuario_actual(),
+                             _obs_dev))
+                        conn.commit()
+                        conn.close()
+                        limpiar_cache()
+                        st.success(f"✅ Devolución de {_cant_dev:,.1f} unidades de {_prod_dev} registrada.")
+                        st.rerun()
+                    else:
+                        conn.close()
+                        st.error("Producto no encontrado.")
+                else:
+                    st.warning("Completá el producto y la cantidad.")
+
+    with _inv_tabs[3]:
+        st.write("### 📊 Historial de Auditorías de Inventario")
+        conn = conectar_db()
+        df_inv_h2 = _rsql("SELECT * FROM inventario_fisico ORDER BY id_inventario DESC LIMIT 500", conn)
+        conn.close()
+        if df_inv_h2.empty:
+            st.info("Sin auditorías registradas aún.")
+        else:
+            _ai1, _ai2, _ai3 = st.columns(3)
+            _ai1.metric("Total auditorías", len(df_inv_h2))
+            _ai2.metric("Con diferencia", int((df_inv_h2["diferencia"] != 0).sum()))
+            _ai3.metric("Diferencia acumulada", f"{df_inv_h2['diferencia'].sum():,.1f}")
+            st.dataframe(
+                df_inv_h2.rename(columns={
+                    "fecha_conteo":"Fecha","codigo":"Código","producto":"Producto",
+                    "deposito":"Depósito","stock_sistema":"Sistema","conteo_fisico":"Conteo",
+                    "diferencia":"Dif","observaciones":"Notas"
+                }),
+                use_container_width=True, hide_index=True
+            )
+            st.download_button("📥 Exportar auditorías (.xlsx)",
+                               data=to_excel_bytes(df_inv_h2, "Auditorias"),
+                               file_name=f"auditorias_{datetime.now().strftime('%Y%m%d')}.xlsx")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -2961,13 +3303,15 @@ with tab7:
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab8:
     st.subheader("📈 Reportes y Análisis")
-    r_tab1, r_tab2, r_tab3, r_tab4, r_tab5, r_tab6 = st.tabs([
+    r_tab1, r_tab2, r_tab3, r_tab4, r_tab5, r_tab6, r_tab7, r_tab8 = st.tabs([
         "👥 Dashboard Vendedores",
         "🔄 Rotación de Stock",
         "⏰ Vencimientos",
         "📄 Reporte Mensual",
         "📊 Resumen Ejecutivo",
         "⏸️ Stock Inmovilizado",
+        "⚡ Eficiencia Entregas",
+        "🏆 Ranking Clientes",
     ])
 
     # ── Vendedores ────────────────────────────────────────────────────────────
@@ -3138,38 +3482,51 @@ with tab8:
             with _em2: st.metric("Clientes",           _em_pend["cliente"].nunique())
             with _em3: st.metric("Vol. pendiente",     f"{_em_pend['pendiente'].sum():,.0f}")
 
-        # Descarga todo en un solo Excel
+        # Descarga todo en un solo Excel + PDF
         st.markdown("---")
-        if st.button("📥 Generar Reporte Ejecutivo Completo (.xlsx)", type="primary"):
-            _out_ej = io.BytesIO()
-            with pd.ExcelWriter(_out_ej, engine="openpyxl") as _w:
-                if not _re_stock.empty:
-                    _re_stock.to_excel(_w, index=False, sheet_name="Stock_Actual")
-                    _crit_all = _re_stock[_re_stock["Stock Actual"] < _re_U]
-                    if not _crit_all.empty:
-                        _crit_all.to_excel(_w, index=False, sheet_name="Stock_Critico")
-                if not _re_ent.empty:
-                    _re_ent[_re_ent["pendiente"] > 0].to_excel(_w, index=False, sheet_name="Entregas_Pendientes")
-                if not _re_mg.empty:
-                    _re_mg[_re_mg["pendiente"] > 0].to_excel(_w, index=False, sheet_name="SinEntregar_MG")
-                _kpi_ej = pd.DataFrame({
-                    "Indicador": ["Fecha","Productos","Depósitos","Stock Negativo","Bajo Umbral",
-                                  "Pendientes Entregas","Pendientes MG"],
-                    "Valor": [
-                        datetime.now().strftime("%d/%m/%Y %H:%M"),
-                        _re_stock["Producto"].nunique() if not _re_stock.empty else 0,
-                        _re_stock["Deposito"].nunique() if not _re_stock.empty else 0,
-                        int((_re_stock["Stock Actual"] < 0).sum()) if not _re_stock.empty else 0,
-                        int((_re_stock["Stock Actual"].between(0,_re_U,inclusive="left")).sum()) if not _re_stock.empty else 0,
-                        len(_re_ent[_re_ent["pendiente"]>0]) if not _re_ent.empty else 0,
-                        len(_re_mg[_re_mg["pendiente"]>0])  if not _re_mg.empty  else 0,
-                    ]
-                })
-                _kpi_ej.to_excel(_w, index=False, sheet_name="KPIs")
-            st.download_button("⬇️ Descargar ahora",
-                               data=_out_ej.getvalue(),
-                               file_name=f"ejecutivo_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
-                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        _dej1, _dej2 = st.columns(2)
+        with _dej1:
+            if st.button("📥 Excel Ejecutivo (.xlsx)", type="primary"):
+                _out_ej = io.BytesIO()
+                with pd.ExcelWriter(_out_ej, engine="openpyxl") as _w:
+                    if not _re_stock.empty:
+                        _re_stock.to_excel(_w, index=False, sheet_name="Stock_Actual")
+                        _crit_all = _re_stock[_re_stock["Stock Actual"] < _re_U]
+                        if not _crit_all.empty:
+                            _crit_all.to_excel(_w, index=False, sheet_name="Stock_Critico")
+                    if not _re_ent.empty:
+                        _re_ent[_re_ent["pendiente"] > 0].to_excel(_w, index=False, sheet_name="Entregas_Pendientes")
+                    if not _re_mg.empty:
+                        _re_mg[_re_mg["pendiente"] > 0].to_excel(_w, index=False, sheet_name="SinEntregar_MG")
+                    _kpi_ej = pd.DataFrame({
+                        "Indicador": ["Fecha","Productos","Depósitos","Stock Negativo","Bajo Umbral",
+                                      "Pendientes Entregas","Pendientes MG"],
+                        "Valor": [
+                            datetime.now().strftime("%d/%m/%Y %H:%M"),
+                            _re_stock["Producto"].nunique() if not _re_stock.empty else 0,
+                            _re_stock["Deposito"].nunique() if not _re_stock.empty else 0,
+                            int((_re_stock["Stock Actual"] < 0).sum()) if not _re_stock.empty else 0,
+                            int((_re_stock["Stock Actual"].between(0,_re_U,inclusive="left")).sum()) if not _re_stock.empty else 0,
+                            len(_re_ent[_re_ent["pendiente"]>0]) if not _re_ent.empty else 0,
+                            len(_re_mg[_re_mg["pendiente"]>0])  if not _re_mg.empty  else 0,
+                        ]
+                    })
+                    _kpi_ej.to_excel(_w, index=False, sheet_name="KPIs")
+                st.download_button("⬇️ Descargar Excel",
+                                   data=_out_ej.getvalue(),
+                                   file_name=f"ejecutivo_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                                   mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        with _dej2:
+            if PDF_AVAILABLE:
+                if st.button("📄 PDF Ejecutivo con Logo LC"):
+                    _pdf_ej = generar_ejecutivo_pdf()
+                    if _pdf_ej:
+                        st.download_button("⬇️ Descargar PDF",
+                                           data=_pdf_ej,
+                                           file_name=f"ejecutivo_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
+                                           mime="application/pdf")
+            else:
+                st.caption("PDF: `pip install reportlab`")
 
     # ── Reporte Mensual ───────────────────────────────────────────────────────
     with r_tab4:
@@ -3275,13 +3632,127 @@ with tab8:
             else:
                 st.success(f"✅ Todos los productos tuvieron movimientos en los últimos {_dias_inm} días.")
 
+    # ── Eficiencia de Entregas ────────────────────────────────────────────────
+    with r_tab7:
+        st.write("### ⚡ Eficiencia de Entregas")
+        st.caption("Tiempo promedio entre la fecha de recepción del pedido y la confirmación de entrega, por vendedor y producto.")
+        _ent_ef = obtener_entregas()
+        if _ent_ef.empty:
+            st.info("Sin datos de entregas.")
+        else:
+            _ent_conf = _ent_ef[_ent_ef.get("confirmada", pd.Series(0, index=_ent_ef.index)).fillna(0) == 1].copy() \
+                        if "confirmada" in _ent_ef.columns else pd.DataFrame()
+
+            # Global metrics
+            _ef1, _ef2, _ef3, _ef4 = st.columns(4)
+            _total_pend  = len(_ent_ef[_ent_ef["pendiente"] > 0])
+            _prom_dias_g = _ent_ef["dia_recibido"].apply(dias_desde).mean() if "dia_recibido" in _ent_ef.columns else 0
+            _ef1.metric("Registros activos", len(_ent_ef))
+            _ef2.metric("Pendientes de entrega", _total_pend)
+            _ef3.metric("Días prom. en espera", f"{_prom_dias_g:.1f}")
+            _ef4.metric("Confirmadas",
+                        len(_ent_conf) if not _ent_conf.empty else "—")
+
+            st.markdown("---")
+            # Tiempo en cola por vendedor
+            if "vendedor" in _ent_ef.columns and "dia_recibido" in _ent_ef.columns:
+                _ent_ef["dias_espera"] = _ent_ef["dia_recibido"].apply(dias_desde)
+                _by_vend = (_ent_ef[_ent_ef["pendiente"] > 0]
+                            .groupby("vendedor")
+                            .agg(Pedidos=("rto","nunique"),
+                                 Volumen=("pendiente","sum"),
+                                 DiasPromedio=("dias_espera","mean"))
+                            .reset_index().sort_values("DiasPromedio", ascending=False))
+                if not _by_vend.empty:
+                    st.write("#### Por Vendedor")
+                    fig_vend_ef = px.bar(
+                        _by_vend, x="vendedor", y="DiasPromedio",
+                        color="DiasPromedio",
+                        color_continuous_scale=["#28a745","#ffc107","#dc3545"],
+                        labels={"DiasPromedio":"Días promedio","vendedor":"Vendedor"},
+                        title="Días promedio en cola por vendedor"
+                    )
+                    fig_vend_ef.update_layout(height=320, margin=dict(l=0,r=0,t=40,b=0), showlegend=False)
+                    st.plotly_chart(fig_vend_ef, use_container_width=True)
+                    st.dataframe(
+                        _by_vend.rename(columns={"vendedor":"Vendedor","DiasPromedio":"Días Prom."}),
+                        use_container_width=True, hide_index=True
+                    )
+
+            # Por producto
+            if "producto" in _ent_ef.columns and "dia_recibido" in _ent_ef.columns:
+                _by_prod_ef = (_ent_ef[_ent_ef["pendiente"] > 0]
+                               .groupby("producto")
+                               .agg(Pedidos=("rto","nunique"),
+                                    Volumen=("pendiente","sum"),
+                                    DiasPromedio=("dias_espera","mean"))
+                               .reset_index().sort_values("Volumen", ascending=False).head(15))
+                if not _by_prod_ef.empty:
+                    st.write("#### Por Producto (top 15 por volumen pendiente)")
+                    st.dataframe(
+                        _by_prod_ef.rename(columns={"producto":"Producto","DiasPromedio":"Días Prom."}),
+                        use_container_width=True, hide_index=True
+                    )
+                    st.download_button("📥 Exportar eficiencia (.xlsx)",
+                                       data=to_excel_bytes(_by_prod_ef, "Eficiencia"),
+                                       file_name=f"eficiencia_{datetime.now().strftime('%Y%m%d')}.xlsx")
+
+    # ── Ranking de Clientes ───────────────────────────────────────────────────
+    with r_tab8:
+        st.write("### 🏆 Ranking de Clientes")
+        st.caption("Clientes ordenados por volumen total pedido, cantidad de remitos y balance pendiente.")
+        _ent_rk = obtener_entregas()
+        if _ent_rk.empty:
+            st.info("Sin datos de entregas.")
+        else:
+            _rk = (_ent_rk.groupby("cliente")
+                   .agg(Remitos=("rto","nunique"),
+                        VolTotal=("cantidad","sum"),
+                        Pendiente=("pendiente","sum"),
+                        Productos=("producto","nunique"))
+                   .reset_index()
+                   .rename(columns={"cliente":"Cliente","VolTotal":"Vol. Total"})
+                   .sort_values("Vol. Total", ascending=False)
+                   .reset_index(drop=True))
+            _rk.index = _rk.index + 1  # ranking 1-based
+
+            _rk_top = _rk.head(5)
+            st.markdown("**Top 5 clientes por volumen**")
+            _rc = st.columns(min(5, len(_rk_top)))
+            for _ci, (___, _row) in enumerate(zip(_rc, _rk_top.itertuples())):
+                _rc[_ci].metric(
+                    f"#{___ + 1} {_row.Cliente[:15]}",
+                    f"{_row._4:,.0f}",   # Vol. Total
+                    f"{_row.Remitos} remitos"
+                )
+
+            st.markdown("---")
+            _n_rk = st.slider("Mostrar top N clientes", 10, 100, 25, key="rk_n")
+            fig_rk = px.bar(
+                _rk.head(_n_rk),
+                x="Cliente", y="Vol. Total",
+                color="Pendiente",
+                color_continuous_scale=["#3D4E6B","#F5A800","#dc3545"],
+                labels={"Vol. Total":"Volumen Total","Pendiente":"Pend."},
+                title=f"Top {_n_rk} clientes por volumen total"
+            )
+            fig_rk.update_layout(height=380, margin=dict(l=0,r=0,t=40,b=0), xaxis_tickangle=-40)
+            st.plotly_chart(fig_rk, use_container_width=True)
+            st.dataframe(_rk.head(_n_rk), use_container_width=True)
+            st.download_button("📥 Exportar ranking (.xlsx)",
+                               data=to_excel_bytes(_rk, "Ranking_Clientes"),
+                               file_name=f"ranking_{datetime.now().strftime('%Y%m%d')}.xlsx")
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 9 — CONFIGURACIÓN
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab9:
     st.subheader("⚙️ Configuración")
-    cfg1, cfg2 = st.tabs(["📥 Importación / Exportación", "🔧 Parámetros & Sistema"])
+    cfg1, cfg2, cfg3, cfg4 = st.tabs([
+        "📥 Importación / Exportación", "🔧 Parámetros & Sistema",
+        "⚙️ Config JSON", "📋 Changelog"
+    ])
 
     # ── Importación / Exportación ─────────────────────────────────────────────
     with cfg1:
@@ -3704,8 +4175,82 @@ with tab9:
                                data=to_excel_bytes(df_rem_log, "Remitos"),
                                file_name=f"remitos_{datetime.now().strftime('%Y%m%d')}.xlsx")
 
+    # ── Config JSON ───────────────────────────────────────────────────────────
+    with cfg3:
+        st.write("### ⚙️ Exportar / Importar Configuración JSON")
+        st.caption("Hacé backup de todos los parámetros de la app en un archivo JSON. Útil para restaurar configuración en otro equipo o luego de un reset.")
+
+        # Exportar
+        _cfg_keys = [
+            "umbral_alerta","wa_numero","smtp_server","smtp_port","smtp_user",
+            "email_dest","codigo_supervisor","auth_enabled",
+            "ultimo_hash_stock","ultimo_hash_entregas","ultimo_hash_mg",
+        ]
+        _cfg_exp = {}
+        for _k in _cfg_keys:
+            _v = obtener_metadata(_k)
+            if _v: _cfg_exp[_k] = _v
+        # También metas
+        _conn_cfg = conectar_db()
+        _metas_cfg = _rsql("SELECT campana, vendedor, producto, meta_cantidad, meta_valor FROM metas_campana", _conn_cfg)
+        _conn_cfg.close()
+        if not _metas_cfg.empty:
+            _cfg_exp["metas_campana"] = _metas_cfg.to_dict(orient="records")
+        _json_bytes = json.dumps(_cfg_exp, ensure_ascii=False, indent=2).encode("utf-8")
+        st.download_button(
+            "📥 Exportar configuración (.json)",
+            data=_json_bytes,
+            file_name=f"config_lc_{datetime.now().strftime('%Y%m%d')}.json",
+            mime="application/json",
+            type="primary"
+        )
+        st.markdown("---")
+        # Importar
+        st.write("#### Importar configuración desde JSON")
+        _arch_cfg = st.file_uploader("Archivo config (.json)", type=["json"], key="up_cfg_json")
+        if _arch_cfg:
+            try:
+                _cfg_imp = json.loads(_arch_cfg.read().decode("utf-8"))
+                st.json(_cfg_imp)
+                if st.button("✅ Aplicar configuración", type="primary", key="btn_apply_cfg"):
+                    for _k, _v in _cfg_imp.items():
+                        if _k == "metas_campana":
+                            continue  # no sobrescribir metas automáticamente
+                        guardar_metadata(_k, str(_v))
+                    # Refrescar session state
+                    if "umbral_alerta" in _cfg_imp:
+                        st.session_state.umbral_alerta = int(_cfg_imp["umbral_alerta"])
+                    if "wa_numero" in _cfg_imp:
+                        st.session_state.wa_numero = _cfg_imp["wa_numero"]
+                    st.success("✅ Configuración importada correctamente.")
+                    st.rerun()
+            except Exception as _ex:
+                st.error(f"Error leyendo JSON: {_ex}")
+
+    # ── Changelog ─────────────────────────────────────────────────────────────
+    with cfg4:
+        st.write("### 📋 Changelog — Historial de Versiones")
+        st.markdown("""
+| Versión | Fecha | Cambios |
+|---------|-------|---------|
+| **v4.0 PRO** | Jul 2026 | Inventario físico masivo, devoluciones, eficiencia entregas, ranking clientes, reporte ejecutivo PDF con logo, exportación config JSON, tabs de reportes ampliados |
+| **v3.5** | Jun 2026 | Reservas de stock, filtro global de depósito, comparativa campañas, WhatsApp share, changelog, importación múltiple |
+| **v3.0 PRO** | Jun 2026 | Remitos correlativos (R-00001...), log de importaciones, backup SQLite, orden de compra PDF, forecast de demanda, novedades del día, tendencias mensuales, tooltips KPIs, alerta stock negativo inmediata |
+| **v2.5** | May 2026 | Logo LC + colores corporativos, header profesional, remitos PDF, confirmación entregas MG con descuento stock, observaciones en movimientos, stock inmovilizado, validación duplicados |
+| **v2.0** | May 2026 | Índices DB, stock mínimo por producto, semáforos, proyección, trazabilidad lote, margen bruto, paginación historial, modo oscuro |
+| **v1.5** | Abr 2026 | Lista de precios separada, cache TTL 300s, LIMIT 2000 en historial, batch imports (executemany) |
+| **v1.0** | Mar 2026 | Versión inicial: control de stock multi-depósito, importación MacroGest, entregas, historial, valorización |
+""")
+        st.markdown("---")
+        st.write("#### 🔧 Estado del Sistema")
+        _sys1, _sys2, _sys3, _sys4 = st.columns(4)
+        _sys1.metric("Versión", "v4.0 PRO")
+        _sys2.metric("PDF", "✅" if PDF_AVAILABLE else "❌")
+        _sys3.metric("DB", "PostgreSQL" if IS_POSTGRES else "SQLite")
+        _sys4.metric("Usuario", usuario_actual())
+
     st.markdown("---")
-    st.caption(f"La Clementina S.A. — v3.0 PRO — "
+    st.caption(f"La Clementina S.A. — v4.0 PRO — "
                f"{'PDF ✅' if PDF_AVAILABLE else 'PDF ❌ (pip install reportlab)'}")
 
 
