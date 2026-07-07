@@ -56,81 +56,144 @@ _LC_LIGHT  = "#FFF8E7"
 
 st.markdown(f"""
 <style>
-/* ── Corporativo LC ── */
+/* ── Dark mode forzado LC ── */
 :root {{
     --lc-yellow: {_LC_YELLOW};
     --lc-navy:   {_LC_NAVY};
-    --lc-light:  {_LC_LIGHT};
+    --lc-light:  #1C2333;
+    --bg-main:   #0E1117;
+    --bg-card:   #1C2333;
+    --bg-card2:  #252D3D;
+    --text-main: #FAFAFA;
+    --text-muted:#A0AEC0;
+    --border:    #2D3748;
 }}
-.main{{background-color:#f7f8fc}}
+/* Fondo principal */
+.stApp, .main, [data-testid="stAppViewContainer"] {{
+    background-color: #0E1117 !important;
+    color: #FAFAFA !important;
+}}
+[data-testid="stHeader"] {{background-color:#0E1117!important}}
+[data-testid="stToolbar"] {{background-color:#0E1117!important}}
+section[data-testid="stSidebar"] {{background-color:#1C2333!important}}
+
+/* Inputs, selects, textareas */
+input, textarea, select,
+[data-baseweb="input"] input,
+[data-baseweb="textarea"] textarea,
+[data-baseweb="select"] div {{
+    background-color:#1C2333!important;
+    color:#FAFAFA!important;
+    border-color:#2D3748!important;
+}}
+[data-baseweb="select"] {{background-color:#1C2333!important}}
+[data-baseweb="popover"] {{background-color:#1C2333!important;color:#FAFAFA!important}}
+
+/* Expanders */
+[data-testid="stExpander"] {{
+    background-color:#1C2333!important;
+    border:1px solid #2D3748!important;
+    border-radius:8px!important;
+}}
+
+/* Dataframes / tablas */
+[data-testid="stDataFrame"] {{background-color:#1C2333!important}}
+.dvn-scroller {{background-color:#1C2333!important}}
+
+/* Métricas */
+[data-testid="metric-container"] {{
+    background-color:#1C2333!important;
+    border:1px solid #2D3748!important;
+    border-radius:8px!important;
+    padding:12px!important;
+}}
+[data-testid="stMetricValue"] {{color:#FAFAFA!important}}
+[data-testid="stMetricLabel"] {{color:#A0AEC0!important}}
+
+/* Botones */
+.stButton>button{{
+    width:100%;border-radius:8px;font-weight:bold;height:3em;
+    background:{_LC_NAVY};color:white;border:1px solid #2D3748;
+}}
+.stButton>button:hover{{background:{_LC_YELLOW};color:{_LC_NAVY};border-color:{_LC_YELLOW}}}
+
+/* Tabs */
+.stTabs [data-baseweb="tab-list"] {{
+    border-bottom:3px solid {_LC_YELLOW}!important;
+    background-color:#0E1117!important;
+}}
+.stTabs [data-baseweb="tab"] {{
+    background-color:#0E1117!important;
+    color:#A0AEC0!important;
+}}
+.stTabs [aria-selected="true"] {{
+    color:{_LC_YELLOW}!important;
+    font-weight:700!important;
+    background-color:#1C2333!important;
+}}
+
+/* ── Header LC ── */
 .lc-header {{
-    background: linear-gradient(135deg, {_LC_NAVY} 0%, #2c3a52 100%);
-    padding: 14px 24px; border-radius: 12px; margin-bottom: 16px;
-    display: flex; align-items: center; gap: 18px;
-    box-shadow: 0 4px 20px rgba(61,78,107,.25);
+    background:linear-gradient(135deg,{_LC_NAVY} 0%,#1a2540 100%);
+    padding:14px 24px;border-radius:12px;margin-bottom:16px;
+    display:flex;align-items:center;gap:18px;
+    box-shadow:0 4px 20px rgba(0,0,0,.4);
+    border:1px solid #2D3748;
 }}
-.lc-header-title {{
-    color: white; font-size: 1.35rem; font-weight: 800; margin: 0;
-    letter-spacing: .3px;
-}}
-.lc-header-sub {{
-    color: {_LC_YELLOW}; font-size: .82rem; font-weight: 600; margin: 2px 0 0;
-}}
+.lc-header-title {{color:white;font-size:1.35rem;font-weight:800;margin:0;letter-spacing:.3px}}
+.lc-header-sub   {{color:{_LC_YELLOW};font-size:.82rem;font-weight:600;margin:2px 0 0}}
 .lc-badge {{
-    background: {_LC_YELLOW}; color: {_LC_NAVY}; font-weight: 800;
-    padding: 4px 10px; border-radius: 6px; font-size: .75rem;
+    background:{_LC_YELLOW};color:{_LC_NAVY};font-weight:800;
+    padding:4px 10px;border-radius:6px;font-size:.75rem;
 }}
-/* ── Cards ── */
-.stButton>button{{width:100%;border-radius:8px;font-weight:bold;height:3em;
-    background:{_LC_NAVY};color:white;border:none}}
-.stButton>button:hover{{background:{_LC_YELLOW};color:{_LC_NAVY}}}
-.stock-card{{background:white;padding:18px;border-radius:12px;
-    box-shadow:0 4px 15px rgba(0,0,0,.05);margin-bottom:12px;
-    border:1px solid #e1e4e8;position:relative}}
-.card-normal {{border-left:8px solid #28a745}}
+
+/* ── Cards de stock ── */
+.stock-card{{
+    background:#1C2333;padding:18px;border-radius:12px;
+    box-shadow:0 4px 15px rgba(0,0,0,.3);margin-bottom:12px;
+    border:1px solid #2D3748;position:relative;
+}}
+.card-normal {{border-left:8px solid #38a169}}
 .card-low    {{border-left:8px solid {_LC_YELLOW}}}
-.card-warning{{border-left:8px solid #dc3545}}
-.stock-title {{font-size:.95rem;color:{_LC_NAVY};font-weight:700;margin-bottom:8px;
+.card-warning{{border-left:8px solid #e53e3e}}
+.stock-title {{font-size:.95rem;color:#E2E8F0;font-weight:700;margin-bottom:8px;
     line-height:1.2;min-height:2.4em}}
-.stock-value {{font-size:1.5rem;color:{_LC_NAVY};font-weight:800;display:block}}
-.stock-unit  {{font-size:.8rem;color:#6c757d;font-weight:400}}
-.stock-info  {{margin-top:10px;padding-top:8px;border-top:1px solid #f0f2f6;
-    font-size:.8rem;color:#495057}}
-.label-blue  {{background:#e7f3ff;color:{_LC_NAVY};padding:2px 6px;border-radius:4px;font-weight:bold}}
-.label-orange{{background:{_LC_LIGHT};color:#856404;padding:2px 6px;border-radius:4px;font-weight:bold}}
-.neg-badge   {{display:inline-block;background:#dc3545;color:white;font-size:.65rem;
+.stock-value {{font-size:1.5rem;color:#FAFAFA;font-weight:800;display:block}}
+.stock-unit  {{font-size:.8rem;color:#A0AEC0;font-weight:400}}
+.stock-info  {{margin-top:10px;padding-top:8px;border-top:1px solid #2D3748;
+    font-size:.8rem;color:#A0AEC0}}
+.label-blue  {{background:#1a365d;color:#90cdf4;padding:2px 6px;border-radius:4px;font-weight:bold}}
+.label-orange{{background:#2d1e0a;color:{_LC_YELLOW};padding:2px 6px;border-radius:4px;font-weight:bold}}
+.neg-badge   {{display:inline-block;background:#e53e3e;color:white;font-size:.65rem;
     padding:1px 6px;border-radius:8px;font-weight:bold;margin-left:4px;vertical-align:middle}}
 .comp-badge  {{display:inline-block;background:{_LC_YELLOW};color:{_LC_NAVY};font-size:.65rem;
     padding:1px 6px;border-radius:8px;font-weight:bold;margin-left:4px;vertical-align:middle}}
-.venc-badge  {{display:inline-block;background:#6f42c1;color:white;font-size:.65rem;
+.venc-badge  {{display:inline-block;background:#6b46c1;color:white;font-size:.65rem;
     padding:1px 6px;border-radius:8px;font-weight:bold;margin-left:4px;vertical-align:middle}}
-.login-box   {{max-width:400px;margin:80px auto;padding:30px;background:white;
-    border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,.1)}}
-.semaforo-verde   {{background:#d4edda;border-left:6px solid #28a745;padding:8px 14px;border-radius:6px;margin:3px 0}}
-.semaforo-amarillo{{background:{_LC_LIGHT};border-left:6px solid {_LC_YELLOW};padding:8px 14px;border-radius:6px;margin:3px 0}}
-.semaforo-rojo    {{background:#f8d7da;border-left:6px solid #dc3545;padding:8px 14px;border-radius:6px;margin:3px 0}}
-.semaforo-label   {{font-weight:700;font-size:.85rem}}
-.projeccion-card  {{background:#f8f9fa;border:1px solid #dee2e6;border-radius:8px;padding:12px;margin:4px 0}}
-.remito-box {{background:white;border:2px solid {_LC_NAVY};border-radius:10px;padding:20px;}}
-.seccion-titulo {{color:{_LC_NAVY};font-weight:800;border-bottom:3px solid {_LC_YELLOW};
+.login-box   {{max-width:400px;margin:80px auto;padding:30px;background:#1C2333;
+    border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,.4);border:1px solid #2D3748}}
+.semaforo-verde   {{background:#1a2e1a;border-left:6px solid #38a169;padding:8px 14px;border-radius:6px;margin:3px 0}}
+.semaforo-amarillo{{background:#2d2010;border-left:6px solid {_LC_YELLOW};padding:8px 14px;border-radius:6px;margin:3px 0}}
+.semaforo-rojo    {{background:#2d1212;border-left:6px solid #e53e3e;padding:8px 14px;border-radius:6px;margin:3px 0}}
+.semaforo-label   {{font-weight:700;font-size:.85rem;color:#FAFAFA}}
+.projeccion-card  {{background:#1C2333;border:1px solid #2D3748;border-radius:8px;padding:12px;margin:4px 0}}
+.remito-box {{background:#1C2333;border:2px solid {_LC_NAVY};border-radius:10px;padding:20px;}}
+.seccion-titulo {{color:{_LC_YELLOW};font-weight:800;border-bottom:3px solid {_LC_YELLOW};
     padding-bottom:4px;margin-bottom:12px;}}
-/* Tabs con acento LC */
-.stTabs [data-baseweb="tab-list"] {{border-bottom: 3px solid {_LC_YELLOW}!important}}
-.stTabs [aria-selected="true"] {{color:{_LC_NAVY}!important;font-weight:700!important}}
-/* ── Vista depósito mobile ── */
+.presupuesto-item {{background:#1C2333;border-left:4px solid {_LC_YELLOW};
+    padding:8px 12px;margin:4px 0;border-radius:4px;font-size:.9rem;color:#FAFAFA}}
+
+/* ── Mobile responsive ── */
 @media (max-width: 768px) {{
     .stock-card {{padding:12px;margin-bottom:8px}}
     .stock-title {{font-size:.85rem;min-height:auto}}
     .stock-value {{font-size:1.3rem}}
-    .lc-header {{padding:10px 14px}}
+    .lc-header  {{padding:10px 14px}}
     .lc-header-title {{font-size:1.1rem}}
     section[data-testid="stSidebar"] {{display:none}}
     .stTabs [data-baseweb="tab-list"] {{flex-wrap:wrap}}
     [data-testid="metric-container"] {{min-width:45%}}
 }}
-/* ── Presupuesto ── */
-.presupuesto-item {{background:#f8f9fa;border-left:4px solid {_LC_YELLOW};
-    padding:8px 12px;margin:4px 0;border-radius:4px;font-size:.9rem}}
 </style>
 """, unsafe_allow_html=True)
 
