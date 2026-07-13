@@ -568,8 +568,6 @@ def inicializar_db():
             except: pass
 
     # Índices para acelerar queries sobre tablas grandes
-    # En PostgreSQL cada CREATE INDEX que falla deja la tx en error state;
-    # se usa SAVEPOINT para aislar cada intento y hacer rollback individual.
     for idx_sql in [
         "CREATE INDEX IF NOT EXISTS idx_mov_producto ON movimientos(id_producto)",
         "CREATE INDEX IF NOT EXISTS idx_mov_origen   ON movimientos(origen)",
@@ -798,7 +796,7 @@ def mostrar_login():
 def limpiar_cache():
     """Invalida todas las caches de datos. Llamar tras cualquier escritura en DB."""
     st.cache_data.clear()
-    # Resetear preload y caches de session_state — se recargan en el próximo render
+    # Resetear preload y caches de session_state
     _keys_reset = [k for k in st.session_state.keys()
                    if k.startswith("df_ent_cache_") or k.startswith("_pre_")
                    or k in ("df_mg_cache", "preload_done")]
@@ -2134,19 +2132,17 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ── Pre-carga de datos pesados en session_state ──────────────────────────────
-# Se ejecuta UNA sola vez por sesión; los tabs filtran en memoria sin re-query.
 if "preload_done" not in st.session_state:
-    st.session_state["preload_done"]       = False
+    st.session_state["preload_done"] = False
 if not st.session_state["preload_done"]:
-    st.session_state["_pre_stock"]         = obtener_stock_con_compromisos()
-    st.session_state["_pre_ent_lc"]        = obtener_entregas("LA CLEMENTINA S.A")
-    st.session_state["_pre_ent_b55"]       = obtener_entregas("BAYER DEP55")
-    st.session_state["_pre_ent_bd"]        = obtener_entregas("BAYER DIRECTA")
-    st.session_state["df_mg_cache"]        = obtener_entregas("MACROGEST")
-    st.session_state["_pre_hist"]          = obtener_historial_movimientos()
-    st.session_state["_pre_lp"]            = obtener_lista_precios()
-    st.session_state["preload_done"]       = True
-    # También inicializar caches de entregas para mostrar_tab_entregas
+    st.session_state["_pre_stock"]   = obtener_stock_con_compromisos()
+    st.session_state["_pre_ent_lc"]  = obtener_entregas("LA CLEMENTINA S.A")
+    st.session_state["_pre_ent_b55"] = obtener_entregas("BAYER DEP55")
+    st.session_state["_pre_ent_bd"]  = obtener_entregas("BAYER DIRECTA")
+    st.session_state["df_mg_cache"]  = obtener_entregas("MACROGEST")
+    st.session_state["_pre_hist"]    = obtener_historial_movimientos()
+    st.session_state["_pre_lp"]      = obtener_lista_precios()
+    st.session_state["preload_done"] = True
     st.session_state["df_ent_cache_LA CLEMENTINA S.A"] = st.session_state["_pre_ent_lc"]
     st.session_state["df_ent_cache_BAYER DEP55"]       = st.session_state["_pre_ent_b55"]
     st.session_state["df_ent_cache_BAYER DIRECTA"]     = st.session_state["_pre_ent_bd"]
@@ -2171,6 +2167,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12 = st.t
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab1:
     stock_df = st.session_state.get("_pre_stock") if st.session_state.get("preload_done") else obtener_stock_con_compromisos()
+    if stock_df is None: stock_df = obtener_stock_con_compromisos()
     # Aplicar filtro global de depósito
     _dep_global = st.session_state.get("deposito_global", "Todos")
     if _dep_global != "Todos" and not stock_df.empty:
@@ -2195,6 +2192,7 @@ with tab1:
         comp_n = len(stock_df[stock_df["Disponible Neto"] < 0])
 
         ent_panel = st.session_state.get("_pre_ent_lc") if st.session_state.get("preload_done") else obtener_entregas()
+        if ent_panel is None: ent_panel = obtener_entregas()
         venc30 = 0
         if not ent_panel.empty:
             ent_panel["dias_p"] = ent_panel["dia_recibido"].apply(dias_desde)
@@ -2682,7 +2680,7 @@ with tab1:
             df_f = df_f[df_f["Producto"] == f_prod]
         if f_dep != "Todos":
             df_f = df_f[df_f["Deposito"] == f_dep]
-            agrupar_prod = False  # con depósito seleccionado no agrupar
+            agrupar_prod = False
         if hide_neg:
             mask = df_f["Stock Actual"] > 0
             if show_neg_f: mask = mask | (df_f["Stock Actual"] < 0)
@@ -2692,7 +2690,6 @@ with tab1:
         if show_comp_f:
             df_f = df_f[df_f["Disponible Neto"] < 0]
 
-        # Agrupar por producto sumando depósitos
         if agrupar_prod and not df_f.empty:
             df_f = (df_f.groupby("Producto", as_index=False)
                     .agg({
@@ -2710,7 +2707,6 @@ with tab1:
                 st.download_button("📥 Descargar Comparativa", data=excel_b,
                                    file_name="stock_agrupado.xlsx")
 
-            # Vencimientos en cards
             prod_df_venc = obtener_productos_completo()
 
             items = df_f.to_dict("records")
@@ -2751,13 +2747,15 @@ with tab1:
                         .head(5))
                         if not cli_pend.empty:
                             filas = "".join(
-                                f"<tr><td style='padding:1px 6px'>{str(r['cliente'])}</td>"
-                                f"<td style='padding:1px 6px;text-align:right'><b>{r['pendiente']:,.0f}</b></td>"
-                                f"<td style='padding:1px 6px;color:#aaa'>{str(r['deposito'] or '-')}</td></tr>"
+                                "<tr>"
+                                "<td style='padding:1px 6px'>" + str(r["cliente"]) + "</td>"
+                                "<td style='padding:1px 6px;text-align:right'><b>" + f"{r['pendiente']:,.0f}" + "</b></td>"
+                                "<td style='padding:1px 6px;color:#aaa'>" + str(r["deposito"] or "-") + "</td>"
+                                "</tr>"
                                 for _, r in cli_pend.iterrows()
                             )
                             clientes_pend_line = (
-                                "<br><b>&#128101; Clientes con pendiente:</b>"
+                                "<br><b>Clientes pendiente:</b>"
                                 "<table style='width:100%;font-size:.75rem;margin-top:4px'>"
                                 "<tr style='color:#aaa'><td>Cliente</td><td>Pend.</td><td>Dep.</td></tr>"
                                 + filas +
@@ -2765,15 +2763,15 @@ with tab1:
                             )
 
                     card_html = (
-                        f'<div class="stock-card {clase}">'
-                        f'<div class="stock-title">{item["Producto"]}{b_neg}{b_comp}</div>'
-                        f'<span class="stock-value">{stk:,.1f} <small class="stock-unit">{item["Unidad"]}</small></span>'
-                        f'<div class="stock-info">'
-                        f'<b>&#128273;</b> {item["Código"]}<br>'
-                        f'<b>&#128205;</b> <span class="label-blue">{item["Deposito"]}</span>'
-                        f'{comp_line}{venc_info}{clientes_pend_line}'
-                        f'</div>'
-                        f'</div>'
+                        '<div class="stock-card ' + clase + '">'
+                        '<div class="stock-title">' + str(item["Producto"]) + b_neg + b_comp + '</div>'
+                        '<span class="stock-value">' + f"{stk:,.1f}" + ' <small class="stock-unit">' + str(item["Unidad"]) + '</small></span>'
+                        '<div class="stock-info">'
+                        '<b>ID</b> ' + str(item["Código"]) + '<br>'
+                        '<b>Dep.</b> <span class="label-blue">' + str(item["Deposito"]) + '</span>'
+                        + comp_line + venc_info + clientes_pend_line +
+                        '</div>'
+                        '</div>'
                     )
                     st.markdown(card_html, unsafe_allow_html=True)
 
@@ -3045,7 +3043,7 @@ def mostrar_tab_entregas(hoja_nombre, titulo):
             df_h = st.session_state[_ent_cache_key]
             st.rerun()
 
-    if df_h.empty:
+    if df_h is None or df_h.empty:
         st.info("Sin datos. Importá en 'LC / LCAGRO'.")
         return
 
@@ -3339,6 +3337,7 @@ with tab6:
     _ult_h = obtener_metadata("ultima_importacion")
     if _ult_h: st.caption(f"🕐 Última importación de stock: **{_ult_h}**")
     hist_df = st.session_state.get("_pre_hist") if st.session_state.get("preload_done") else obtener_historial_movimientos()
+    if hist_df is None: hist_df = obtener_historial_movimientos()
 
     if hist_df is None or hist_df.empty:
         st.info("Sin movimientos registrados.")
@@ -3368,7 +3367,6 @@ with tab6:
         with cd3:
             f_anulados = st.toggle("Mostrar anulados", value=False)
 
-        # Filtrado vectorizado — sin .copy() hasta el final
         _hmask = pd.Series([True] * len(hist_df), index=hist_df.index)
         if f_tipo_h != "Todos": _hmask &= hist_df["Tipo"] == f_tipo_h
         if f_orig_h != "Todos": _hmask &= hist_df["Origen"] == f_orig_h
@@ -5725,7 +5723,7 @@ with tab11:
             df_mg_stored = st.session_state["df_mg_cache"]
             st.rerun()
 
-    if df_mg_stored.empty:
+    if df_mg_stored is None or df_mg_stored.empty:
         st.info("Sin datos. Importá un archivo arriba.")
     else:
         tc2 = df_mg_stored["cantidad_comprada"].sum()
@@ -6070,7 +6068,7 @@ with tab12:
     df_lp = st.session_state.get("_pre_lp") if st.session_state.get("preload_done") else obtener_lista_precios()
     if df_lp is None: df_lp = obtener_lista_precios()
 
-    if df_lp.empty:
+    if df_lp is None or df_lp.empty:
         st.info("Sin datos. Importá un archivo arriba.")
     else:
         _lp_ult = df_lp["fecha_carga"].iloc[0] if "fecha_carga" in df_lp.columns else ""
