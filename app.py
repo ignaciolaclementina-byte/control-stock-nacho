@@ -29,6 +29,7 @@ import json
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+import difflib
 
 try:
     from reportlab.lib.pagesizes import A4
@@ -829,6 +830,20 @@ def dias_hasta(fecha_str):
     try:
         return (datetime.strptime(str(fecha_str).strip(), "%d/%m/%Y") - datetime.now()).days
     except: return 9999
+
+def _similitud(a, b):
+    return difflib.SequenceMatcher(None, a.lower(), b.lower()).ratio()
+
+def _filtro_fonetico(serie, query, umbral=0.6):
+    """Retorna máscara booleana con coincidencias exactas + fonéticas."""
+    q = query.lower()
+    exacta = serie.fillna("").str.lower().str.contains(q, na=False)
+    if len(q) < 4:
+        return exacta
+    fonetica = serie.fillna("").apply(
+        lambda x: any(_similitud(q, word) >= umbral for word in x.lower().split())
+    )
+    return exacta | fonetica
 
 def usuario_actual():
     return st.session_state.get("username", "sistema")
@@ -3124,7 +3139,7 @@ with tab5:
     st.subheader("📋 Toma de Stock Físico")
     st_df = obtener_stock_full()
 
-    _inv_tabs = st.tabs(["📝 Conteo Individual", "📋 Conteo Masivo", "↩️ Devoluciones", "📊 Historial Auditorías"])
+    _inv_tabs = st.tabs(["📝 Conteo Individual", "📋 Conteo Masivo", "↩️ Devoluciones", "📊 Historial Auditorías", "🔀 Transferencia"])
 
     with _inv_tabs[0]:
         if not st_df.empty:
@@ -3307,6 +3322,58 @@ with tab5:
             st.download_button("📥 Exportar auditorías (.xlsx)",
                                data=to_excel_bytes(df_inv_h2, "Auditorias"),
                                file_name=f"auditorias_{datetime.now().strftime('%Y%m%d')}.xlsx")
+
+    with _inv_tabs[4]:
+        st.write("### 🔀 Transferencia entre Depósitos")
+        st.caption("Mover stock de un depósito a otro. Genera movimiento de Salida en origen y Entrada en destino.")
+        if st_df.empty:
+            st.info("Sin datos de stock.")
+        else:
+            _deps_tr = sorted(st_df["Deposito"].unique().tolist())
+            _prods_tr = sorted(st_df["Producto"].unique().tolist())
+            _tr1, _tr2 = st.columns(2)
+            with _tr1:
+                _prod_tr = st.selectbox("Producto", _prods_tr, key="tr_prod")
+                _dep_orig_tr = st.selectbox("Depósito origen", _deps_tr, key="tr_orig")
+                _dep_dest_tr = st.selectbox("Depósito destino", _deps_tr, key="tr_dest")
+            with _tr2:
+                _filt_tr = st_df[(st_df["Producto"]==_prod_tr) & (st_df["Deposito"]==_dep_orig_tr)]
+                _stk_orig_tr = float(_filt_tr["Stock Actual"].sum()) if not _filt_tr.empty else 0.0
+                st.metric("Stock disponible en origen", f"{_stk_orig_tr:,.1f}")
+                _cant_tr = st.number_input("Cantidad a transferir", min_value=0.01,
+                                           max_value=max(_stk_orig_tr, 0.01),
+                                           step=1.0, key="tr_cant")
+                _motivo_tr = st.text_input("Motivo / Referencia", key="tr_motivo",
+                                           placeholder="ej: Reposición sucursal Las Varillas")
+            if _dep_orig_tr == _dep_dest_tr:
+                st.warning("El depósito de origen y destino deben ser distintos.")
+            elif st.button("✅ Confirmar Transferencia", type="primary", key="btn_tr"):
+                if _cant_tr > 0:
+                    conn = conectar_db()
+                    _id_tr = conn.execute("SELECT id_producto FROM productos WHERE nombre=?",
+                                         (_prod_tr,)).fetchone()
+                    if _id_tr:
+                        _ts_tr = datetime.now().strftime("%d/%m/%Y %H:%M")
+                        _ref_tr = f"TRANSF: {_dep_orig_tr} → {_dep_dest_tr}" + (f" | {_motivo_tr}" if _motivo_tr else "")
+                        conn.cursor().executemany(
+                            """INSERT INTO movimientos
+                               (fecha_hora,tipo_movimiento,id_producto,cantidad,lote,
+                                referencia,deposito,origen,usuario)
+                               VALUES (?,?,?,?,?,?,?,?,?)""",
+                            [
+                                (_ts_tr, "Salida",  _id_tr[0], _cant_tr, "S/L", _ref_tr, _dep_orig_tr, "transferencia", usuario_actual()),
+                                (_ts_tr, "Entrada", _id_tr[0], _cant_tr, "S/L", _ref_tr, _dep_dest_tr, "transferencia", usuario_actual()),
+                            ]
+                        )
+                        conn.commit(); conn.close()
+                        limpiar_cache()
+                        st.success(f"✅ Transferidos {_cant_tr:,.1f} de {_prod_tr}: {_dep_orig_tr} → {_dep_dest_tr}")
+                        st.rerun()
+                    else:
+                        conn.close()
+                        st.error("Producto no encontrado.")
+                else:
+                    st.warning("Ingresá una cantidad mayor a cero.")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -3744,7 +3811,7 @@ with tab7:
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab8:
     st.subheader("📈 Reportes y Análisis")
-    r_tab1, r_tab2, r_tab3, r_tab4, r_tab5, r_tab6, r_tab7, r_tab8 = st.tabs([
+    r_tab1, r_tab2, r_tab3, r_tab4, r_tab5, r_tab6, r_tab7, r_tab8, r_tab9, r_tab10 = st.tabs([
         "👥 Dashboard Vendedores",
         "🔄 Rotación de Stock",
         "⏰ Vencimientos",
@@ -3753,6 +3820,8 @@ with tab8:
         "⏸️ Stock Inmovilizado",
         "⚡ Eficiencia Entregas",
         "🏆 Ranking Clientes",
+        "📉 Proyección de Quiebre",
+        "😴 Clientes Sin Actividad",
     ])
 
     # ── Vendedores ────────────────────────────────────────────────────────────
@@ -4379,6 +4448,109 @@ with tab8:
             st.download_button("📥 Exportar ranking (.xlsx)",
                                data=to_excel_bytes(_rk, "Ranking_Clientes"),
                                file_name=f"ranking_{datetime.now().strftime('%Y%m%d')}.xlsx")
+
+    # ── Proyección de Quiebre de Stock ────────────────────────────────────────
+    with r_tab9:
+        st.write("### 📉 Proyección de Quiebre de Stock")
+        st.caption("Estima cuántos días quedan de stock por producto según el ritmo de salidas de los últimos 30 días.")
+        _hist_qb = obtener_historial_movimientos()
+        _stk_qb  = obtener_stock_full()
+        if _hist_qb.empty or _stk_qb.empty:
+            st.info("Sin datos suficientes para calcular proyección.")
+        else:
+            _hoy_qb = datetime.now()
+            def _parse_fecha_qb(s):
+                try:
+                    return datetime.strptime(str(s).strip()[:16], "%d/%m/%Y %H:%M")
+                except Exception:
+                    try: return datetime.strptime(str(s).strip()[:10], "%d/%m/%Y")
+                    except: return None
+
+            _hist_qb["_dt"] = _hist_qb["Fecha"].apply(_parse_fecha_qb)
+            _desde30 = _hoy_qb - timedelta(days=30)
+            _sal30 = _hist_qb[
+                (_hist_qb["Tipo"] == "Salida") &
+                (_hist_qb["Anulado"] == 0) &
+                (_hist_qb["_dt"].notna()) &
+                (_hist_qb["_dt"] >= _desde30)
+            ].groupby("Producto")["Cantidad"].sum().reset_index()
+            _sal30.columns = ["Producto", "Salidas_30d"]
+            _sal30["Tasa_Diaria"] = (_sal30["Salidas_30d"] / 30).round(3)
+
+            _stk_tot = _stk_qb.groupby(["Producto","Unidad"])["Stock Actual"].sum().reset_index()
+            _df_qb = _stk_tot.merge(_sal30, on="Producto", how="left").fillna(0)
+            _df_qb["Días_Quiebre"] = _df_qb.apply(
+                lambda r: round(r["Stock Actual"] / r["Tasa_Diaria"]) if r["Tasa_Diaria"] > 0 else None, axis=1
+            )
+
+            def _sem_qb(d):
+                if d is None: return "⚪ Sin movimiento"
+                if d < 15:    return "🔴 Crítico (<15d)"
+                if d < 30:    return "🟡 Atención (15-30d)"
+                return "🟢 OK (>30d)"
+
+            _df_qb["Estado"] = _df_qb["Días_Quiebre"].apply(_sem_qb)
+            _df_qb = _df_qb[_df_qb["Salidas_30d"] > 0].sort_values(
+                "Días_Quiebre", ascending=True, na_position="last"
+            )
+
+            _qb1, _qb2, _qb3 = st.columns(3)
+            _qb1.metric("🔴 Críticos (<15d)",    int((_df_qb["Estado"]=="🔴 Crítico (<15d)").sum()))
+            _qb2.metric("🟡 Atención (15-30d)",  int((_df_qb["Estado"]=="🟡 Atención (15-30d)").sum()))
+            _qb3.metric("🟢 OK",                 int((_df_qb["Estado"]=="🟢 OK (>30d)").sum()))
+
+            st.dataframe(
+                _df_qb[["Estado","Producto","Unidad","Stock Actual","Tasa_Diaria","Días_Quiebre"]]
+                .rename(columns={"Stock Actual":"Stock","Tasa_Diaria":"Sal/día","Días_Quiebre":"Días al quiebre"}),
+                use_container_width=True, hide_index=True
+            )
+            st.download_button("📥 Exportar proyección (.xlsx)",
+                               data=to_excel_bytes(_df_qb, "Proyeccion_Quiebre"),
+                               file_name=f"proyeccion_quiebre_{datetime.now().strftime('%Y%m%d')}.xlsx")
+
+    # ── Clientes Sin Actividad ────────────────────────────────────────────────
+    with r_tab10:
+        st.write("### 😴 Clientes Sin Actividad")
+        st.caption(
+            "Clientes con historial en La Clementina (LA CLEMENTINA S.A) "
+            "que NO tienen pedidos en la campaña actual (MACROGEST)."
+        )
+        _ent_all_cs = obtener_entregas()
+        if _ent_all_cs.empty:
+            st.info("Sin datos de entregas.")
+        else:
+            _cli_hist = set(
+                _ent_all_cs[_ent_all_cs["hoja"]=="LA CLEMENTINA S.A"]["cliente"].dropna().unique()
+            )
+            _cli_mg   = set(
+                _ent_all_cs[_ent_all_cs["hoja"]=="MACROGEST"]["cliente"].dropna().unique()
+            )
+            _cli_sin  = _cli_hist - _cli_mg
+
+            if not _cli_sin:
+                st.success("Todos los clientes históricos tienen al menos un pedido en MacroGest.")
+            else:
+                _df_hist_lc = _ent_all_cs[
+                    (_ent_all_cs["hoja"]=="LA CLEMENTINA S.A") &
+                    (_ent_all_cs["cliente"].isin(_cli_sin))
+                ]
+                _agg_cs = _df_hist_lc.groupby("cliente").agg(
+                    Ultima_Compra=("dia_recibido", "max"),
+                    Total_Comprado=("cantidad_comprada", "sum"),
+                    Registros=("id_entrega", "count"),
+                ).reset_index().rename(columns={
+                    "cliente":"Cliente",
+                    "Ultima_Compra":"Última Compra",
+                    "Total_Comprado":"Total Comprado",
+                }).sort_values("Última Compra", ascending=False)
+
+                st.metric("Clientes sin actividad en campaña actual", len(_agg_cs))
+                st.dataframe(_agg_cs, use_container_width=True, hide_index=True)
+                st.download_button(
+                    "📥 Exportar clientes sin actividad (.xlsx)",
+                    data=to_excel_bytes(_agg_cs, "Clientes_Sin_Actividad"),
+                    file_name=f"clientes_sin_actividad_{datetime.now().strftime('%Y%m%d')}.xlsx"
+                )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -5746,7 +5918,7 @@ def _render_tab11():
 
         _mask = pd.Series([True] * len(df_mg_stored), index=df_mg_stored.index)
         if f_cli_mg:
-            _mask &= _cli_lower.str.contains(f_cli_mg.lower(), na=False)
+            _mask &= _filtro_fonetico(df_mg_stored["cliente"], f_cli_mg)
         if f_prod_mg != "Todos":
             _mask &= df_mg_stored["producto"] == f_prod_mg
         if f_vend_mg != "Todos":
@@ -5798,6 +5970,73 @@ def _render_tab11():
                         "**Plan Comercial → Cartera de Clientes → Importar desde MacroGest**.")
             st.dataframe(resumen_mg, use_container_width=True, hide_index=True)
 
+            # ── Remito PDF por Cliente ────────────────────────────────────────
+            st.markdown("---")
+            st.markdown("#### 📄 Remito PDF por Cliente")
+            _clientes_pdf = sorted(df_f_mg["cliente"].dropna().unique().tolist()) if not df_f_mg.empty else []
+            if _clientes_pdf:
+                _cli_pdf = st.selectbox("Cliente para remito", _clientes_pdf, key="mg_cli_pdf")
+                if st.button("📄 Generar Remito PDF", key="mg_btn_pdf"):
+                    if not PDF_AVAILABLE:
+                        st.warning("reportlab no está instalado. Ejecutá: pip install reportlab")
+                    else:
+                        _df_cli_pdf = df_f_mg[(df_f_mg["cliente"] == _cli_pdf) & (df_f_mg["pendiente"] > 0)]
+                        if _df_cli_pdf.empty:
+                            st.info(f"{_cli_pdf} no tiene pendientes.")
+                        else:
+                            _buf_r = io.BytesIO()
+                            _doc_r = SimpleDocTemplate(_buf_r, pagesize=A4,
+                                                       rightMargin=1.5*cm, leftMargin=1.5*cm,
+                                                       topMargin=2*cm, bottomMargin=2*cm)
+                            _sty_r = getSampleStyleSheet()
+                            _el_r  = []
+                            # Header
+                            _el_r.append(Paragraph(
+                                "<b>La Clementina S.A.</b> — Remito de Pendientes",
+                                _sty_r["Title"]
+                            ))
+                            _el_r.append(Paragraph(
+                                f"Cliente: <b>{_cli_pdf}</b> &nbsp;&nbsp; "
+                                f"Fecha: <b>{datetime.now().strftime('%d/%m/%Y')}</b>",
+                                _sty_r["Normal"]
+                            ))
+                            _el_r.append(Spacer(1, 0.5*cm))
+                            # Tabla
+                            _hdr_r = [["Producto", "Comprado", "Entregado", "Pendiente", "% Entregado"]]
+                            _rows_r = []
+                            for _, _rr in _df_cli_pdf.iterrows():
+                                _pct_r = round(_rr["cant_entregada"] / _rr["cantidad_comprada"] * 100, 1) if _rr.get("cantidad_comprada", 0) > 0 else 0
+                                _rows_r.append([
+                                    str(_rr.get("producto","")),
+                                    f'{_rr.get("cantidad_comprada",0):,.0f}',
+                                    f'{_rr.get("cant_entregada",0):,.0f}',
+                                    f'{_rr.get("pendiente",0):,.0f}',
+                                    f'{_pct_r}%',
+                                ])
+                            _tbl_r = Table(_hdr_r + _rows_r, repeatRows=1)
+                            _tbl_r.setStyle(TableStyle([
+                                ("BACKGROUND",    (0,0), (-1,0),  rl_colors.HexColor("#3D4E6B")),
+                                ("TEXTCOLOR",     (0,0), (-1,0),  rl_colors.white),
+                                ("FONTNAME",      (0,0), (-1,0),  "Helvetica-Bold"),
+                                ("FONTSIZE",      (0,0), (-1,-1), 9),
+                                ("ROWBACKGROUNDS",(0,1), (-1,-1), [rl_colors.white, rl_colors.HexColor("#FFF8E7")]),
+                                ("GRID",          (0,0), (-1,-1), 0.5, rl_colors.grey),
+                            ]))
+                            _el_r.append(_tbl_r)
+                            _el_r.append(Spacer(1, 1*cm))
+                            _el_r.append(Paragraph(
+                                "<font size=8 color=grey>La Clementina S.A. · San Jorge, Santa Fe</font>",
+                                _sty_r["Normal"]
+                            ))
+                            _doc_r.build(_el_r)
+                            st.download_button(
+                                "⬇️ Descargar Remito PDF",
+                                data=_buf_r.getvalue(),
+                                file_name=f"remito_pendientes_{_cli_pdf.replace(' ','_')}_{datetime.now().strftime('%Y%m%d')}.pdf",
+                                mime="application/pdf",
+                                key="dl_rem_cli_pdf"
+                            )
+
             # ── Comparativa por Vendedor ──────────────────────────────────────
             st.markdown("---")
             st.markdown("#### 👤 Comparativa por Vendedor")
@@ -5835,8 +6074,18 @@ def _render_tab11():
                 else:
                     _cross["TOTAL"] = _cross.sum(axis=1)
                     _cross = _cross.sort_values("TOTAL", ascending=False)
-                    st.dataframe(_cross.style.format("{:,.0f}").background_gradient(
-                        cmap="Reds", subset=[c for c in _cross.columns if c != "TOTAL"]),
+                    # Semáforo de antigüedad por cliente
+                    if "dia_recibido" in df_f_mg.columns:
+                        _df_pend_sem = df_f_mg[df_f_mg["pendiente"] > 0].copy()
+                        _df_pend_sem["_dias_sem"] = _df_pend_sem["dia_recibido"].apply(dias_desde)
+                        _max_dias = _df_pend_sem.groupby("cliente")["_dias_sem"].max()
+                        def _sem_cross(d):
+                            if d > 60:  return "🔴 >60d"
+                            if d > 30:  return "🟡 30-60d"
+                            return "🟢 ≤30d"
+                        _cross["Estado"] = _cross.index.map(lambda c: _sem_cross(_max_dias.get(c, 0)))
+                    st.dataframe(_cross.style.format("{:,.0f}", subset=[c for c in _cross.columns if c not in ("TOTAL","Estado")]).background_gradient(
+                        cmap="Reds", subset=[c for c in _cross.columns if c not in ("TOTAL","Estado")]),
                         use_container_width=True)
                     st.download_button("📥 Exportar tabla cruzada",
                                        data=to_excel_bytes(_cross.reset_index(), "Cliente_x_Producto"),
