@@ -5991,6 +5991,54 @@ def _render_tab11():
                         "**Plan Comercial → Cartera de Clientes → Importar desde MacroGest**.")
             st.dataframe(resumen_mg, use_container_width=True, hide_index=True)
 
+            # ── Entregas de otras hojas para el cliente filtrado ──────────────
+            if _vista_cliente and f_cli_mg:
+                st.markdown("---")
+                st.markdown(f"#### 📋 Entregas en otras hojas — **{_nom_cli}**")
+                st.caption("Pedidos del mismo cliente en LC/LCAGRO, Bayer DEP55 y Bayer Directa.")
+
+                _hojas_extra = [
+                    ("LA CLEMENTINA S.A", "📦 LC / LCAGRO"),
+                    ("BAYER DEP55",       "🌿 Bayer DEP55"),
+                    ("BAYER DIRECTA",     "🚚 Bayer Directa"),
+                ]
+                _hay_extra = False
+                for _hoja_key, _hoja_label in _hojas_extra:
+                    _cache_key = f"df_ent_cache_{_hoja_key}"
+                    _df_hoja = st.session_state.get(_cache_key)
+                    if _df_hoja is None:
+                        _df_hoja = obtener_entregas(_hoja_key)
+                        st.session_state[_cache_key] = _df_hoja
+                    if _df_hoja is None or _df_hoja.empty:
+                        continue
+                    # Filtrar por cliente (exacto + fonético)
+                    _mask_h = _filtro_fonetico(_df_hoja["cliente"], f_cli_mg)
+                    _df_cli_h = _df_hoja[_mask_h].copy()
+                    if _df_cli_h.empty:
+                        continue
+                    _hay_extra = True
+                    with st.expander(f"{_hoja_label} — {len(_df_cli_h)} registros", expanded=True):
+                        _res_h = (
+                            _df_cli_h.groupby("producto")
+                            .agg(
+                                Depósitos=("deposito",         lambda x: ", ".join(sorted(x.dropna().astype(str).unique()))),
+                                Comprado =("cantidad_comprada","sum"),
+                                Entregado=("cant_entregada",   "sum"),
+                                Pendiente=("pendiente",         "sum"),
+                                Estado   =("estado",           lambda x: x.mode()[0] if not x.empty else ""),
+                            )
+                            .reset_index()
+                            .rename(columns={"producto": "Producto"})
+                            .sort_values("Pendiente", ascending=False)
+                        )
+                        _res_h["% Entregado"] = (
+                            _res_h["Entregado"] / _res_h["Comprado"].replace(0, 1) * 100
+                        ).round(1).astype(str) + "%"
+                        st.dataframe(_res_h, use_container_width=True, hide_index=True)
+
+                if not _hay_extra:
+                    st.info("No se encontraron registros para este cliente en las otras hojas.")
+
             # ── Remito PDF por Cliente ────────────────────────────────────────
             st.markdown("---")
             st.markdown("#### 📄 Remito PDF por Cliente")
