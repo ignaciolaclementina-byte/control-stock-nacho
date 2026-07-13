@@ -6126,28 +6126,14 @@ def _render_tab11():
             _dias_por_prod.columns = ["Producto", "_dias_max"]
             resumen_mg = resumen_mg.merge(_dias_por_prod, on="Producto", how="left")
             resumen_mg["_dias_max"] = resumen_mg["_dias_max"].fillna(0).astype(int)
-
+            resumen_mg["Estado"] = resumen_mg["_dias_max"].apply(
+                lambda d: "🔴 Crítico" if d > 90 else ("🟡 Demorado" if d > 30 else "🟢 OK")
+            )
             _resumen_display = resumen_mg.drop(columns=["_dias_max"], errors="ignore").reset_index(drop=True)
-            _dias_array = resumen_mg["_dias_max"].values
-
-            def _apply_sem(df):
-                rows = []
-                for i in range(len(df)):
-                    d = int(_dias_array[i]) if i < len(_dias_array) else 0
-                    if d > 90:   bg = "background-color:#FFCCCC"
-                    elif d > 30: bg = "background-color:#FFF3CD"
-                    else:        bg = ""
-                    rows.append([bg] * len(df.columns))
-                return pd.DataFrame(rows, index=df.index, columns=df.columns)
-
-            try:
-                st.dataframe(
-                    _resumen_display.style.apply(_apply_sem, axis=None),
-                    use_container_width=True, hide_index=True
-                )
-            except Exception:
-                st.dataframe(_resumen_display, use_container_width=True, hide_index=True)
-            st.caption("🔴 Crítico >90 días · 🟡 Demorado >30 días · ⚪ Reciente")
+            # Reordenar para que Estado quede primero
+            _cols_ord = ["Estado"] + [c for c in _resumen_display.columns if c != "Estado"]
+            st.dataframe(_resumen_display[_cols_ord], use_container_width=True, hide_index=True)
+            st.caption("🔴 Crítico >90 días · 🟡 Demorado >30 días · 🟢 OK ≤30 días")
 
             # ── Ranking top 10 clientes con más pendiente ─────────────────────
             with st.expander("🏆 Ranking — Clientes con más pendiente", expanded=False):
@@ -6223,22 +6209,25 @@ def _render_tab11():
 
             # ── Pedidos por vencer (próximos 30 días) ─────────────────────────
             with st.expander("⏰ Pedidos por vencer — próximos 30 días", expanded=False):
-                _hoy = datetime.now()
                 _venc_df = df_f_mg.copy()
-                _venc_df["_fecha_p"] = pd.to_datetime(_venc_df["dia_recibido"], dayfirst=True, errors="coerce")
-                _venc_df["_dias_p"]  = (_venc_df["_fecha_p"] - _hoy).dt.days
-                _venc_prox = _venc_df[(_venc_df["_dias_p"] >= 0) & (_venc_df["_dias_p"] <= 30) & (_venc_df["pendiente"] > 0)].copy()
-                if _venc_prox.empty:
-                    _venc_prox = _venc_df[(_venc_df["_dias_sem"] >= 25) & (_venc_df["_dias_sem"] <= 35) & (_venc_df["pendiente"] > 0)].copy()
-                    if not _venc_prox.empty:
-                        st.caption("Mostrando pedidos con antigüedad entre 25-35 días.")
-                if not _venc_prox.empty:
-                    _cols_venc = ["cliente","producto","deposito","pendiente","dia_recibido"]
-                    _cols_venc = [c for c in _cols_venc if c in _venc_prox.columns]
-                    st.dataframe(_venc_prox[_cols_venc].sort_values("dia_recibido"),
+                _venc_df["_dias_ant"] = _venc_df["dia_recibido"].apply(dias_desde)
+                _venc_prox = _venc_df[
+                    (_venc_df["_dias_ant"] >= 25) & (_venc_df["_dias_ant"] <= 45) &
+                    (_venc_df["pendiente"] > 0)
+                ].copy()
+                _venc_crit = _venc_df[(_venc_df["_dias_ant"] > 60) & (_venc_df["pendiente"] > 0)].copy()
+                if not _venc_crit.empty:
+                    st.warning(f"🔴 {len(_venc_crit)} registros con más de 60 días sin entregar")
+                    _cols_vc = [c for c in ["cliente","producto","deposito","pendiente","dia_recibido","_dias_ant"] if c in _venc_crit.columns]
+                    st.dataframe(_venc_crit[_cols_vc].rename(columns={"_dias_ant":"Días"}).sort_values("Días", ascending=False),
                                  use_container_width=True, hide_index=True)
-                else:
-                    st.success("No hay pedidos críticos por vencer en los próximos 30 días.")
+                if not _venc_prox.empty:
+                    st.info(f"🟡 {len(_venc_prox)} registros con 25-45 días de antigüedad")
+                    _cols_vp = [c for c in ["cliente","producto","deposito","pendiente","dia_recibido","_dias_ant"] if c in _venc_prox.columns]
+                    st.dataframe(_venc_prox[_cols_vp].rename(columns={"_dias_ant":"Días"}).sort_values("Días", ascending=False),
+                                 use_container_width=True, hide_index=True)
+                if _venc_crit.empty and _venc_prox.empty:
+                    st.success("No hay pedidos críticos pendientes.")
 
             # ── Clientes sin actividad reciente ───────────────────────────────
             with st.expander("😴 Clientes sin actividad reciente (>60 días)", expanded=False):
