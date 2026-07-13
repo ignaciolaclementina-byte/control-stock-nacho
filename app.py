@@ -6045,6 +6045,7 @@ def _render_tab11():
             _clientes_pdf = sorted(df_f_mg["cliente"].dropna().unique().tolist()) if not df_f_mg.empty else []
             if _clientes_pdf:
                 _cli_pdf = st.selectbox("Cliente para remito", _clientes_pdf, key="mg_cli_pdf")
+                _generado_por = st.text_input("Generado por", value=usuario_actual() or "Ignacio", key="mg_pdf_autor")
                 if st.button("📄 Generar PDF Completo", key="mg_btn_pdf", type="primary"):
                     if not PDF_AVAILABLE:
                         st.warning("reportlab no está instalado. Ejecutá: pip install reportlab")
@@ -6107,7 +6108,7 @@ def _render_tab11():
                         _info_tbl = Table([[
                             Paragraph(f"<b>Cliente:</b> {_cli_pdf}", _sty_r["Normal"]),
                             Paragraph(f"<b>Fecha:</b> {datetime.now().strftime('%d/%m/%Y %H:%M')}", _sty_r["Normal"]),
-                            Paragraph(f"<b>Generado por:</b> {usuario_actual()}", _sty_r["Normal"]),
+                            Paragraph(f"<b>Generado por:</b> {_generado_por}", _sty_r["Normal"]),
                         ]], colWidths=[7*cm, 5*cm, 5*cm])
                         _info_tbl.setStyle(TableStyle([
                             ("BACKGROUND", (0,0), (-1,-1), rl_colors.HexColor("#EEF2F7")),
