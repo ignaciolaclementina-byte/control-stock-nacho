@@ -2800,10 +2800,9 @@ with tab1:
                         df_f["Código"].astype(str).str.contains(search_q, case=False, na=False)]
         if f_prod != "Todos" and not search_q:
             df_f = df_f[df_f["Producto"] == f_prod]
-        agrupar_prod = True
+        agrupar_prod = False
         if f_dep != "Todos":
             df_f = df_f[df_f["Deposito"] == f_dep]
-            agrupar_prod = False
         if hide_neg:
             mask = df_f["Stock Actual"] > 0
             if show_neg_f: mask = mask | (df_f["Stock Actual"] < 0)
