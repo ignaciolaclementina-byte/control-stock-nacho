@@ -568,6 +568,8 @@ def inicializar_db():
             except: pass
 
     # Índices para acelerar queries sobre tablas grandes
+    # En PostgreSQL cada CREATE INDEX que falla deja la tx en error state;
+    # se usa SAVEPOINT para aislar cada intento y hacer rollback individual.
     for idx_sql in [
         "CREATE INDEX IF NOT EXISTS idx_mov_producto ON movimientos(id_producto)",
         "CREATE INDEX IF NOT EXISTS idx_mov_origen   ON movimientos(origen)",
@@ -579,8 +581,14 @@ def inicializar_db():
         "CREATE INDEX IF NOT EXISTS idx_ent_origen   ON entregas(origen)",
         "CREATE INDEX IF NOT EXISTS idx_lp_producto  ON lista_precios(producto)",
     ]:
-        try: c.execute(idx_sql)
-        except: pass
+        try:
+            if IS_POSTGRES: c.execute("SAVEPOINT idx_save")
+            c.execute(idx_sql)
+            if IS_POSTGRES: c.execute("RELEASE SAVEPOINT idx_save")
+        except Exception:
+            if IS_POSTGRES:
+                try: c.execute("ROLLBACK TO SAVEPOINT idx_save")
+                except Exception: pass
 
     # Usuario admin por defecto
     row = c.execute("SELECT COUNT(*) FROM usuarios").fetchone()
