@@ -6069,6 +6069,21 @@ def _render_tab11():
                         _sty_sec    = ParagraphStyle("sec_lc", parent=_sty_r["Heading2"],
                                                      textColor=rl_colors.HexColor("#F5A800"),
                                                      fontSize=11, spaceBefore=12, spaceAfter=4)
+
+                        def _sec_header(label, bg_hex, fg_hex="#FFFFFF"):
+                            """Barra de sección con color diferenciado por origen."""
+                            _t = Table([[Paragraph(f"<b>{label}</b>",
+                                        ParagraphStyle("sh", parent=_sty_r["Normal"],
+                                                       textColor=rl_colors.HexColor(fg_hex),
+                                                       fontSize=11))]],
+                                       colWidths=[26.7*cm])
+                            _t.setStyle(TableStyle([
+                                ("BACKGROUND",    (0,0),(-1,-1), rl_colors.HexColor(bg_hex)),
+                                ("TOPPADDING",    (0,0),(-1,-1), 6),
+                                ("BOTTOMPADDING", (0,0),(-1,-1), 6),
+                                ("LEFTPADDING",   (0,0),(-1,-1), 10),
+                            ]))
+                            return _t
                         _sty_small  = ParagraphStyle("small_lc", parent=_sty_r["Normal"],
                                                      fontSize=7, textColor=rl_colors.grey)
 
@@ -6123,7 +6138,8 @@ def _render_tab11():
                         # ── SECCIÓN 1: MacroGest ──
                         _df_mg_pdf = df_mg_stored[df_mg_stored["cliente"] == _cli_pdf].copy()
                         if not _df_mg_pdf.empty:
-                            _el_r.append(Paragraph("Pedidos MacroGest", _sty_sec))
+                            _el_r.append(Spacer(1, 0.3*cm))
+                            _el_r.append(_sec_header("📋  MacroGest — Pedidos Sin Entregar", "#3D4E6B"))
                             # KPIs
                             _tc_p = _df_mg_pdf["cantidad_comprada"].sum()
                             _te_p = _df_mg_pdf["cant_entregada"].sum()
@@ -6167,11 +6183,11 @@ def _render_tab11():
 
                         # ── SECCIONES: otras hojas ──
                         _hojas_pdf = [
-                            ("LA CLEMENTINA S.A", "LC / LCAGRO"),
-                            ("BAYER DEP55",       "Bayer DEP55"),
-                            ("BAYER DIRECTA",     "Bayer Directa"),
+                            ("LA CLEMENTINA S.A", "📦  LC / LCAGRO — Entregas",       "#1A6B3C"),
+                            ("BAYER DEP55",       "🌿  Bayer DEP55 — Entregas",        "#2E7D32"),
+                            ("BAYER DIRECTA",     "🚚  Bayer Directa — Entregas",      "#0277BD"),
                         ]
-                        for _hk, _hl in _hojas_pdf:
+                        for _hk, _hl, _hcolor in _hojas_pdf:
                             _ck = f"df_ent_cache_{_hk}"
                             _dfh = st.session_state.get(_ck)
                             if _dfh is None:
@@ -6181,7 +6197,8 @@ def _render_tab11():
                             _dfh_cli = _dfh[_dfh["cliente"] == _cli_pdf].copy()
                             if _dfh_cli.empty:
                                 continue
-                            _el_r.append(Paragraph(f"Entregas — {_hl}", _sty_sec))
+                            _el_r.append(Spacer(1, 0.3*cm))
+                            _el_r.append(_sec_header(_hl, _hcolor))
                             _hdr_h = ["Producto", "Lote", "Depósito", "Vendedor",
                                       "Estado", "Comprado", "Entregado", "Pendiente", "% Ent.", "Fecha"]
                             _rows_h = []
