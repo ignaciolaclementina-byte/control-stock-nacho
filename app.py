@@ -520,6 +520,14 @@ def inicializar_db():
             prioridad  INTEGER DEFAULT 1,
             UNIQUE(campana, producto)
         )""",
+        f"""CREATE TABLE IF NOT EXISTS notas_cliente (
+            id_nota    {_pk},
+            cliente    TEXT NOT NULL,
+            nota       TEXT NOT NULL,
+            usuario    TEXT DEFAULT '',
+            fecha      TEXT DEFAULT '',
+            destacada  INTEGER DEFAULT 0
+        )""",
         f"""CREATE TABLE IF NOT EXISTS ventas_detalle (
             id_venta      {_pk},
             campana       TEXT DEFAULT '2026-2027',
@@ -627,6 +635,37 @@ def borrar_solo_importacion():
     conn.execute("DELETE FROM productos WHERE id_producto NOT IN (SELECT DISTINCT id_producto FROM movimientos)")
     conn.commit(); conn.close()
     limpiar_cache()
+
+# ─────────────────────────────────────────────────────────────────────────────
+# NOTAS POR CLIENTE
+# ─────────────────────────────────────────────────────────────────────────────
+def obtener_notas_cliente(cliente):
+    try:
+        conn = conectar_db()
+        ph = "%s" if IS_POSTGRES else "?"
+        rows = conn.execute(
+            f"SELECT id_nota, nota, usuario, fecha, destacada FROM notas_cliente WHERE cliente={ph} ORDER BY destacada DESC, fecha DESC",
+            (cliente,)
+        ).fetchall()
+        conn.close()
+        return rows
+    except Exception:
+        return []
+
+def guardar_nota_cliente(cliente, nota, usuario, destacada=False):
+    conn = conectar_db()
+    ph = "%s" if IS_POSTGRES else "?"
+    conn.execute(
+        f"INSERT INTO notas_cliente (cliente, nota, usuario, fecha, destacada) VALUES ({ph},{ph},{ph},{ph},{ph})",
+        (cliente, nota, usuario, datetime.now().strftime("%d/%m/%Y %H:%M"), 1 if destacada else 0)
+    )
+    conn.commit(); conn.close()
+
+def eliminar_nota_cliente(id_nota):
+    conn = conectar_db()
+    ph = "%s" if IS_POSTGRES else "?"
+    conn.execute(f"DELETE FROM notas_cliente WHERE id_nota={ph}", (id_nota,))
+    conn.commit(); conn.close()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 4. QUERIES CON CACHÉ
@@ -2577,47 +2616,128 @@ with tab1:
                         fig_est.update_layout(height=260, margin=dict(l=0,r=0,t=40,b=0))
                         st.plotly_chart(fig_est, use_container_width=True)
 
-        # ── Buscador Global ───────────────────────────────────────────────────
+        # ── Buscador Global mejorado ──────────────────────────────────────────
         with st.expander("🔎 Buscador Global", expanded=False):
-            st.caption("Busca simultáneamente en stock, entregas y pedidos Sin Entregar MacroGest.")
-            q_glob = st.text_input("Buscar producto o cliente...", key="busq_global",
-                                   placeholder="ej: Round Up, BELTRAMO, glifosato...")
+            st.caption("Busca simultáneamente en stock, entregas (todas las hojas) y pedidos MacroGest.")
+            _bg_c1, _bg_c2 = st.columns([4, 1])
+            with _bg_c1:
+                q_glob = st.text_input("Buscar producto o cliente...", key="busq_global",
+                                       placeholder="ej: Round Up, BELTRAMO, glifosato...")
+            with _bg_c2:
+                _bg_solo_pend = st.checkbox("Solo pendientes", value=True, key="bg_solo_pend")
+
             if q_glob and len(q_glob) >= 2:
-                _bg_cols = st.columns(3)
-                with _bg_cols[0]:
-                    st.markdown("**📦 En Stock**")
-                    _bg_stk = stock_df[
-                        stock_df["Producto"].str.contains(q_glob, case=False, na=False) |
-                        stock_df["Código"].astype(str).str.contains(q_glob, case=False, na=False)
-                    ][["Producto","Deposito","Stock Actual","Comprometido","Disponible Neto"]]
-                    if _bg_stk.empty: st.info("Sin resultados.")
-                    else: st.dataframe(_bg_stk, use_container_width=True, hide_index=True)
+                _bg_total = 0
 
-                with _bg_cols[1]:
-                    st.markdown("**📋 En Entregas**")
-                    if not ent_panel.empty:
-                        _bg_ent = ent_panel[
-                            ent_panel["producto"].str.contains(q_glob, case=False, na=False) |
-                            ent_panel["cliente"].str.contains(q_glob, case=False, na=False)
-                        ][["hoja","cliente","producto","pendiente","estado"]].head(20)
-                        if _bg_ent.empty: st.info("Sin resultados.")
-                        else: st.dataframe(_bg_ent, use_container_width=True, hide_index=True)
-                    else:
-                        st.info("Sin datos de entregas.")
+                # Stock
+                st.markdown("##### 📦 Stock")
+                _bg_stk = stock_df[
+                    stock_df["Producto"].str.contains(q_glob, case=False, na=False) |
+                    stock_df["Código"].astype(str).str.contains(q_glob, case=False, na=False)
+                ][["Producto","Deposito","Stock Actual","Comprometido","Disponible Neto"]]
+                if _bg_stk.empty:
+                    st.caption("Sin resultados en stock.")
+                else:
+                    st.dataframe(_bg_stk, use_container_width=True, hide_index=True)
+                    _bg_total += len(_bg_stk)
 
-                with _bg_cols[2]:
-                    st.markdown("**🔄 En Sin Entregar MG**")
-                    _bg_mg_cached = st.session_state.get("df_mg_cache")
-                    _bg_mg = _bg_mg_cached if (_bg_mg_cached is not None) else obtener_entregas("MACROGEST")
-                    if not _bg_mg.empty:
-                        _bg_mg_f = _bg_mg[
-                            _bg_mg["producto"].str.contains(q_glob, case=False, na=False) |
-                            _bg_mg["cliente"].str.contains(q_glob, case=False, na=False)
-                        ][["cliente","producto","pendiente","deposito","dia_recibido"]].head(20)
-                        if _bg_mg_f.empty: st.info("Sin resultados.")
-                        else: st.dataframe(_bg_mg_f, use_container_width=True, hide_index=True)
+                # Entregas todas las hojas
+                st.markdown("##### 📋 Entregas (LC/LCAGRO · Bayer DEP55 · Bayer Directa)")
+                _bg_ent_all = []
+                for _hk_bg in ["LA CLEMENTINA S.A", "BAYER DEP55", "BAYER DIRECTA"]:
+                    _ck_bg = f"df_ent_cache_{_hk_bg}"
+                    _dh_bg = st.session_state.get(_ck_bg) or obtener_entregas(_hk_bg)
+                    if _dh_bg is not None and not _dh_bg.empty:
+                        _msk_bg = (
+                            _dh_bg["producto"].str.contains(q_glob, case=False, na=False) |
+                            _dh_bg["cliente"].str.contains(q_glob, case=False, na=False)
+                        )
+                        _hit_bg = _dh_bg[_msk_bg].copy()
+                        if _bg_solo_pend:
+                            _hit_bg = _hit_bg[_hit_bg["pendiente"] > 0]
+                        if not _hit_bg.empty:
+                            _hit_bg["Hoja"] = _hk_bg
+                            _bg_ent_all.append(_hit_bg)
+                if _bg_ent_all:
+                    _bg_ent_df = pd.concat(_bg_ent_all, ignore_index=True)
+                    _cols_bg = [c for c in ["Hoja","cliente","producto","deposito","pendiente","estado"] if c in _bg_ent_df.columns]
+                    st.dataframe(_bg_ent_df[_cols_bg].head(30), use_container_width=True, hide_index=True)
+                    _bg_total += len(_bg_ent_df)
+                else:
+                    st.caption("Sin resultados en entregas.")
+
+                # MacroGest
+                st.markdown("##### 🔄 MacroGest — Sin Entregar")
+                _bg_mg_cached = st.session_state.get("df_mg_cache")
+                _bg_mg = _bg_mg_cached if (_bg_mg_cached is not None) else obtener_entregas("MACROGEST")
+                if not _bg_mg.empty:
+                    _bg_mg_f = _bg_mg[
+                        _bg_mg["producto"].str.contains(q_glob, case=False, na=False) |
+                        _bg_mg["cliente"].str.contains(q_glob, case=False, na=False)
+                    ].copy()
+                    if _bg_solo_pend:
+                        _bg_mg_f = _bg_mg_f[_bg_mg_f["pendiente"] > 0]
+                    if _bg_mg_f.empty:
+                        st.caption("Sin resultados en MacroGest.")
                     else:
-                        st.info("Sin datos MacroGest.")
+                        st.dataframe(_bg_mg_f[["cliente","producto","pendiente","deposito","dia_recibido"]].head(30),
+                                     use_container_width=True, hide_index=True)
+                        _bg_total += len(_bg_mg_f)
+                else:
+                    st.caption("Sin datos MacroGest.")
+
+                st.success(f"Total de coincidencias: **{_bg_total}** registros")
+
+        # ── Comparativo entre Campañas ────────────────────────────────────────
+        with st.expander("📊 Comparativo entre Campañas", expanded=False):
+            st.caption("Compara volumen de ventas y pendiente entre campañas registradas en MacroGest.")
+            _df_vd_comp = obtener_ventas_detalle()
+            if _df_vd_comp.empty:
+                st.info("Sin datos de ventas. Importá desde Plan Comercial → Cartera de Clientes.")
+            else:
+                _campanas_disp = sorted(_df_vd_comp["campana"].dropna().unique().tolist(), reverse=True)
+                if len(_campanas_disp) < 2:
+                    st.info("Se necesitan al menos 2 campañas importadas para comparar.")
+                else:
+                    _cc1, _cc2 = st.columns(2)
+                    with _cc1:
+                        _camp_a = st.selectbox("Campaña A", _campanas_disp, index=0, key="comp_camp_a")
+                    with _cc2:
+                        _camp_b = st.selectbox("Campaña B", _campanas_disp, index=min(1, len(_campanas_disp)-1), key="comp_camp_b")
+
+                    _df_a = _df_vd_comp[_df_vd_comp["campana"] == _camp_a]
+                    _df_b = _df_vd_comp[_df_vd_comp["campana"] == _camp_b]
+
+                    _ka1, _ka2, _ka3, _kb1, _kb2, _kb3 = st.columns(6)
+                    _ka1.metric(f"Clientes {_camp_a}", _df_a["cliente"].nunique())
+                    _ka2.metric(f"Productos {_camp_a}", _df_a["descripcion"].nunique())
+                    _ka3.metric(f"Importe {_camp_a}", f"USD {_df_a['importe_total'].sum():,.0f}")
+                    _kb1.metric(f"Clientes {_camp_b}", _df_b["cliente"].nunique())
+                    _kb2.metric(f"Productos {_camp_b}", _df_b["descripcion"].nunique())
+                    _kb3.metric(f"Importe {_camp_b}", f"USD {_df_b['importe_total'].sum():,.0f}")
+
+                    # Comparativo por producto
+                    _comp_a_prod = _df_a.groupby("descripcion")["cantidad"].sum().reset_index()
+                    _comp_a_prod.columns = ["Producto", _camp_a]
+                    _comp_b_prod = _df_b.groupby("descripcion")["cantidad"].sum().reset_index()
+                    _comp_b_prod.columns = ["Producto", _camp_b]
+                    _comp_merge = _comp_a_prod.merge(_comp_b_prod, on="Producto", how="outer").fillna(0)
+                    _comp_merge["Variación"] = _comp_merge[_camp_a] - _comp_merge[_camp_b]
+                    _comp_merge["Var %"] = (
+                        (_comp_merge[_camp_a] / _comp_merge[_camp_b].replace(0, 1) - 1) * 100
+                    ).round(1)
+                    _comp_merge = _comp_merge.sort_values("Variación", ascending=False)
+
+                    _top10_comp = _comp_merge.head(10)
+                    _fig_comp = px.bar(_top10_comp, x="Variación", y="Producto", orientation="h",
+                                       color="Variación",
+                                       color_continuous_scale=["#dc3545", "#ffffff", "#28a745"],
+                                       color_continuous_midpoint=0,
+                                       title=f"Top 10 variaciones: {_camp_a} vs {_camp_b}")
+                    _fig_comp.update_layout(height=350, margin=dict(l=10,r=10,t=40,b=10),
+                                            coloraxis_showscale=False)
+                    st.plotly_chart(_fig_comp, use_container_width=True)
+                    st.dataframe(_comp_merge.round(1), use_container_width=True, hide_index=True)
 
         st.subheader("🔍 Filtros")
 
@@ -6180,6 +6300,38 @@ def _render_tab11():
 
                 if not _hay_extra:
                     st.info("No se encontraron registros para este cliente en las otras hojas.")
+
+            # ── Notas por cliente ─────────────────────────────────────────────
+            if _vista_cliente:
+                st.markdown("---")
+                st.markdown(f"#### 📝 Notas — **{_nom_cli}**")
+                _notas_existentes = obtener_notas_cliente(_nom_cli)
+                if _notas_existentes:
+                    for _nid, _ntxt, _nusr, _nfch, _ndest in _notas_existentes:
+                        _ncols = st.columns([0.05, 0.85, 0.1])
+                        with _ncols[0]:
+                            st.markdown("⭐" if _ndest else "•")
+                        with _ncols[1]:
+                            st.markdown(f"**{_ntxt}**" if _ndest else _ntxt)
+                            st.caption(f"{_nusr} · {_nfch}")
+                        with _ncols[2]:
+                            if st.button("🗑️", key=f"del_nota_{_nid}", help="Eliminar nota"):
+                                eliminar_nota_cliente(_nid)
+                                st.rerun()
+                else:
+                    st.caption("Sin notas para este cliente.")
+
+                with st.expander("➕ Agregar nota", expanded=False):
+                    _nota_txt = st.text_area("Nota", key="nueva_nota_txt", placeholder="Acuerdo comercial, condición especial, contacto...")
+                    _nota_dest = st.checkbox("⭐ Destacada", key="nueva_nota_dest")
+                    if st.button("💾 Guardar nota", key="btn_guardar_nota", type="primary"):
+                        if _nota_txt.strip():
+                            guardar_nota_cliente(_nom_cli, _nota_txt.strip(),
+                                                  usuario_actual() or "Admin", _nota_dest)
+                            st.success("Nota guardada.")
+                            st.rerun()
+                        else:
+                            st.warning("Escribí algo antes de guardar.")
 
             # ── Remito PDF por Cliente (completo) ────────────────────────────
             st.markdown("---")
