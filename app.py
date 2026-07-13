@@ -797,13 +797,8 @@ def limpiar_cache():
     """Invalida todas las caches de datos. Llamar tras cualquier escritura en DB."""
     st.cache_data.clear()
     # Resetear preload y caches de session_state
-    _keys_reset = [k for k in st.session_state.keys()
-                   if k.startswith("df_ent_cache_") or k.startswith("_pre_")
-                   or k in ("df_mg_cache", "preload_done")]
-    for _k in _keys_reset:
-        if _k == "preload_done":
-            st.session_state[_k] = False
-        else:
+    for _k in list(st.session_state.keys()):
+        if _k.startswith("df_ent_cache_") or _k == "df_mg_cache":
             st.session_state[_k] = None
 
 def safe_float(val, default=0.0):
@@ -2131,21 +2126,7 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# ── Pre-carga de datos pesados en session_state ──────────────────────────────
-if "preload_done" not in st.session_state:
-    st.session_state["preload_done"] = False
-if not st.session_state["preload_done"]:
-    st.session_state["_pre_stock"]   = obtener_stock_con_compromisos()
-    st.session_state["_pre_ent_lc"]  = obtener_entregas("LA CLEMENTINA S.A")
-    st.session_state["_pre_ent_b55"] = obtener_entregas("BAYER DEP55")
-    st.session_state["_pre_ent_bd"]  = obtener_entregas("BAYER DIRECTA")
-    st.session_state["df_mg_cache"]  = obtener_entregas("MACROGEST")
-    st.session_state["_pre_hist"]    = obtener_historial_movimientos()
-    st.session_state["_pre_lp"]      = obtener_lista_precios()
-    st.session_state["preload_done"] = True
-    st.session_state["df_ent_cache_LA CLEMENTINA S.A"] = st.session_state["_pre_ent_lc"]
-    st.session_state["df_ent_cache_BAYER DEP55"]       = st.session_state["_pre_ent_b55"]
-    st.session_state["df_ent_cache_BAYER DIRECTA"]     = st.session_state["_pre_ent_bd"]
+# session_state para cache lazy por tab (se carga la primera vez que se abre cada tab)
 
 tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12 = st.tabs([
     "⚡ Panel",
@@ -2166,8 +2147,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12 = st.t
 # TAB 1 — PANEL DE CONTROL
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab1:
-    stock_df = st.session_state.get("_pre_stock") if st.session_state.get("preload_done") else obtener_stock_con_compromisos()
-    if stock_df is None: stock_df = obtener_stock_con_compromisos()
+    stock_df = obtener_stock_con_compromisos()
     # Aplicar filtro global de depósito
     _dep_global = st.session_state.get("deposito_global", "Todos")
     if _dep_global != "Todos" and not stock_df.empty:
@@ -2191,8 +2171,7 @@ with tab1:
         bajo_n = len(stock_df[(stock_df["Stock Actual"] >= 0) & (stock_df["Stock Actual"] < U)])
         comp_n = len(stock_df[stock_df["Disponible Neto"] < 0])
 
-        ent_panel = st.session_state.get("_pre_ent_lc") if st.session_state.get("preload_done") else obtener_entregas()
-        if ent_panel is None: ent_panel = obtener_entregas()
+        ent_panel = obtener_entregas()
         venc30 = 0
         if not ent_panel.empty:
             ent_panel["dias_p"] = ent_panel["dia_recibido"].apply(dias_desde)
@@ -3336,10 +3315,9 @@ with tab6:
     st.subheader("📜 Historial de Movimientos")
     _ult_h = obtener_metadata("ultima_importacion")
     if _ult_h: st.caption(f"🕐 Última importación de stock: **{_ult_h}**")
-    hist_df = st.session_state.get("_pre_hist") if st.session_state.get("preload_done") else obtener_historial_movimientos()
-    if hist_df is None: hist_df = obtener_historial_movimientos()
+    hist_df = obtener_historial_movimientos()
 
-    if hist_df is None or hist_df.empty:
+    if hist_df.empty:
         st.info("Sin movimientos registrados.")
     else:
         # KPIs rápidos
@@ -6065,10 +6043,9 @@ with tab12:
                 st.error(f"Error: {_ex_lp}")
 
     # ── Datos cargados ────────────────────────────────────────────────────────
-    df_lp = st.session_state.get("_pre_lp") if st.session_state.get("preload_done") else obtener_lista_precios()
-    if df_lp is None: df_lp = obtener_lista_precios()
+    df_lp = obtener_lista_precios()
 
-    if df_lp is None or df_lp.empty:
+    if df_lp.empty:
         st.info("Sin datos. Importá un archivo arriba.")
     else:
         _lp_ult = df_lp["fecha_carga"].iloc[0] if "fecha_carga" in df_lp.columns else ""
