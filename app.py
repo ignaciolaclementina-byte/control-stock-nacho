@@ -798,9 +798,14 @@ def mostrar_login():
 def limpiar_cache():
     """Invalida todas las caches de datos. Llamar tras cualquier escritura en DB."""
     st.cache_data.clear()
-    # Limpiar también caches de session_state para forzar recarga en próximo render
-    for _k in list(st.session_state.keys()):
-        if _k.startswith("df_ent_cache_") or _k == "df_mg_cache":
+    # Resetear preload y caches de session_state — se recargan en el próximo render
+    _keys_reset = [k for k in st.session_state.keys()
+                   if k.startswith("df_ent_cache_") or k.startswith("_pre_")
+                   or k in ("df_mg_cache", "preload_done")]
+    for _k in _keys_reset:
+        if _k == "preload_done":
+            st.session_state[_k] = False
+        else:
             st.session_state[_k] = None
 
 def safe_float(val, default=0.0):
@@ -2128,6 +2133,24 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
+# ── Pre-carga de datos pesados en session_state ──────────────────────────────
+# Se ejecuta UNA sola vez por sesión; los tabs filtran en memoria sin re-query.
+if "preload_done" not in st.session_state:
+    st.session_state["preload_done"]       = False
+if not st.session_state["preload_done"]:
+    st.session_state["_pre_stock"]         = obtener_stock_con_compromisos()
+    st.session_state["_pre_ent_lc"]        = obtener_entregas("LA CLEMENTINA S.A")
+    st.session_state["_pre_ent_b55"]       = obtener_entregas("BAYER DEP55")
+    st.session_state["_pre_ent_bd"]        = obtener_entregas("BAYER DIRECTA")
+    st.session_state["df_mg_cache"]        = obtener_entregas("MACROGEST")
+    st.session_state["_pre_hist"]          = obtener_historial_movimientos()
+    st.session_state["_pre_lp"]            = obtener_lista_precios()
+    st.session_state["preload_done"]       = True
+    # También inicializar caches de entregas para mostrar_tab_entregas
+    st.session_state["df_ent_cache_LA CLEMENTINA S.A"] = st.session_state["_pre_ent_lc"]
+    st.session_state["df_ent_cache_BAYER DEP55"]       = st.session_state["_pre_ent_b55"]
+    st.session_state["df_ent_cache_BAYER DIRECTA"]     = st.session_state["_pre_ent_bd"]
+
 tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12 = st.tabs([
     "⚡ Panel",
     "📦 LC / LCAGRO",
@@ -2147,7 +2170,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12 = st.t
 # TAB 1 — PANEL DE CONTROL
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab1:
-    stock_df = obtener_stock_con_compromisos()
+    stock_df = st.session_state.get("_pre_stock") if st.session_state.get("preload_done") else obtener_stock_con_compromisos()
     # Aplicar filtro global de depósito
     _dep_global = st.session_state.get("deposito_global", "Todos")
     if _dep_global != "Todos" and not stock_df.empty:
@@ -2171,7 +2194,7 @@ with tab1:
         bajo_n = len(stock_df[(stock_df["Stock Actual"] >= 0) & (stock_df["Stock Actual"] < U)])
         comp_n = len(stock_df[stock_df["Disponible Neto"] < 0])
 
-        ent_panel = obtener_entregas()
+        ent_panel = st.session_state.get("_pre_ent_lc") if st.session_state.get("preload_done") else obtener_entregas()
         venc30 = 0
         if not ent_panel.empty:
             ent_panel["dias_p"] = ent_panel["dia_recibido"].apply(dias_desde)
@@ -2914,6 +2937,7 @@ with tab1:
 # ═══════════════════════════════════════════════════════════════════════════════
 # FUNCIÓN REUTILIZABLE: ENTREGAS
 # ═══════════════════════════════════════════════════════════════════════════════
+@st.fragment
 def mostrar_tab_entregas(hoja_nombre, titulo):
     st.subheader(titulo)
     if hoja_nombre == "LA CLEMENTINA S.A":
@@ -3296,9 +3320,9 @@ with tab6:
     st.subheader("📜 Historial de Movimientos")
     _ult_h = obtener_metadata("ultima_importacion")
     if _ult_h: st.caption(f"🕐 Última importación de stock: **{_ult_h}**")
-    hist_df = obtener_historial_movimientos()
+    hist_df = st.session_state.get("_pre_hist") if st.session_state.get("preload_done") else obtener_historial_movimientos()
 
-    if hist_df.empty:
+    if hist_df is None or hist_df.empty:
         st.info("Sin movimientos registrados.")
     else:
         # KPIs rápidos
@@ -3326,18 +3350,22 @@ with tab6:
         with cd3:
             f_anulados = st.toggle("Mostrar anulados", value=False)
 
-        df_hf = hist_df.copy()
-        if f_tipo_h != "Todos": df_hf = df_hf[df_hf["Tipo"] == f_tipo_h]
-        if f_orig_h != "Todos": df_hf = df_hf[df_hf["Origen"] == f_orig_h]
-        if f_usu_h  != "Todos": df_hf = df_hf[df_hf["Usuario"].replace("","sistema") == f_usu_h]
+        # Filtrado vectorizado — sin .copy() hasta el final
+        _hmask = pd.Series([True] * len(hist_df), index=hist_df.index)
+        if f_tipo_h != "Todos": _hmask &= hist_df["Tipo"] == f_tipo_h
+        if f_orig_h != "Todos": _hmask &= hist_df["Origen"] == f_orig_h
+        if f_usu_h  != "Todos": _hmask &= hist_df["Usuario"].replace("","sistema") == f_usu_h
         if f_bus_h:
-            df_hf = df_hf[
-                df_hf["Producto"].str.contains(f_bus_h, case=False, na=False) |
-                df_hf["Lote"].astype(str).str.contains(f_bus_h, case=False, na=False) |
-                df_hf["Referencia"].astype(str).str.contains(f_bus_h, case=False, na=False)
-            ]
+            _q = f_bus_h.lower()
+            _hmask &= (
+                hist_df["Producto"].fillna("").str.lower().str.contains(_q, na=False) |
+                hist_df["Lote"].astype(str).str.lower().str.contains(_q, na=False) |
+                hist_df["Referencia"].astype(str).str.lower().str.contains(_q, na=False)
+            )
         if not f_anulados:
-            df_hf = df_hf[df_hf["Anulado"] == 0]
+            _hmask &= hist_df["Anulado"] == 0
+
+        df_hf = hist_df[_hmask].copy()
 
         def parse_fh(s):
             try: return datetime.strptime(str(s)[:10], "%d/%m/%Y").date()
@@ -6021,7 +6049,8 @@ with tab12:
                 st.error(f"Error: {_ex_lp}")
 
     # ── Datos cargados ────────────────────────────────────────────────────────
-    df_lp = obtener_lista_precios()
+    df_lp = st.session_state.get("_pre_lp") if st.session_state.get("preload_done") else obtener_lista_precios()
+    if df_lp is None: df_lp = obtener_lista_precios()
 
     if df_lp.empty:
         st.info("Sin datos. Importá un archivo arriba.")
@@ -6048,9 +6077,10 @@ with tab12:
         with _lf3:
             orden_lp = st.selectbox("Ordenar por", ["Rubro / Producto","Mayor precio","Menor precio"], key="ord_lp")
 
-        df_lp_f = df_lp.copy()
-        if f_rubro_lp != "Todos": df_lp_f = df_lp_f[df_lp_f["rubro"] == f_rubro_lp]
-        if busq_lp: df_lp_f = df_lp_f[df_lp_f["producto"].str.contains(busq_lp, case=False, na=False)]
+        _lp_mask = pd.Series([True] * len(df_lp), index=df_lp.index)
+        if f_rubro_lp != "Todos": _lp_mask &= df_lp["rubro"] == f_rubro_lp
+        if busq_lp: _lp_mask &= df_lp["producto"].fillna("").str.lower().str.contains(busq_lp.lower(), na=False)
+        df_lp_f = df_lp[_lp_mask].copy()
         if orden_lp == "Mayor precio":   df_lp_f = df_lp_f.sort_values("precio_contado", ascending=False)
         elif orden_lp == "Menor precio": df_lp_f = df_lp_f.sort_values("precio_contado", ascending=True)
 
