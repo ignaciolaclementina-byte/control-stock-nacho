@@ -6039,72 +6039,181 @@ def _render_tab11():
                 if not _hay_extra:
                     st.info("No se encontraron registros para este cliente en las otras hojas.")
 
-            # ── Remito PDF por Cliente ────────────────────────────────────────
+            # ── Remito PDF por Cliente (completo) ────────────────────────────
             st.markdown("---")
-            st.markdown("#### 📄 Remito PDF por Cliente")
+            st.markdown("#### 📄 Resumen Completo PDF por Cliente")
             _clientes_pdf = sorted(df_f_mg["cliente"].dropna().unique().tolist()) if not df_f_mg.empty else []
             if _clientes_pdf:
                 _cli_pdf = st.selectbox("Cliente para remito", _clientes_pdf, key="mg_cli_pdf")
-                if st.button("📄 Generar Remito PDF", key="mg_btn_pdf"):
+                if st.button("📄 Generar PDF Completo", key="mg_btn_pdf", type="primary"):
                     if not PDF_AVAILABLE:
                         st.warning("reportlab no está instalado. Ejecutá: pip install reportlab")
                     else:
-                        _df_cli_pdf = df_f_mg[(df_f_mg["cliente"] == _cli_pdf) & (df_f_mg["pendiente"] > 0)]
-                        if _df_cli_pdf.empty:
-                            st.info(f"{_cli_pdf} no tiene pendientes.")
-                        else:
-                            _buf_r = io.BytesIO()
-                            _doc_r = SimpleDocTemplate(_buf_r, pagesize=A4,
-                                                       rightMargin=1.5*cm, leftMargin=1.5*cm,
-                                                       topMargin=2*cm, bottomMargin=2*cm)
-                            _sty_r = getSampleStyleSheet()
-                            _el_r  = []
-                            # Header
-                            _el_r.append(Paragraph(
-                                "<b>La Clementina S.A.</b> — Remito de Pendientes",
-                                _sty_r["Title"]
-                            ))
-                            _el_r.append(Paragraph(
-                                f"Cliente: <b>{_cli_pdf}</b> &nbsp;&nbsp; "
-                                f"Fecha: <b>{datetime.now().strftime('%d/%m/%Y')}</b>",
-                                _sty_r["Normal"]
-                            ))
-                            _el_r.append(Spacer(1, 0.5*cm))
-                            # Tabla
-                            _hdr_r = [["Producto", "Comprado", "Entregado", "Pendiente", "% Entregado"]]
-                            _rows_r = []
-                            for _, _rr in _df_cli_pdf.iterrows():
-                                _pct_r = round(_rr["cant_entregada"] / _rr["cantidad_comprada"] * 100, 1) if _rr.get("cantidad_comprada", 0) > 0 else 0
-                                _rows_r.append([
-                                    str(_rr.get("producto","")),
-                                    f'{_rr.get("cantidad_comprada",0):,.0f}',
-                                    f'{_rr.get("cant_entregada",0):,.0f}',
-                                    f'{_rr.get("pendiente",0):,.0f}',
-                                    f'{_pct_r}%',
-                                ])
-                            _tbl_r = Table(_hdr_r + _rows_r, repeatRows=1)
-                            _tbl_r.setStyle(TableStyle([
+                        _buf_r = io.BytesIO()
+                        _doc_r = SimpleDocTemplate(_buf_r, pagesize=A4,
+                                                   rightMargin=1.5*cm, leftMargin=1.5*cm,
+                                                   topMargin=2*cm, bottomMargin=2*cm)
+                        _sty_r = getSampleStyleSheet()
+                        _el_r  = []
+
+                        # ── Estilos personalizados ──
+                        from reportlab.lib.styles import ParagraphStyle
+                        from reportlab.lib.enums import TA_CENTER, TA_LEFT
+                        _sty_titulo = ParagraphStyle("titulo_lc", parent=_sty_r["Title"],
+                                                     textColor=rl_colors.HexColor("#3D4E6B"),
+                                                     fontSize=16, spaceAfter=4)
+                        _sty_sub    = ParagraphStyle("sub_lc", parent=_sty_r["Normal"],
+                                                     textColor=rl_colors.HexColor("#3D4E6B"),
+                                                     fontSize=10, spaceAfter=2)
+                        _sty_sec    = ParagraphStyle("sec_lc", parent=_sty_r["Heading2"],
+                                                     textColor=rl_colors.HexColor("#F5A800"),
+                                                     fontSize=11, spaceBefore=12, spaceAfter=4)
+                        _sty_small  = ParagraphStyle("small_lc", parent=_sty_r["Normal"],
+                                                     fontSize=7, textColor=rl_colors.grey)
+
+                        def _tabla(header, rows, col_widths=None):
+                            _t = Table([header] + rows, repeatRows=1, colWidths=col_widths)
+                            _t.setStyle(TableStyle([
                                 ("BACKGROUND",    (0,0), (-1,0),  rl_colors.HexColor("#3D4E6B")),
                                 ("TEXTCOLOR",     (0,0), (-1,0),  rl_colors.white),
                                 ("FONTNAME",      (0,0), (-1,0),  "Helvetica-Bold"),
-                                ("FONTSIZE",      (0,0), (-1,-1), 9),
+                                ("FONTNAME",      (0,1), (-1,-1), "Helvetica"),
+                                ("FONTSIZE",      (0,0), (-1,-1), 8),
                                 ("ROWBACKGROUNDS",(0,1), (-1,-1), [rl_colors.white, rl_colors.HexColor("#FFF8E7")]),
-                                ("GRID",          (0,0), (-1,-1), 0.5, rl_colors.grey),
+                                ("GRID",          (0,0), (-1,-1), 0.4, rl_colors.HexColor("#cccccc")),
+                                ("ALIGN",         (1,0), (-1,-1), "RIGHT"),
+                                ("ALIGN",         (0,0), (0,-1),  "LEFT"),
+                                ("TOPPADDING",    (0,0), (-1,-1), 3),
+                                ("BOTTOMPADDING", (0,0), (-1,-1), 3),
                             ]))
-                            _el_r.append(_tbl_r)
-                            _el_r.append(Spacer(1, 1*cm))
-                            _el_r.append(Paragraph(
-                                "<font size=8 color=grey>La Clementina S.A. · San Jorge, Santa Fe</font>",
-                                _sty_r["Normal"]
-                            ))
-                            _doc_r.build(_el_r)
-                            st.download_button(
-                                "⬇️ Descargar Remito PDF",
-                                data=_buf_r.getvalue(),
-                                file_name=f"remito_pendientes_{_cli_pdf.replace(' ','_')}_{datetime.now().strftime('%Y%m%d')}.pdf",
-                                mime="application/pdf",
-                                key="dl_rem_cli_pdf"
-                            )
+                            return _t
+
+                        # ── Encabezado ──
+                        if _logo_b64:
+                            from reportlab.platypus import Image as RLImage
+                            import base64
+                            _logo_bytes = base64.b64decode(_logo_b64)
+                            _logo_buf   = io.BytesIO(_logo_bytes)
+                            _el_r.append(RLImage(_logo_buf, width=3*cm, height=1.2*cm))
+                        _el_r.append(Paragraph("La Clementina S.A.", _sty_titulo))
+                        _el_r.append(Paragraph("Insumos Agropecuarios · Bayer CropScience / Monsanto-Bayer · San Jorge, Santa Fe", _sty_sub))
+                        _el_r.append(Spacer(1, 0.3*cm))
+
+                        # Info cliente y fecha
+                        _info_tbl = Table([[
+                            Paragraph(f"<b>Cliente:</b> {_cli_pdf}", _sty_r["Normal"]),
+                            Paragraph(f"<b>Fecha:</b> {datetime.now().strftime('%d/%m/%Y %H:%M')}", _sty_r["Normal"]),
+                            Paragraph(f"<b>Generado por:</b> {usuario_actual()}", _sty_r["Normal"]),
+                        ]], colWidths=[7*cm, 5*cm, 5*cm])
+                        _info_tbl.setStyle(TableStyle([
+                            ("BACKGROUND", (0,0), (-1,-1), rl_colors.HexColor("#EEF2F7")),
+                            ("BOX",        (0,0), (-1,-1), 0.5, rl_colors.HexColor("#3D4E6B")),
+                            ("FONTSIZE",   (0,0), (-1,-1), 9),
+                            ("TOPPADDING", (0,0), (-1,-1), 5),
+                            ("BOTTOMPADDING",(0,0),(-1,-1),5),
+                        ]))
+                        _el_r.append(_info_tbl)
+                        _el_r.append(Spacer(1, 0.5*cm))
+
+                        # ── SECCIÓN 1: MacroGest ──
+                        _df_mg_pdf = df_mg_stored[df_mg_stored["cliente"] == _cli_pdf].copy()
+                        if not _df_mg_pdf.empty:
+                            _el_r.append(Paragraph("Pedidos MacroGest", _sty_sec))
+                            # KPIs
+                            _tc_p = _df_mg_pdf["cantidad_comprada"].sum()
+                            _te_p = _df_mg_pdf["cant_entregada"].sum()
+                            _tp_p = _df_mg_pdf["pendiente"].sum()
+                            _kpi_tbl = Table([[
+                                Paragraph(f"<b>Comprado:</b> {_tc_p:,.0f}", _sty_r["Normal"]),
+                                Paragraph(f"<b>Entregado:</b> {_te_p:,.0f}", _sty_r["Normal"]),
+                                Paragraph(f"<b>Pendiente:</b> {_tp_p:,.0f}", _sty_r["Normal"]),
+                                Paragraph(f"<b>% Entregado:</b> {(_te_p/_tc_p*100 if _tc_p>0 else 0):.1f}%", _sty_r["Normal"]),
+                            ]], colWidths=[4.25*cm]*4)
+                            _kpi_tbl.setStyle(TableStyle([
+                                ("BACKGROUND", (0,0),(-1,-1), rl_colors.HexColor("#FFF8E7")),
+                                ("FONTSIZE",   (0,0),(-1,-1), 9),
+                                ("TOPPADDING", (0,0),(-1,-1), 4),
+                                ("BOTTOMPADDING",(0,0),(-1,-1),4),
+                                ("BOX",        (0,0),(-1,-1), 0.4, rl_colors.HexColor("#F5A800")),
+                            ]))
+                            _el_r.append(_kpi_tbl)
+                            _el_r.append(Spacer(1, 0.2*cm))
+
+                            # Detalle completo fila por fila con TODOS los campos
+                            _hdr_mg = ["Producto", "Lote", "Depósito", "Vendedor",
+                                       "Pedido", "Comprado", "Entregado", "Pendiente", "% Ent.", "Fecha Pedido"]
+                            _rows_mg = []
+                            for _, _rr in _df_mg_pdf.sort_values("pendiente", ascending=False).iterrows():
+                                _pct = round(_rr.get("cant_entregada",0) / _rr.get("cantidad_comprada",1) * 100, 1) if _rr.get("cantidad_comprada",0) > 0 else 0
+                                _rows_mg.append([
+                                    Paragraph(str(_rr.get("producto","")), _sty_r["Normal"]),
+                                    str(_rr.get("lote","") or "S/L"),
+                                    str(_rr.get("deposito","") or ""),
+                                    str(_rr.get("vendedor","") or ""),
+                                    str(_rr.get("hoja","") or _rr.get("nro_pedido","") or ""),
+                                    f'{_rr.get("cantidad_comprada",0):,.0f}',
+                                    f'{_rr.get("cant_entregada",0):,.0f}',
+                                    f'{_rr.get("pendiente",0):,.0f}',
+                                    f'{_pct}%',
+                                    str(_rr.get("dia_recibido","") or ""),
+                                ])
+                            _cw_mg = [4.5*cm, 1.5*cm, 1.8*cm, 2*cm, 1.5*cm, 1.5*cm, 1.5*cm, 1.5*cm, 1*cm, 2*cm]
+                            _el_r.append(_tabla(_hdr_mg, _rows_mg, _cw_mg))
+
+                        # ── SECCIONES: otras hojas ──
+                        _hojas_pdf = [
+                            ("LA CLEMENTINA S.A", "LC / LCAGRO"),
+                            ("BAYER DEP55",       "Bayer DEP55"),
+                            ("BAYER DIRECTA",     "Bayer Directa"),
+                        ]
+                        for _hk, _hl in _hojas_pdf:
+                            _ck = f"df_ent_cache_{_hk}"
+                            _dfh = st.session_state.get(_ck)
+                            if _dfh is None:
+                                _dfh = obtener_entregas(_hk)
+                            if _dfh is None or _dfh.empty:
+                                continue
+                            _dfh_cli = _dfh[_dfh["cliente"] == _cli_pdf].copy()
+                            if _dfh_cli.empty:
+                                continue
+                            _el_r.append(Paragraph(f"Entregas — {_hl}", _sty_sec))
+                            _hdr_h = ["Producto", "Lote", "Depósito", "Vendedor",
+                                      "Estado", "Comprado", "Entregado", "Pendiente", "% Ent.", "Fecha"]
+                            _rows_h = []
+                            for _, _rh in _dfh_cli.sort_values("pendiente", ascending=False).iterrows():
+                                _ph = round(_rh.get("cant_entregada",0) / _rh.get("cantidad_comprada",1) * 100, 1) if _rh.get("cantidad_comprada",0) > 0 else 0
+                                _rows_h.append([
+                                    Paragraph(str(_rh.get("producto","")), _sty_r["Normal"]),
+                                    str(_rh.get("lote","") or "S/L"),
+                                    str(_rh.get("deposito","") or ""),
+                                    str(_rh.get("vendedor","") or ""),
+                                    str(_rh.get("estado","") or ""),
+                                    f'{_rh.get("cantidad_comprada",0):,.0f}',
+                                    f'{_rh.get("cant_entregada",0):,.0f}',
+                                    f'{_rh.get("pendiente",0):,.0f}',
+                                    f'{_ph}%',
+                                    str(_rh.get("dia_recibido","") or ""),
+                                ])
+                            _cw_h = [4.5*cm, 1.5*cm, 1.8*cm, 2*cm, 1.5*cm, 1.5*cm, 1.5*cm, 1.5*cm, 1*cm, 2*cm]
+                            _el_r.append(_tabla(_hdr_h, _rows_h, _cw_h))
+
+                        # ── Footer ──
+                        _el_r.append(Spacer(1, 0.8*cm))
+                        _el_r.append(Paragraph(
+                            f"La Clementina S.A. · San Jorge, Santa Fe · "
+                            f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')} · "
+                            f"Sistema de Control de Depósito",
+                            _sty_small
+                        ))
+
+                        _doc_r.build(_el_r)
+                        st.download_button(
+                            "⬇️ Descargar PDF Completo",
+                            data=_buf_r.getvalue(),
+                            file_name=f"resumen_{_cli_pdf.replace(' ','_')}_{datetime.now().strftime('%Y%m%d')}.pdf",
+                            mime="application/pdf",
+                            key="dl_rem_cli_pdf"
+                        )
 
             # ── Comparativa por Vendedor ──────────────────────────────────────
             st.markdown("---")
