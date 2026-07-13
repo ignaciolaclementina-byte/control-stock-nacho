@@ -2584,7 +2584,8 @@ with tab1:
 
                 with _bg_cols[2]:
                     st.markdown("**🔄 En Sin Entregar MG**")
-                    _bg_mg = st.session_state.get("df_mg_cache") or obtener_entregas("MACROGEST")
+                    _bg_mg_cached = st.session_state.get("df_mg_cache")
+                    _bg_mg = _bg_mg_cached if (_bg_mg_cached is not None) else obtener_entregas("MACROGEST")
                     if not _bg_mg.empty:
                         _bg_mg_f = _bg_mg[
                             _bg_mg["producto"].str.contains(q_glob, case=False, na=False) |
