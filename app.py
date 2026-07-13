@@ -5608,7 +5608,8 @@ Cada vendedor debe:
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 11 — SIN ENTREGAR MACROGEST
 # ═══════════════════════════════════════════════════════════════════════════════
-with tab11:
+@st.fragment
+def _render_tab11():
     st.subheader("🔄 Pedidos Sin Entregar — MacroGest")
     st.caption("Importá el reporte de MacroGest con los pedidos pendientes de entrega. Los datos quedan guardados y se actualizan con cada importación.")
 
@@ -5989,7 +5990,8 @@ with tab11:
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 12 — LISTA DE PRECIOS
 # ═══════════════════════════════════════════════════════════════════════════════
-with tab12:
+@st.fragment
+def _render_tab12():
     st.subheader("🏷️ Lista de Precios 2026")
     st.caption("Importá la lista de precios de MacroGest. Los precios quedan guardados y se pueden mapear automáticamente al stock para valorizar el inventario.")
 
@@ -6229,3 +6231,10 @@ with tab12:
                 st.caption("PDF: `pip install reportlab`")
         else:
             st.caption("Agregá productos para armar el presupuesto.")
+
+with tab11: _render_tab11()
+
+
+
+
+with tab12: _render_tab12()
