@@ -32,7 +32,7 @@ from email.mime.multipart import MIMEMultipart
 import difflib
 
 try:
-    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.pagesizes import A4, landscape
     from reportlab.lib import colors as rl_colors
     from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
     from reportlab.lib.styles import getSampleStyleSheet
@@ -6050,9 +6050,9 @@ def _render_tab11():
                         st.warning("reportlab no está instalado. Ejecutá: pip install reportlab")
                     else:
                         _buf_r = io.BytesIO()
-                        _doc_r = SimpleDocTemplate(_buf_r, pagesize=A4,
-                                                   rightMargin=1.5*cm, leftMargin=1.5*cm,
-                                                   topMargin=2*cm, bottomMargin=2*cm)
+                        _doc_r = SimpleDocTemplate(_buf_r, pagesize=landscape(A4),
+                                                   rightMargin=1.2*cm, leftMargin=1.2*cm,
+                                                   topMargin=1.5*cm, bottomMargin=1.5*cm)
                         _sty_r = getSampleStyleSheet()
                         _el_r  = []
 
@@ -6078,13 +6078,17 @@ def _render_tab11():
                                 ("TEXTCOLOR",     (0,0), (-1,0),  rl_colors.white),
                                 ("FONTNAME",      (0,0), (-1,0),  "Helvetica-Bold"),
                                 ("FONTNAME",      (0,1), (-1,-1), "Helvetica"),
-                                ("FONTSIZE",      (0,0), (-1,-1), 8),
+                                ("FONTSIZE",      (0,0), (-1,0),  9),
+                                ("FONTSIZE",      (0,1), (-1,-1), 8),
                                 ("ROWBACKGROUNDS",(0,1), (-1,-1), [rl_colors.white, rl_colors.HexColor("#FFF8E7")]),
                                 ("GRID",          (0,0), (-1,-1), 0.4, rl_colors.HexColor("#cccccc")),
                                 ("ALIGN",         (1,0), (-1,-1), "RIGHT"),
                                 ("ALIGN",         (0,0), (0,-1),  "LEFT"),
-                                ("TOPPADDING",    (0,0), (-1,-1), 3),
-                                ("BOTTOMPADDING", (0,0), (-1,-1), 3),
+                                ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
+                                ("TOPPADDING",    (0,0), (-1,-1), 4),
+                                ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+                                ("LEFTPADDING",   (0,0), (-1,-1), 4),
+                                ("RIGHTPADDING",  (0,0), (-1,-1), 4),
                             ]))
                             return _t
 
@@ -6157,7 +6161,7 @@ def _render_tab11():
                                     f'{_pct}%',
                                     str(_rr.get("dia_recibido","") or ""),
                                 ])
-                            _cw_mg = [4.5*cm, 1.5*cm, 1.8*cm, 2*cm, 1.5*cm, 1.5*cm, 1.5*cm, 1.5*cm, 1*cm, 2*cm]
+                            _cw_mg = [5.5*cm, 1.8*cm, 2.5*cm, 2.5*cm, 1.8*cm, 2*cm, 2*cm, 2*cm, 1.2*cm, 2.5*cm]
                             _el_r.append(_tabla(_hdr_mg, _rows_mg, _cw_mg))
 
                         # ── SECCIONES: otras hojas ──
@@ -6194,7 +6198,7 @@ def _render_tab11():
                                     f'{_ph}%',
                                     str(_rh.get("dia_recibido","") or ""),
                                 ])
-                            _cw_h = [4.5*cm, 1.5*cm, 1.8*cm, 2*cm, 1.5*cm, 1.5*cm, 1.5*cm, 1.5*cm, 1*cm, 2*cm]
+                            _cw_h = [5.5*cm, 1.8*cm, 2.5*cm, 2.5*cm, 1.8*cm, 2*cm, 2*cm, 2*cm, 1.2*cm, 2.5*cm]
                             _el_r.append(_tabla(_hdr_h, _rows_h, _cw_h))
 
                         # ── Footer ──
