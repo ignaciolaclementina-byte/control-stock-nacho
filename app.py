@@ -2655,7 +2655,7 @@ with tab1:
                 else:
                     st.warning("QR no detectado.")
 
-        cf1, cf2, cf3 = st.columns(3)
+        cf1, cf2, cf3, cf4 = st.columns(4)
         with cf1:
             lista_p = ["Todos"] + sorted(stock_df["Producto"].unique().tolist())
             idx_p   = lista_p.index(st.session_state.qr_detectado) \
@@ -2670,6 +2670,9 @@ with tab1:
             filter_reponer = st.toggle(f"🚨 Reponer (<{U})",        value=False)
             show_neg_f     = st.toggle("⚠️ Mostrar negativos",       value=True)
             show_comp_f    = st.toggle("🔒 Solo comprometidos",      value=False)
+        with cf4:
+            agrupar_prod   = st.toggle("🗂️ Agrupar por producto",    value=True,
+                                       help="Suma todos los depósitos y muestra una card por producto")
 
         df_f = stock_df.copy()
         if search_q:
@@ -2679,6 +2682,7 @@ with tab1:
             df_f = df_f[df_f["Producto"] == f_prod]
         if f_dep != "Todos":
             df_f = df_f[df_f["Deposito"] == f_dep]
+            agrupar_prod = False  # con depósito seleccionado no agrupar
         if hide_neg:
             mask = df_f["Stock Actual"] > 0
             if show_neg_f: mask = mask | (df_f["Stock Actual"] < 0)
@@ -2687,6 +2691,18 @@ with tab1:
             df_f = df_f[df_f["Stock Actual"] < U]
         if show_comp_f:
             df_f = df_f[df_f["Disponible Neto"] < 0]
+
+        # Agrupar por producto sumando depósitos
+        if agrupar_prod and not df_f.empty:
+            df_f = (df_f.groupby("Producto", as_index=False)
+                    .agg({
+                        "Código":          "first",
+                        "Unidad":          "first",
+                        "Stock Actual":    "sum",
+                        "Comprometido":    "sum",
+                        "Disponible Neto": "sum",
+                        "Deposito":        lambda x: ", ".join(sorted(x.dropna().astype(str).unique())),
+                    }))
 
         if not df_f.empty:
             excel_b = descargar_excel_agrupado(df_f)
@@ -2735,29 +2751,31 @@ with tab1:
                         .head(5))
                         if not cli_pend.empty:
                             filas = "".join(
-                                f"<tr><td style='padding:1px 6px'>{r['cliente']}</td>"
+                                f"<tr><td style='padding:1px 6px'>{str(r['cliente'])}</td>"
                                 f"<td style='padding:1px 6px;text-align:right'><b>{r['pendiente']:,.0f}</b></td>"
-                                f"<td style='padding:1px 6px;color:#6c757d'>{r['deposito'] or '-'}</td></tr>"
+                                f"<td style='padding:1px 6px;color:#aaa'>{str(r['deposito'] or '-')}</td></tr>"
                                 for _, r in cli_pend.iterrows()
                             )
                             clientes_pend_line = (
-                                f"<br><b>👥 Clientes con pendiente:</b>"
-                                f"<table style='width:100%;font-size:.75rem;margin-top:4px'>"
-                                f"<tr style='color:#6c757d'><td>Cliente</td><td>Pend.</td><td>Depósito</td></tr>"
-                                f"{filas}</table>"
+                                "<br><b>&#128101; Clientes con pendiente:</b>"
+                                "<table style='width:100%;font-size:.75rem;margin-top:4px'>"
+                                "<tr style='color:#aaa'><td>Cliente</td><td>Pend.</td><td>Dep.</td></tr>"
+                                + filas +
+                                "</table>"
                             )
 
-                    st.markdown(f"""
-                        <div class="stock-card {clase}">
-                            <div class="stock-title">{item['Producto']}{b_neg}{b_comp}</div>
-                            <span class="stock-value">{stk:,.1f}
-                                <small class="stock-unit">{item['Unidad']}</small></span>
-                            <div class="stock-info">
-                                <b>🆔</b> {item['Código']}<br>
-                                <b>📍</b> <span class="label-blue">{item['Deposito']}</span>
-                                {comp_line}{venc_info}{clientes_pend_line}
-                            </div>
-                        </div>""", unsafe_allow_html=True)
+                    card_html = (
+                        f'<div class="stock-card {clase}">'
+                        f'<div class="stock-title">{item["Producto"]}{b_neg}{b_comp}</div>'
+                        f'<span class="stock-value">{stk:,.1f} <small class="stock-unit">{item["Unidad"]}</small></span>'
+                        f'<div class="stock-info">'
+                        f'<b>&#128273;</b> {item["Código"]}<br>'
+                        f'<b>&#128205;</b> <span class="label-blue">{item["Deposito"]}</span>'
+                        f'{comp_line}{venc_info}{clientes_pend_line}'
+                        f'</div>'
+                        f'</div>'
+                    )
+                    st.markdown(card_html, unsafe_allow_html=True)
 
         st.markdown("---")
 
