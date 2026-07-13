@@ -2076,7 +2076,7 @@ try:
 except Exception:
     pass
 
-_head_cols = st.columns([3, 2, 1, 1])
+_head_cols = st.columns([3, 2, 1, 1, 1])
 with _head_cols[1]:
     _dep_sel = st.selectbox("🏭 Depósito", _deps_global_opts, key="deposito_global",
                              label_visibility="collapsed",
@@ -2096,6 +2096,14 @@ with _head_cols[2]:
         </style>""", unsafe_allow_html=True)
     else:
         st.session_state.dark_mode = False
+with _head_cols[3]:
+    _auto_ref = st.selectbox("⏱️ Auto", ["Off", "5 min", "10 min", "30 min"],
+                              key="auto_refresh_sel", label_visibility="collapsed",
+                              help="Auto-actualizar datos")
+    if _auto_ref != "Off":
+        _ref_ms = {"5 min": 300000, "10 min": 600000, "30 min": 1800000}[_auto_ref]
+        st.markdown(f"""<script>setTimeout(function(){{window.location.reload();}},{_ref_ms});</script>""",
+                    unsafe_allow_html=True)
 with _head_cols[2]:
     if auth_enabled and st.session_state.get("authenticated"):
         st.caption(f"👤 {st.session_state.user_nombre}")
@@ -5989,7 +5997,141 @@ def _render_tab11():
             else:
                 st.info("💡 Para ver el valor monetario pendiente, importá ventas desde "
                         "**Plan Comercial → Cartera de Clientes → Importar desde MacroGest**.")
-            st.dataframe(resumen_mg, use_container_width=True, hide_index=True)
+            # ── Semáforo de antigüedad en el resumen ──────────────────────────
+            _dias_por_prod = (
+                df_f_mg.groupby("producto")["dia_recibido"]
+                .apply(lambda x: max(((dias_desde(v) or 0) for v in x), default=0))
+                .reset_index()
+            )
+            _dias_por_prod.columns = ["Producto", "_dias_max"]
+            resumen_mg = resumen_mg.merge(_dias_por_prod, on="Producto", how="left")
+            resumen_mg["_dias_max"] = resumen_mg["_dias_max"].fillna(0).astype(int)
+
+            _resumen_display = resumen_mg.drop(columns=["_dias_max"], errors="ignore").reset_index(drop=True)
+            _dias_array = resumen_mg["_dias_max"].values
+
+            def _apply_sem(df):
+                rows = []
+                for i in range(len(df)):
+                    d = int(_dias_array[i]) if i < len(_dias_array) else 0
+                    if d > 90:   bg = "background-color:#FFCCCC"
+                    elif d > 30: bg = "background-color:#FFF3CD"
+                    else:        bg = ""
+                    rows.append([bg] * len(df.columns))
+                return pd.DataFrame(rows, index=df.index, columns=df.columns)
+
+            try:
+                st.dataframe(
+                    _resumen_display.style.apply(_apply_sem, axis=None),
+                    use_container_width=True, hide_index=True
+                )
+            except Exception:
+                st.dataframe(_resumen_display, use_container_width=True, hide_index=True)
+            st.caption("🔴 Crítico >90 días · 🟡 Demorado >30 días · ⚪ Reciente")
+
+            # ── Ranking top 10 clientes con más pendiente ─────────────────────
+            with st.expander("🏆 Ranking — Clientes con más pendiente", expanded=False):
+                _rank_df = (df_f_mg.groupby("cliente")["pendiente"].sum()
+                            .reset_index().rename(columns={"cliente":"Cliente","pendiente":"Pendiente"})
+                            .sort_values("Pendiente", ascending=False).head(10))
+                if not _rank_df.empty:
+                    _fig_rank = px.bar(_rank_df, x="Pendiente", y="Cliente", orientation="h",
+                                       color="Pendiente", color_continuous_scale=["#F5A800","#3D4E6B"],
+                                       title="Top 10 Clientes — Unidades Pendientes",
+                                       text="Pendiente")
+                    _fig_rank.update_traces(texttemplate="%{text:,.0f}", textposition="outside")
+                    _fig_rank.update_layout(yaxis={"categoryorder":"total ascending"},
+                                            height=350, margin=dict(l=10,r=10,t=40,b=10),
+                                            coloraxis_showscale=False)
+                    st.plotly_chart(_fig_rank, use_container_width=True)
+
+            # ── Gráficos: torta distribución + evolución mensual ──────────────
+            with st.expander("📊 Gráficos — Distribución y evolución", expanded=False):
+                _gc1, _gc2 = st.columns(2)
+                with _gc1:
+                    _dist_prod = (df_f_mg.groupby("producto")["pendiente"].sum()
+                                  .reset_index().sort_values("pendiente", ascending=False).head(8))
+                    if not _dist_prod.empty:
+                        _fig_pie = px.pie(_dist_prod, values="pendiente", names="producto",
+                                          title="Pendiente por Producto (top 8)",
+                                          color_discrete_sequence=px.colors.sequential.Blues_r)
+                        _fig_pie.update_traces(textposition="inside", textinfo="percent+label")
+                        _fig_pie.update_layout(height=350, showlegend=False,
+                                               margin=dict(l=10,r=10,t=40,b=10))
+                        st.plotly_chart(_fig_pie, use_container_width=True)
+                with _gc2:
+                    _evo_df = df_f_mg.copy()
+                    _evo_df["_mes"] = pd.to_datetime(_evo_df["dia_recibido"], dayfirst=True, errors="coerce").dt.to_period("M").astype(str)
+                    _evo_mes = (_evo_df.groupby("_mes").agg(
+                        Comprado=("cantidad_comprada","sum"),
+                        Entregado=("cant_entregada","sum"),
+                        Pendiente=("pendiente","sum")
+                    ).reset_index().rename(columns={"_mes":"Mes"}))
+                    if not _evo_mes.empty and _evo_mes["Mes"].notna().any():
+                        _evo_mes = _evo_mes[_evo_mes["Mes"] != "NaT"].sort_values("Mes")
+                        _fig_evo = px.bar(_evo_mes, x="Mes", y=["Comprado","Entregado","Pendiente"],
+                                          barmode="group", title="Evolución Mensual",
+                                          color_discrete_map={"Comprado":"#3D4E6B","Entregado":"#2E7D32","Pendiente":"#F5A800"})
+                        _fig_evo.update_layout(height=350, margin=dict(l=10,r=10,t=40,b=10),
+                                               legend=dict(orientation="h", y=-0.2))
+                        st.plotly_chart(_fig_evo, use_container_width=True)
+
+            # ── Exportar Excel ────────────────────────────────────────────────
+            with st.expander("📥 Exportar datos filtrados", expanded=False):
+                _exc1, _exc2 = st.columns(2)
+                with _exc1:
+                    _buf_xl = io.BytesIO()
+                    _df_export = df_f_mg.drop(columns=["_dias_sem"], errors="ignore").copy()
+                    with pd.ExcelWriter(_buf_xl, engine="openpyxl") as _xw:
+                        _df_export.to_excel(_xw, index=False, sheet_name="Sin Entregar MG")
+                    st.download_button(
+                        "⬇️ Descargar Excel (.xlsx)",
+                        data=_buf_xl.getvalue(),
+                        file_name=f"sin_entregar_mg_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key="dl_mg_excel"
+                    )
+                with _exc2:
+                    _csv_data = _df_export.to_csv(index=False).encode("utf-8")
+                    st.download_button(
+                        "⬇️ Descargar CSV",
+                        data=_csv_data,
+                        file_name=f"sin_entregar_mg_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                        mime="text/csv",
+                        key="dl_mg_csv"
+                    )
+
+            # ── Pedidos por vencer (próximos 30 días) ─────────────────────────
+            with st.expander("⏰ Pedidos por vencer — próximos 30 días", expanded=False):
+                _hoy = datetime.now()
+                _venc_df = df_f_mg.copy()
+                _venc_df["_fecha_p"] = pd.to_datetime(_venc_df["dia_recibido"], dayfirst=True, errors="coerce")
+                _venc_df["_dias_p"]  = (_venc_df["_fecha_p"] - _hoy).dt.days
+                _venc_prox = _venc_df[(_venc_df["_dias_p"] >= 0) & (_venc_df["_dias_p"] <= 30) & (_venc_df["pendiente"] > 0)].copy()
+                if _venc_prox.empty:
+                    _venc_prox = _venc_df[(_venc_df["_dias_sem"] >= 25) & (_venc_df["_dias_sem"] <= 35) & (_venc_df["pendiente"] > 0)].copy()
+                    if not _venc_prox.empty:
+                        st.caption("Mostrando pedidos con antigüedad entre 25-35 días.")
+                if not _venc_prox.empty:
+                    _cols_venc = ["cliente","producto","deposito","pendiente","dia_recibido"]
+                    _cols_venc = [c for c in _cols_venc if c in _venc_prox.columns]
+                    st.dataframe(_venc_prox[_cols_venc].sort_values("dia_recibido"),
+                                 use_container_width=True, hide_index=True)
+                else:
+                    st.success("No hay pedidos críticos por vencer en los próximos 30 días.")
+
+            # ── Clientes sin actividad reciente ───────────────────────────────
+            with st.expander("😴 Clientes sin actividad reciente (>60 días)", expanded=False):
+                _act_df = df_mg_stored.copy()
+                _act_df["_dias_act"] = _act_df["dia_recibido"].apply(dias_desde)
+                _ultima_act = _act_df.groupby("cliente")["_dias_act"].min().reset_index()
+                _ultima_act.columns = ["Cliente", "Días desde último pedido"]
+                _sin_act = _ultima_act[_ultima_act["Días desde último pedido"] > 60].sort_values("Días desde último pedido", ascending=False)
+                if not _sin_act.empty:
+                    st.dataframe(_sin_act, use_container_width=True, hide_index=True)
+                    st.caption(f"Total: {len(_sin_act)} clientes sin pedidos nuevos en más de 60 días.")
+                else:
+                    st.success("Todos los clientes tuvieron actividad en los últimos 60 días.")
 
             # ── Entregas de otras hojas para el cliente filtrado ──────────────
             if _vista_cliente and f_cli_mg:
@@ -6134,6 +6276,54 @@ def _render_tab11():
                         ]))
                         _el_r.append(_info_tbl)
                         _el_r.append(Spacer(1, 0.5*cm))
+
+                        # ── RESUMEN EJECUTIVO ──────────────────────────────────
+                        _all_hojas_resumen = []
+                        _df_mg_ej = df_mg_stored[df_mg_stored["cliente"] == _cli_pdf]
+                        if not _df_mg_ej.empty:
+                            _all_hojas_resumen.append(("MacroGest", _df_mg_ej))
+                        for _hk_ej, _hl_ej, _ in [
+                            ("LA CLEMENTINA S.A", "LC / LCAGRO", ""),
+                            ("BAYER DEP55",       "Bayer DEP55", ""),
+                            ("BAYER DIRECTA",     "Bayer Directa", ""),
+                        ]:
+                            _ck_ej = f"df_ent_cache_{_hk_ej}"
+                            _dh_ej = st.session_state.get(_ck_ej) or obtener_entregas(_hk_ej)
+                            if _dh_ej is not None and not _dh_ej.empty:
+                                _dh_ej_cli = _dh_ej[_dh_ej["cliente"] == _cli_pdf]
+                                if not _dh_ej_cli.empty:
+                                    _all_hojas_resumen.append((_hl_ej, _dh_ej_cli))
+
+                        if _all_hojas_resumen:
+                            _el_r.append(_sec_header("RESUMEN EJECUTIVO", "#1A1A2E"))
+                            _el_r.append(Spacer(1, 0.2*cm))
+                            _rej_rows = [["Origen", "Comprado", "Entregado", "Pendiente", "% Ent."]]
+                            _tot_c = _tot_e = _tot_p = 0
+                            for _hnm, _hdf in _all_hojas_resumen:
+                                _hc = _hdf["cantidad_comprada"].sum()
+                                _he = _hdf["cant_entregada"].sum()
+                                _hp = _hdf["pendiente"].sum()
+                                _hpct = f"{_he/_hc*100:.1f}%" if _hc > 0 else "0%"
+                                _rej_rows.append([_hnm, f"{_hc:,.0f}", f"{_he:,.0f}", f"{_hp:,.0f}", _hpct])
+                                _tot_c += _hc; _tot_e += _he; _tot_p += _hp
+                            _rej_rows.append(["TOTAL", f"{_tot_c:,.0f}", f"{_tot_e:,.0f}", f"{_tot_p:,.0f}",
+                                              f"{_tot_e/_tot_c*100:.1f}%" if _tot_c > 0 else "0%"])
+                            _rej_tbl = Table(_rej_rows, colWidths=[6*cm, 3.5*cm, 3.5*cm, 3.5*cm, 3*cm])
+                            _rej_tbl.setStyle(TableStyle([
+                                ("BACKGROUND",    (0,0),  (-1,0),  rl_colors.HexColor("#3D4E6B")),
+                                ("TEXTCOLOR",     (0,0),  (-1,0),  rl_colors.white),
+                                ("BACKGROUND",    (0,-1), (-1,-1), rl_colors.HexColor("#F5A800")),
+                                ("FONTNAME",      (0,0),  (-1,0),  "Helvetica-Bold"),
+                                ("FONTNAME",      (0,-1), (-1,-1), "Helvetica-Bold"),
+                                ("FONTSIZE",      (0,0),  (-1,-1), 9),
+                                ("ALIGN",         (1,0),  (-1,-1), "RIGHT"),
+                                ("ROWBACKGROUNDS",(0,1),  (-1,-2), [rl_colors.white, rl_colors.HexColor("#F0F4FF")]),
+                                ("GRID",          (0,0),  (-1,-1), 0.3, rl_colors.HexColor("#CCCCCC")),
+                                ("TOPPADDING",    (0,0),  (-1,-1), 4),
+                                ("BOTTOMPADDING", (0,0),  (-1,-1), 4),
+                            ]))
+                            _el_r.append(_rej_tbl)
+                            _el_r.append(Spacer(1, 0.4*cm))
 
                         # ── SECCIÓN 1: MacroGest ──
                         _df_mg_pdf = df_mg_stored[df_mg_stored["cliente"] == _cli_pdf].copy()
