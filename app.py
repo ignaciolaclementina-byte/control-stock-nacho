@@ -575,6 +575,8 @@ def inicializar_db():
         "CREATE INDEX IF NOT EXISTS idx_mov_fecha    ON movimientos(fecha_hora)",
         "CREATE INDEX IF NOT EXISTS idx_ent_hoja     ON entregas(hoja)",
         "CREATE INDEX IF NOT EXISTS idx_ent_pend     ON entregas(pendiente)",
+        "CREATE INDEX IF NOT EXISTS idx_ent_cliente  ON entregas(cliente)",
+        "CREATE INDEX IF NOT EXISTS idx_ent_origen   ON entregas(origen)",
         "CREATE INDEX IF NOT EXISTS idx_lp_producto  ON lista_precios(producto)",
     ]:
         try: c.execute(idx_sql)
@@ -788,6 +790,10 @@ def mostrar_login():
 def limpiar_cache():
     """Invalida todas las caches de datos. Llamar tras cualquier escritura en DB."""
     st.cache_data.clear()
+    # Limpiar también caches de session_state para forzar recarga en próximo render
+    for _k in list(st.session_state.keys()):
+        if _k.startswith("df_ent_cache_") or _k == "df_mg_cache":
+            st.session_state[_k] = None
 
 def safe_float(val, default=0.0):
     try:
@@ -2570,7 +2576,7 @@ with tab1:
 
                 with _bg_cols[2]:
                     st.markdown("**🔄 En Sin Entregar MG**")
-                    _bg_mg = obtener_entregas("MACROGEST")
+                    _bg_mg = st.session_state.get("df_mg_cache") or obtener_entregas("MACROGEST")
                     if not _bg_mg.empty:
                         _bg_mg_f = _bg_mg[
                             _bg_mg["producto"].str.contains(q_glob, case=False, na=False) |
@@ -2974,9 +2980,20 @@ def mostrar_tab_entregas(hoja_nombre, titulo):
                 except Exception as ex:
                     st.error(f"Error: {ex}")
 
-    df_h = obtener_entregas(hoja_nombre)
+    _ent_cache_key = f"df_ent_cache_{hoja_nombre}"
+    if _ent_cache_key not in st.session_state or st.session_state[_ent_cache_key] is None:
+        st.session_state[_ent_cache_key] = obtener_entregas(hoja_nombre)
+    df_h = st.session_state[_ent_cache_key]
+
     _ult_ent = obtener_metadata("ultima_importacion_entregas")
-    if _ult_ent: st.caption(f"🕐 Última importación: **{_ult_ent}**")
+    _hdr1, _hdr2 = st.columns([9, 1])
+    with _hdr1:
+        if _ult_ent: st.caption(f"🕐 Última importación: **{_ult_ent}**")
+    with _hdr2:
+        if st.button("🔄", key=f"ent_refresh_{hoja_nombre}", help="Actualizar datos"):
+            st.session_state[_ent_cache_key] = obtener_entregas(hoja_nombre)
+            df_h = st.session_state[_ent_cache_key]
+            st.rerun()
 
     if df_h.empty:
         st.info("Sin datos. Importá en 'LC / LCAGRO'.")
@@ -3021,11 +3038,20 @@ def mostrar_tab_entregas(hoja_nombre, titulo):
                               ["Todos","Normal (≤30d)","Demorado (30-60d)","Crítico (>60d)"],
                               key=f"fedad_{hoja_nombre}")
 
-    df_f2 = df_h.copy()
-    if f_est  != "Todos": df_f2 = df_f2[df_f2["estado"] == f_est]
-    if f_pr   != "Todos": df_f2 = df_f2[df_f2["producto"] == f_pr]
-    if f_vd   != "Todos": df_f2 = df_f2[df_f2["vendedor"].replace("","S/V") == f_vd]
-    if f_cli:             df_f2 = df_f2[df_f2["cliente"].str.contains(f_cli, case=False, na=False)]
+    # Pre-calcular columna lowercase para búsqueda instantánea por cliente
+    _ent_cli_key = f"ent_cli_lower_{hoja_nombre}"
+    _ent_id_key  = f"ent_cache_id_{hoja_nombre}"
+    if _ent_cli_key not in st.session_state or st.session_state.get(_ent_id_key) != id(df_h):
+        st.session_state[_ent_cli_key] = df_h["cliente"].fillna("").str.lower()
+        st.session_state[_ent_id_key]  = id(df_h)
+
+    _mask2 = pd.Series([True] * len(df_h), index=df_h.index)
+    if f_est != "Todos": _mask2 &= df_h["estado"] == f_est
+    if f_pr  != "Todos": _mask2 &= df_h["producto"] == f_pr
+    if f_vd  != "Todos": _mask2 &= df_h["vendedor"].replace("","S/V") == f_vd
+    if f_cli:            _mask2 &= st.session_state[_ent_cli_key].str.contains(f_cli.lower(), na=False)
+
+    df_f2 = df_h[_mask2].copy()
     if   f_edad == "Normal (≤30d)":       df_f2 = df_f2[df_f2["dias_pend"] <= 30]
     elif f_edad == "Demorado (30-60d)":   df_f2 = df_f2[(df_f2["dias_pend"]>30) & (df_f2["dias_pend"]<=60)]
     elif f_edad == "Crítico (>60d)":      df_f2 = df_f2[df_f2["dias_pend"] > 60]
@@ -5633,7 +5659,17 @@ with tab11:
     if ultima_mg:
         st.caption(f"Última importación MacroGest: **{ultima_mg}**")
 
-    df_mg_stored = obtener_entregas("MACROGEST")
+    # ── Cache en session_state para velocidad máxima de filtrado ─────────────
+    if "df_mg_cache" not in st.session_state or st.session_state.get("df_mg_cache") is None:
+        st.session_state["df_mg_cache"] = obtener_entregas("MACROGEST")
+    df_mg_stored = st.session_state["df_mg_cache"]
+
+    _rc1, _rc2 = st.columns([8, 1])
+    with _rc2:
+        if st.button("🔄", key="mg_refresh", help="Actualizar datos desde la base"):
+            st.session_state["df_mg_cache"] = obtener_entregas("MACROGEST")
+            df_mg_stored = st.session_state["df_mg_cache"]
+            st.rerun()
 
     if df_mg_stored.empty:
         st.info("Sin datos. Importá un archivo arriba.")
@@ -5670,11 +5706,24 @@ with tab11:
                 help="Días desde la fecha de recibo del pedido"
             )
 
-        df_f_mg = df_mg_stored.copy()
-        if f_cli_mg:  df_f_mg = df_f_mg[df_f_mg["cliente"].str.contains(f_cli_mg, case=False, na=False)]
-        if f_prod_mg != "Todos": df_f_mg = df_f_mg[df_f_mg["producto"] == f_prod_mg]
-        if f_vend_mg != "Todos": df_f_mg = df_f_mg[df_f_mg["vendedor"].replace("","S/V") == f_vend_mg]
-        if solo_pend_mg: df_f_mg = df_f_mg[df_f_mg["pendiente"] > 0]
+        # Filtrado ultra-rápido: máscara booleana sobre columna pre-lowercase
+        if "df_mg_cli_lower" not in st.session_state or st.session_state.get("df_mg_cache_id") != id(df_mg_stored):
+            st.session_state["df_mg_cli_lower"] = df_mg_stored["cliente"].fillna("").str.lower()
+            st.session_state["df_mg_cache_id"]  = id(df_mg_stored)
+        _cli_lower = st.session_state["df_mg_cli_lower"]
+
+        _mask = pd.Series([True] * len(df_mg_stored), index=df_mg_stored.index)
+        if f_cli_mg:
+            _mask &= _cli_lower.str.contains(f_cli_mg.lower(), na=False)
+        if f_prod_mg != "Todos":
+            _mask &= df_mg_stored["producto"] == f_prod_mg
+        if f_vend_mg != "Todos":
+            _mask &= df_mg_stored["vendedor"].replace("","S/V") == f_vend_mg
+        if solo_pend_mg:
+            _mask &= df_mg_stored["pendiente"] > 0
+
+        df_f_mg = df_mg_stored[_mask].copy()
+
         if f_edad_mg != "Todos":
             df_f_mg["_dias"] = df_f_mg["dia_recibido"].apply(dias_desde)
             if f_edad_mg == "Reciente (≤30d)":      df_f_mg = df_f_mg[df_f_mg["_dias"] <= 30]
