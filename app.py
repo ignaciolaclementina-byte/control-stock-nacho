@@ -2190,8 +2190,9 @@ st.markdown(f"""
 
 # session_state para cache lazy por tab (se carga la primera vez que se abre cada tab)
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12 = st.tabs([
+tab1, tab11, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab12 = st.tabs([
     "⚡ Panel",
+    "🔄 Sin Entregar MG",
     "📦 LC / LCAGRO",
     "🌿 Bayer DEP55",
     "🚚 Bayer Directa",
@@ -2201,7 +2202,6 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12 = st.t
     "📈 Reportes",
     "⚙️ Configuración",
     "📊 Plan Comercial",
-    "🔄 Sin Entregar MG",
     "🏷️ Lista de Precios",
 ])
 
@@ -2792,8 +2792,7 @@ with tab1:
             show_neg_f     = st.toggle("⚠️ Mostrar negativos",       value=True)
             show_comp_f    = st.toggle("🔒 Solo comprometidos",      value=False)
         with cf4:
-            agrupar_prod   = st.toggle("🗂️ Agrupar por producto",    value=True,
-                                       help="Suma todos los depósitos y muestra una card por producto")
+            pass
 
         df_f = stock_df.copy()
         if search_q:
@@ -2801,6 +2800,7 @@ with tab1:
                         df_f["Código"].astype(str).str.contains(search_q, case=False, na=False)]
         if f_prod != "Todos" and not search_q:
             df_f = df_f[df_f["Producto"] == f_prod]
+        agrupar_prod = True
         if f_dep != "Todos":
             df_f = df_f[df_f["Deposito"] == f_dep]
             agrupar_prod = False
