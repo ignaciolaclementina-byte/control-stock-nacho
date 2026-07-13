@@ -2646,7 +2646,8 @@ with tab1:
                 _bg_ent_all = []
                 for _hk_bg in ["LA CLEMENTINA S.A", "BAYER DEP55", "BAYER DIRECTA"]:
                     _ck_bg = f"df_ent_cache_{_hk_bg}"
-                    _dh_bg = st.session_state.get(_ck_bg) or obtener_entregas(_hk_bg)
+                    _dh_bg_cached = st.session_state.get(_ck_bg)
+                    _dh_bg = _dh_bg_cached if _dh_bg_cached is not None else obtener_entregas(_hk_bg)
                     if _dh_bg is not None and not _dh_bg.empty:
                         _msk_bg = (
                             _dh_bg["producto"].str.contains(q_glob, case=False, na=False) |
@@ -6428,7 +6429,8 @@ def _render_tab11():
                             ("BAYER DIRECTA",     "Bayer Directa", ""),
                         ]:
                             _ck_ej = f"df_ent_cache_{_hk_ej}"
-                            _dh_ej = st.session_state.get(_ck_ej) or obtener_entregas(_hk_ej)
+                            _dh_ej_cached = st.session_state.get(_ck_ej)
+                            _dh_ej = _dh_ej_cached if _dh_ej_cached is not None else obtener_entregas(_hk_ej)
                             if _dh_ej is not None and not _dh_ej.empty:
                                 _dh_ej_cli = _dh_ej[_dh_ej["cliente"] == _cli_pdf]
                                 if not _dh_ej_cli.empty:
