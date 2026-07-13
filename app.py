@@ -834,12 +834,12 @@ def dias_hasta(fecha_str):
 def _similitud(a, b):
     return difflib.SequenceMatcher(None, a.lower(), b.lower()).ratio()
 
-def _filtro_fonetico(serie, query, umbral=0.6):
+def _filtro_fonetico(serie, query, umbral=0.82):
     """Retorna máscara booleana con coincidencias exactas + fonéticas."""
     q = query.lower()
     exacta = serie.fillna("").str.lower().str.contains(q, na=False)
-    if len(q) < 4:
-        return exacta
+    if len(q) < 5:
+        return exacta  # búsquedas cortas: solo exacta
     fonetica = serie.fillna("").apply(
         lambda x: any(_similitud(q, word) >= umbral for word in x.lower().split())
     )
@@ -5936,19 +5936,40 @@ def _render_tab11():
             df_f_mg = df_f_mg.drop(columns=["_dias"], errors="ignore")
 
         if not df_f_mg.empty:
-            resumen_mg = (
-                df_f_mg.groupby("producto")
-                .agg(
-                    Clientes =("cliente",   "nunique"),
-                    Depósitos=("deposito",  lambda x: ", ".join(sorted(x.dropna().astype(str).unique()))),
-                    Comprado =("cantidad_comprada","sum"),
-                    Entregado=("cant_entregada",   "sum"),
-                    Pendiente=("pendiente",         "sum"),
+            # Si hay un único cliente filtrado → vista detallada de ese cliente
+            _clientes_filtrados = df_f_mg["cliente"].dropna().unique()
+            _vista_cliente = len(_clientes_filtrados) == 1
+
+            if _vista_cliente:
+                _nom_cli = _clientes_filtrados[0]
+                st.markdown(f"#### 👤 Pendientes de **{_nom_cli}**")
+                resumen_mg = (
+                    df_f_mg.groupby("producto")
+                    .agg(
+                        Depósitos=("deposito",        lambda x: ", ".join(sorted(x.dropna().astype(str).unique()))),
+                        Comprado =("cantidad_comprada","sum"),
+                        Entregado=("cant_entregada",   "sum"),
+                        Pendiente=("pendiente",         "sum"),
+                    )
+                    .reset_index()
+                    .rename(columns={"producto":"Producto"})
+                    .sort_values("Pendiente", ascending=False)
                 )
-                .reset_index()
-                .rename(columns={"producto":"Producto"})
-                .sort_values("Pendiente", ascending=False)
-            )
+            else:
+                resumen_mg = (
+                    df_f_mg.groupby("producto")
+                    .agg(
+                        Clientes =("cliente",          "nunique"),
+                        Depósitos=("deposito",          lambda x: ", ".join(sorted(x.dropna().astype(str).unique()))),
+                        Comprado =("cantidad_comprada", "sum"),
+                        Entregado=("cant_entregada",    "sum"),
+                        Pendiente=("pendiente",          "sum"),
+                    )
+                    .reset_index()
+                    .rename(columns={"producto":"Producto"})
+                    .sort_values("Pendiente", ascending=False)
+                )
+
             resumen_mg["% Entregado"] = (
                 resumen_mg["Entregado"] / resumen_mg["Comprado"].replace(0,1) * 100
             ).round(1).astype(str) + "%"
