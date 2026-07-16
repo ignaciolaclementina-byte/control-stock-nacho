@@ -2786,7 +2786,7 @@ with tab1:
             st.session_state.qr_detectado = f_prod
         with cf2:
             lista_d = sorted(stock_df["Deposito"].dropna().unique().tolist())
-            f_dep   = st.multiselect("Depósito", lista_d, placeholder="Todos los depósitos")
+            f_dep   = st.selectbox("Depósito principal", ["Todos"] + lista_d, key="dep_principal")
         with cf3:
             hide_neg       = st.toggle("Solo stock positivo",       value=True)
             filter_reponer = st.toggle(f"🚨 Reponer (<{U})",        value=False)
@@ -2795,6 +2795,18 @@ with tab1:
         with cf4:
             pass
 
+        # ── Selector múltiple de depósitos ────────────────────────────────────
+        with st.expander("🏭 Seleccionar depósitos adicionales", expanded=False):
+            st.caption("Marcá uno o más depósitos para combinar con el filtro principal.")
+            _dep_cols = st.columns(8)
+            _deps_extra = []
+            for _di, _dn in enumerate(lista_d):
+                with _dep_cols[_di % 8]:
+                    if st.checkbox(str(_dn), key=f"dep_chk_{_dn}"):
+                        _deps_extra.append(_dn)
+            if _deps_extra:
+                st.caption(f"Depósitos seleccionados: {', '.join(str(d) for d in _deps_extra)}")
+
         df_f = stock_df.copy()
         if search_q:
             df_f = df_f[df_f["Producto"].str.contains(search_q, case=False, na=False) |
@@ -2802,8 +2814,13 @@ with tab1:
         if f_prod != "Todos" and not search_q:
             df_f = df_f[df_f["Producto"] == f_prod]
         agrupar_prod = False
-        if f_dep:
-            df_f = df_f[df_f["Deposito"].isin(f_dep)]
+        # Aplicar filtro de depósito: primero el selector principal, luego los extras
+        _deps_filtro = set()
+        if f_dep != "Todos":
+            _deps_filtro.add(f_dep)
+        _deps_filtro.update(_deps_extra)
+        if _deps_filtro:
+            df_f = df_f[df_f["Deposito"].isin(_deps_filtro)]
         if hide_neg:
             mask = df_f["Stock Actual"] > 0
             if show_neg_f: mask = mask | (df_f["Stock Actual"] < 0)
