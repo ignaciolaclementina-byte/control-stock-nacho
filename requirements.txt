@@ -5,6 +5,6 @@ numpy
 opencv-python-headless
 openpyxl
 matplotlib
-xlsxwriter
+qrcode[pil]
 reportlab
 psycopg2-binary
