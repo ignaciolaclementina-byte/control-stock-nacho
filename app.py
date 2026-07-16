@@ -132,20 +132,72 @@ details, [data-testid="stExpander"] > div:first-child {{
                    padding:4px 10px;border-radius:6px;font-size:.75rem}}
 
 /* Cards de stock */
-.stock-card   {{background:#1C2333;padding:18px;border-radius:12px;
-                box-shadow:0 4px 15px rgba(0,0,0,.3);margin-bottom:12px;
-                border:1px solid #2D3748;position:relative}}
-.card-normal  {{border-left:8px solid #38a169}}
-.card-low     {{border-left:8px solid {_LC_YELLOW}}}
-.card-warning {{border-left:8px solid #e53e3e}}
+.stock-card   {{
+    padding:18px;border-radius:14px;margin-bottom:12px;
+    border:1px solid #2D3748;position:relative;
+    box-shadow:0 6px 20px rgba(0,0,0,.4);
+    animation:fadeInCard .35s ease both;
+    transition:transform .15s ease,box-shadow .15s ease;
+}}
+.stock-card:hover {{
+    transform:translateY(-3px);
+    box-shadow:0 10px 28px rgba(0,0,0,.5);
+}}
+@keyframes fadeInCard {{
+    from{{opacity:0;transform:translateY(10px)}}
+    to  {{opacity:1;transform:translateY(0)}}
+}}
+.card-normal  {{
+    background:linear-gradient(145deg,#1a2a1a 0%,#1C2333 60%);
+    border-left:6px solid #38a169;
+}}
+.card-low     {{
+    background:linear-gradient(145deg,#2a2010 0%,#1C2333 60%);
+    border-left:6px solid {_LC_YELLOW};
+}}
+.card-warning {{
+    background:linear-gradient(145deg,#2a1010 0%,#1C2333 60%);
+    border-left:6px solid #e53e3e;
+}}
 .stock-title  {{font-size:.95rem;color:#E2E8F0;font-weight:700;margin-bottom:8px;
                 line-height:1.2;min-height:2.4em}}
-.stock-value  {{font-size:1.5rem;color:#FAFAFA;font-weight:800;display:block}}
-.stock-unit   {{font-size:.8rem;color:#A0AEC0}}
+.stock-value  {{font-size:1.75rem;color:#FAFAFA;font-weight:900;display:block;letter-spacing:-.5px}}
+.stock-unit   {{font-size:.8rem;color:#A0AEC0;font-weight:400}}
 .stock-info   {{margin-top:10px;padding-top:8px;border-top:1px solid #2D3748;
                 font-size:.8rem;color:#A0AEC0}}
 .label-blue   {{background:#1a365d;color:#90cdf4;padding:2px 6px;border-radius:4px;font-weight:bold}}
 .label-orange {{background:#2d1e0a;color:{_LC_YELLOW};padding:2px 6px;border-radius:4px;font-weight:bold}}
+
+/* Barra de progreso en cards */
+.stock-progress-wrap {{
+    background:#2D3748;border-radius:99px;height:7px;margin:8px 0 4px;overflow:hidden;
+}}
+.stock-progress-bar {{
+    height:7px;border-radius:99px;transition:width .4s ease;
+}}
+
+/* Zebra en tablas nativas */
+[data-testid="stDataFrame"] tr:nth-child(even) td {{
+    background:rgba(255,255,255,.03) !important;
+}}
+
+/* KPI bar fija superior */
+.kpi-topbar {{
+    display:flex;gap:12px;padding:10px 18px;
+    background:linear-gradient(90deg,{_LC_NAVY} 0%,#1a2540 100%);
+    border-radius:10px;margin-bottom:14px;border:1px solid #2D3748;
+    flex-wrap:wrap;align-items:center;
+}}
+.kpi-topbar-item {{
+    display:flex;flex-direction:column;align-items:center;
+    padding:0 14px;border-right:1px solid #2D3748;
+}}
+.kpi-topbar-item:last-child {{border-right:none}}
+.kpi-topbar-val  {{font-size:1.4rem;font-weight:900;color:#FAFAFA}}
+.kpi-topbar-lbl  {{font-size:.65rem;color:#A0AEC0;text-transform:uppercase;letter-spacing:.5px}}
+.kpi-topbar-val.kpi-red   {{color:#fc8181}}
+.kpi-topbar-val.kpi-yellow{{color:{_LC_YELLOW}}}
+.kpi-topbar-val.kpi-green {{color:#68d391}}
 
 /* Badges */
 .neg-badge  {{display:inline-block;background:#e53e3e;color:white;font-size:.65rem;
@@ -2239,6 +2291,23 @@ with tab1:
             ent_panel["dias_p"] = ent_panel["dia_recibido"].apply(dias_desde)
             venc30 = len(ent_panel[(ent_panel["pendiente"] > 0) & (ent_panel["dias_p"] > 30)])
 
+        # ── KPI TopBar visual prominente ──────────────────────────────────────
+        _vol_total = stock_df["Stock Actual"].sum()
+        _mg_cache  = st.session_state.get("df_mg_cache")
+        _pend_mg   = int(_mg_cache["pendiente"].sum()) if _mg_cache is not None and not _mg_cache.empty else 0
+        st.markdown(
+            f'<div class="kpi-topbar">'
+            f'<div class="kpi-topbar-item"><span class="kpi-topbar-val">{stock_df["Producto"].nunique()}</span><span class="kpi-topbar-lbl">Productos</span></div>'
+            f'<div class="kpi-topbar-item"><span class="kpi-topbar-val">{_vol_total:,.0f}</span><span class="kpi-topbar-lbl">Volumen Total</span></div>'
+            f'<div class="kpi-topbar-item"><span class="kpi-topbar-val kpi-{"red" if neg_n > 0 else "green"}">{neg_n}</span><span class="kpi-topbar-lbl">Negativos</span></div>'
+            f'<div class="kpi-topbar-item"><span class="kpi-topbar-val kpi-{"yellow" if bajo_n > 0 else "green"}">{bajo_n}</span><span class="kpi-topbar-lbl">Bajo umbral</span></div>'
+            f'<div class="kpi-topbar-item"><span class="kpi-topbar-val kpi-{"red" if comp_n > 0 else "green"}">{comp_n}</span><span class="kpi-topbar-lbl">Comprometidos</span></div>'
+            f'<div class="kpi-topbar-item"><span class="kpi-topbar-val kpi-{"yellow" if venc30 > 0 else "green"}">{venc30}</span><span class="kpi-topbar-lbl">Pend. +30d</span></div>'
+            f'<div class="kpi-topbar-item"><span class="kpi-topbar-val kpi-{"yellow" if _pend_mg > 0 else "green"}">{_pend_mg:,}</span><span class="kpi-topbar-lbl">Sin entregar MG</span></div>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
+
         # Alerta inmediata si hay stock negativo
         if neg_n > 0:
             _neg_prods = stock_df[stock_df["Stock Actual"] < 0]["Producto"].unique()
@@ -2413,7 +2482,7 @@ with tab1:
 
         # Gráficos
         with st.expander("📊 Gráficos y Comparativas", expanded=False):
-            _gtabs = st.tabs(["📦 Por Depósito", "🏆 Top Productos", "⚖️ Stock vs Compromisos", "📈 Evolución", "🔤 Clasificación ABC"])
+            _gtabs = st.tabs(["📦 Por Depósito", "🏆 Top Productos", "⚖️ Stock vs Compromisos", "📈 Evolución", "🔤 Clasificación ABC", "🗺️ Treemap"])
 
             with _gtabs[0]:
                 cg1, cg2 = st.columns(2)
@@ -2538,6 +2607,37 @@ with tab1:
                     st.download_button("📥 Exportar clasificación ABC",
                                        data=to_excel_bytes(_abc, "ABC"),
                                        file_name=f"abc_{datetime.now().strftime('%Y%m%d')}.xlsx")
+
+            with _gtabs[5]:
+                # Treemap: producto × depósito, tamaño = stock, color = estado
+                st.caption("Cada rectángulo = un producto. Tamaño proporcional al stock. Color por estado.")
+                _tm_df = stock_df.copy()
+                _tm_df = _tm_df[_tm_df["Stock Actual"] > 0]
+                if _tm_df.empty:
+                    st.info("Sin stock positivo para mostrar.")
+                else:
+                    _tm_df["Estado"] = _tm_df.apply(
+                        lambda r: "🔴 Negativo" if r["Stock Actual"] < 0
+                        else ("🟡 Bajo" if r["Stock Actual"] < U else "🟢 OK"), axis=1
+                    )
+                    _fig_tm = px.treemap(
+                        _tm_df,
+                        path=["Deposito", "Producto"],
+                        values="Stock Actual",
+                        color="Stock Actual",
+                        color_continuous_scale=["#e53e3e", _LC_YELLOW, "#38a169"],
+                        title="Mapa de calor — Stock por Depósito y Producto",
+                        hover_data={"Stock Actual": ":.1f", "Unidad": True}
+                    )
+                    _fig_tm.update_layout(
+                        height=500, margin=dict(l=10,r=10,t=40,b=10),
+                        coloraxis_colorbar=dict(title="Stock")
+                    )
+                    _fig_tm.update_traces(
+                        textinfo="label+value",
+                        hovertemplate="<b>%{label}</b><br>Stock: %{value:,.1f}<extra></extra>"
+                    )
+                    st.plotly_chart(_fig_tm, use_container_width=True)
 
         st.markdown("---")
 
@@ -2902,10 +3002,25 @@ with tab1:
                                 "</table>"
                             )
 
+                    # Barra de progreso comprometido/stock
+                    if stk > 0 and comp > 0:
+                        _pct_comp = min(100, round(comp / stk * 100))
+                        _bar_color = "#e53e3e" if _pct_comp >= 100 else (_LC_YELLOW if _pct_comp >= 60 else "#38a169")
+                        _progress_html = (
+                            f'<div class="stock-progress-wrap">'
+                            f'<div class="stock-progress-bar" style="width:{_pct_comp}%;background:{_bar_color}"></div>'
+                            f'</div>'
+                            f'<div style="font-size:.68rem;color:#A0AEC0;margin-bottom:4px">'
+                            f'Comprometido {_pct_comp}% del stock</div>'
+                        )
+                    else:
+                        _progress_html = ""
+
                     card_html = (
                         '<div class="stock-card ' + clase + '">'
                         '<div class="stock-title">' + str(item["Producto"]) + b_neg + b_comp + '</div>'
                         '<span class="stock-value">' + f"{stk:,.1f}" + ' <small class="stock-unit">' + str(item["Unidad"]) + '</small></span>'
+                        + _progress_html +
                         '<div class="stock-info">'
                         '<b>ID</b> ' + str(item["Código"]) + '<br>'
                         '<b>Dep.</b> <span class="label-blue">' + str(item["Deposito"]) + '</span>'
@@ -6088,6 +6203,42 @@ def _render_tab11():
             if _vista_cliente:
                 _nom_cli = _clientes_filtrados[0]
                 st.markdown(f"#### 👤 Pendientes de **{_nom_cli}**")
+
+                # Gauge de % entregado
+                _gc_tot = df_f_mg["cantidad_comprada"].sum()
+                _ge_tot = df_f_mg["cant_entregada"].sum()
+                _gp_tot = df_f_mg["pendiente"].sum()
+                _gpct   = round(_ge_tot / _gc_tot * 100, 1) if _gc_tot > 0 else 0
+                _fig_gauge = go.Figure(go.Indicator(
+                    mode="gauge+number+delta",
+                    value=_gpct,
+                    delta={"reference": 100, "suffix": "%"},
+                    number={"suffix": "%", "font": {"size": 36}},
+                    title={"text": "% Entregado", "font": {"size": 14}},
+                    gauge={
+                        "axis": {"range": [0, 100], "tickwidth": 1},
+                        "bar":  {"color": "#38a169" if _gpct >= 80 else (_LC_YELLOW if _gpct >= 50 else "#e53e3e")},
+                        "steps": [
+                            {"range": [0,  50], "color": "#2a1010"},
+                            {"range": [50, 80], "color": "#2a2010"},
+                            {"range": [80,100], "color": "#1a2a1a"},
+                        ],
+                        "threshold": {"line": {"color": "white", "width": 3}, "thickness": .75, "value": 100}
+                    }
+                ))
+                _fig_gauge.update_layout(
+                    height=220, margin=dict(l=20,r=20,t=40,b=10),
+                    paper_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA"
+                )
+                _gcol1, _gcol2, _gcol3, _gcol4 = st.columns([2,1,1,1])
+                with _gcol1:
+                    st.plotly_chart(_fig_gauge, use_container_width=True)
+                with _gcol2:
+                    st.metric("Comprado", f"{_gc_tot:,.0f}")
+                with _gcol3:
+                    st.metric("Entregado", f"{_ge_tot:,.0f}")
+                with _gcol4:
+                    st.metric("Pendiente", f"{_gp_tot:,.0f}", delta=f"-{_gp_tot:,.0f}" if _gp_tot > 0 else "✓", delta_color="inverse")
                 resumen_mg = (
                     df_f_mg.groupby("producto")
                     .agg(
