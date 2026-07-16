@@ -2785,8 +2785,8 @@ with tab1:
             f_prod = st.selectbox("Producto", lista_p, index=idx_p)
             st.session_state.qr_detectado = f_prod
         with cf2:
-            lista_d = ["Todos"] + sorted(stock_df["Deposito"].unique().tolist())
-            f_dep   = st.selectbox("Depósito", lista_d)
+            lista_d = sorted(stock_df["Deposito"].dropna().unique().tolist())
+            f_dep   = st.multiselect("Depósito", lista_d, placeholder="Todos los depósitos")
         with cf3:
             hide_neg       = st.toggle("Solo stock positivo",       value=True)
             filter_reponer = st.toggle(f"🚨 Reponer (<{U})",        value=False)
@@ -2802,8 +2802,8 @@ with tab1:
         if f_prod != "Todos" and not search_q:
             df_f = df_f[df_f["Producto"] == f_prod]
         agrupar_prod = False
-        if f_dep != "Todos":
-            df_f = df_f[df_f["Deposito"] == f_dep]
+        if f_dep:
+            df_f = df_f[df_f["Deposito"].isin(f_dep)]
         if hide_neg:
             mask = df_f["Stock Actual"] > 0
             if show_neg_f: mask = mask | (df_f["Stock Actual"] < 0)
