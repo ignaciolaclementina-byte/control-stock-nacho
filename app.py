@@ -1,5 +1,5 @@
 """
-Control de Depósito Inteligente — La Clementina S.A. SAN JORGE
+Control de Depósito Inteligente — La Clementina S.A.
 Versión PRO: auth, transferencias, valorización, rotación,
              reportes, email, importación incremental, PDF.
 
@@ -4071,7 +4071,7 @@ with tab7:
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab8:
     st.subheader("📈 Reportes y Análisis")
-    r_tab1, r_tab2, r_tab3, r_tab4, r_tab5, r_tab6, r_tab7, r_tab8, r_tab9, r_tab10 = st.tabs([
+    r_tab1, r_tab2, r_tab3, r_tab4, r_tab5, r_tab6, r_tab7, r_tab8, r_tab9, r_tab10, r_tab11, r_tab12, r_tab13 = st.tabs([
         "👥 Dashboard Vendedores",
         "🔄 Rotación de Stock",
         "⏰ Vencimientos",
@@ -4082,6 +4082,9 @@ with tab8:
         "🏆 Ranking Clientes",
         "📉 Proyección de Quiebre",
         "😴 Clientes Sin Actividad",
+        "🔮 Predicción de Demanda",
+        "💰 Clientes más Rentables",
+        "🗺️ Producto por Zona",
     ])
 
     # ── Vendedores ────────────────────────────────────────────────────────────
@@ -4314,7 +4317,6 @@ with tab8:
                                    file_name=f"lotes_vencidos_{datetime.now().strftime('%Y%m%d')}.xlsx")
 
             # ── QR por lote ───────────────────────────────────────────────────
-            st.markdown("---")
             with st.expander("🏷️ Generar QR de lote", expanded=False):
                 _qr_cols = st.columns(4)
                 with _qr_cols[0]:
@@ -4336,8 +4338,6 @@ with tab8:
                         st.image(_qr_bytes, width=200, caption=f"{_qr_prod} · {_qr_lote}")
                         st.download_button("⬇️ Descargar QR (.png)", data=_qr_bytes,
                                            file_name=f"qr_{_qr_lote}.png", mime="image/png")
-                    else:
-                        st.info("Instalá `qrcode` para usar esta función: `pip install qrcode[pil]`")
 
             # ── Timeline de vencimientos ──────────────────────────────────────
             st.markdown("---")
@@ -4812,6 +4812,263 @@ with tab8:
                     file_name=f"clientes_sin_actividad_{datetime.now().strftime('%Y%m%d')}.xlsx"
                 )
 
+    # ══════════════════════════════════════════════════════════════════════════
+    # R_TAB 11 — PREDICCIÓN DE DEMANDA
+    # ══════════════════════════════════════════════════════════════════════════
+    with r_tab11:
+        st.write("### 🔮 Predicción de Demanda")
+        st.caption("Estimación del volumen de ventas del próximo mes basada en el historial de movimientos.")
+
+        _hist_pred = obtener_historial_movimientos()
+        if _hist_pred.empty:
+            st.info("Sin historial de movimientos para calcular predicciones.")
+        else:
+            _hp = _hist_pred[_hist_pred["Anulado"] == 0].copy()
+            _hp["_fecha"] = pd.to_datetime(_hp["Fecha"], dayfirst=True, errors="coerce")
+            _hp["_mes"]   = _hp["_fecha"].dt.to_period("M").astype(str)
+            _hp_sal = _hp[_hp["Tipo"] == "Salida"].dropna(subset=["_mes"])
+
+            _prod_pred = st.selectbox("Producto a predecir",
+                                      ["Todos"] + sorted(_hp_sal["Producto"].dropna().unique().tolist()),
+                                      key="pred_prod")
+            if _prod_pred != "Todos":
+                _hp_sal = _hp_sal[_hp_sal["Producto"] == _prod_pred]
+
+            _sal_mes = (_hp_sal.groupby("_mes")["Cantidad"].sum()
+                        .reset_index().sort_values("_mes"))
+            _sal_mes.columns = ["Mes", "Salidas"]
+
+            if len(_sal_mes) < 2:
+                st.warning("Se necesitan al menos 2 meses de historial para predecir.")
+            else:
+                # Promedio móvil 3 meses como predicción simple
+                _sal_mes["Promedio 3M"] = _sal_mes["Salidas"].rolling(3, min_periods=1).mean().round(0)
+                _pred_val = _sal_mes["Promedio 3M"].iloc[-1]
+                _prev_val = _sal_mes["Salidas"].iloc[-1]
+                _var_pct  = (_pred_val - _prev_val) / _prev_val * 100 if _prev_val > 0 else 0
+
+                _pc1, _pc2, _pc3 = st.columns(3)
+                _pc1.metric("Último mes real",    f"{_prev_val:,.0f} uds")
+                _pc2.metric("Predicción próx. mes", f"{_pred_val:,.0f} uds",
+                            delta=f"{_var_pct:+.1f}%",
+                            delta_color="normal")
+                _pc3.metric("Promedio histórico", f"{_sal_mes['Salidas'].mean():,.0f} uds")
+
+                # Gráfico con predicción
+                _fig_pred = go.Figure()
+                _fig_pred.add_trace(go.Bar(
+                    x=_sal_mes["Mes"], y=_sal_mes["Salidas"],
+                    name="Salidas reales", marker_color=_LC_NAVY
+                ))
+                _fig_pred.add_trace(go.Scatter(
+                    x=_sal_mes["Mes"], y=_sal_mes["Promedio 3M"],
+                    name="Promedio móvil 3M", mode="lines+markers",
+                    line=dict(color=_LC_YELLOW, width=2, dash="dash")
+                ))
+                # Punto de predicción
+                _mes_pred = (pd.Period(_sal_mes["Mes"].iloc[-1], "M") + 1).strftime("%Y-%m")
+                _fig_pred.add_trace(go.Scatter(
+                    x=[_mes_pred], y=[_pred_val],
+                    name="Predicción", mode="markers",
+                    marker=dict(color="#68d391", size=14, symbol="star")
+                ))
+                _fig_pred.update_layout(
+                    title=f"Historial + Predicción — {'Todos' if _prod_pred=='Todos' else _prod_pred}",
+                    height=380, margin=dict(l=10,r=10,t=40,b=10),
+                    legend=dict(orientation="h", y=-0.2),
+                    paper_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA",
+                    plot_bgcolor="rgba(0,0,0,0)"
+                )
+                st.plotly_chart(_fig_pred, use_container_width=True)
+
+                # Tabla de predicciones para todos los productos
+                st.markdown("#### 📋 Predicción por producto")
+                _all_pred = []
+                for _pp in _hp[_hp["Tipo"]=="Salida"]["Producto"].dropna().unique():
+                    _pp_mes = (_hp[(_hp["Tipo"]=="Salida") & (_hp["Producto"]==_pp)]
+                               .groupby("_mes")["Cantidad"].sum())
+                    if len(_pp_mes) >= 2:
+                        _pp_pred  = round(_pp_mes.rolling(3, min_periods=1).mean().iloc[-1], 0)
+                        _pp_real  = _pp_mes.iloc[-1]
+                        _pp_var   = round((_pp_pred - _pp_real) / _pp_real * 100, 1) if _pp_real > 0 else 0
+                        _all_pred.append({
+                            "Producto": _pp,
+                            "Último mes": int(_pp_real),
+                            "Predicción": int(_pp_pred),
+                            "Variación %": f"{_pp_var:+.1f}%",
+                            "Tendencia": "📈 Sube" if _pp_var > 5 else ("📉 Baja" if _pp_var < -5 else "➡️ Estable")
+                        })
+                if _all_pred:
+                    _df_pred_tbl = pd.DataFrame(_all_pred).sort_values("Predicción", ascending=False)
+                    st.dataframe(_df_pred_tbl, use_container_width=True, hide_index=True)
+                    st.download_button("📥 Exportar predicciones",
+                                       data=to_excel_bytes(_df_pred_tbl, "Prediccion"),
+                                       file_name=f"prediccion_demanda_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                                       key="dl_pred")
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # R_TAB 12 — CLIENTES MÁS RENTABLES
+    # ══════════════════════════════════════════════════════════════════════════
+    with r_tab12:
+        st.write("### 💰 Clientes más Rentables")
+        st.caption("Ranking de clientes por importe total comprado en la campaña actual.")
+
+        _df_vd_rent = obtener_ventas_detalle()
+        if _df_vd_rent.empty:
+            st.info("Sin datos de ventas. Importá desde Plan Comercial → Cartera de Clientes.")
+        else:
+            _camp_opts = sorted(_df_vd_rent["campana"].dropna().unique().tolist(), reverse=True)
+            _camp_sel  = st.selectbox("Campaña", _camp_opts, key="rent_camp")
+            _df_rent   = _df_vd_rent[_df_vd_rent["campana"] == _camp_sel].copy()
+
+            _rank_rent = (_df_rent.groupby("cliente").agg(
+                Importe_Total=("importe_total", "sum"),
+                Cantidad_Total=("cantidad",     "sum"),
+                Productos=("descripcion",       "nunique"),
+                Pedidos=("numero_pedido",       "nunique"),
+                Entregado=("entregada",         "sum"),
+            ).reset_index()
+            .rename(columns={"cliente":"Cliente"})
+            .sort_values("Importe_Total", ascending=False))
+
+            _rank_rent["% Entregado"] = (
+                _rank_rent["Entregado"] / _rank_rent["Cantidad_Total"].replace(0,1) * 100
+            ).round(1).astype(str) + "%"
+            _rank_rent["Importe USD"] = _rank_rent["Importe_Total"].apply(lambda x: f"USD {x:,.0f}")
+            _rank_rent["#"] = range(1, len(_rank_rent)+1)
+
+            # KPIs top
+            _rk1, _rk2, _rk3, _rk4 = st.columns(4)
+            _rk1.metric("Total clientes",   len(_rank_rent))
+            _rk2.metric("Facturación total", f"USD {_rank_rent['Importe_Total'].sum():,.0f}")
+            _rk3.metric("Top cliente",       _rank_rent["Cliente"].iloc[0] if not _rank_rent.empty else "-")
+            _rk4.metric("Ticket promedio",   f"USD {_rank_rent['Importe_Total'].mean():,.0f}")
+
+            # Gráfico top 15
+            _fig_rent = px.bar(
+                _rank_rent.head(15),
+                x="Importe_Total", y="Cliente", orientation="h",
+                color="Importe_Total",
+                color_continuous_scale=[_LC_NAVY, _LC_YELLOW],
+                text="Importe USD",
+                title=f"Top 15 Clientes por Importe — Campaña {_camp_sel}"
+            )
+            _fig_rent.update_traces(textposition="outside")
+            _fig_rent.update_layout(
+                yaxis={"categoryorder":"total ascending"},
+                height=480, margin=dict(l=10,r=10,t=40,b=10),
+                coloraxis_showscale=False,
+                paper_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA",
+                plot_bgcolor="rgba(0,0,0,0)"
+            )
+            st.plotly_chart(_fig_rent, use_container_width=True)
+
+            # Pareto — cuántos clientes concentran el 80% de la facturación
+            _rank_rent["Acum %"] = (_rank_rent["Importe_Total"].cumsum() /
+                                     _rank_rent["Importe_Total"].sum() * 100).round(1)
+            _pareto80 = len(_rank_rent[_rank_rent["Acum %"] <= 80])
+            st.info(f"📊 **Ley de Pareto:** {_pareto80} clientes concentran el 80% de la facturación ({_pareto80}/{len(_rank_rent)} = {_pareto80/len(_rank_rent)*100:.0f}% de la cartera)")
+
+            st.dataframe(
+                _rank_rent[["#","Cliente","Importe USD","Cantidad_Total","Productos","% Entregado","Acum %"]],
+                use_container_width=True, hide_index=True
+            )
+            st.download_button("📥 Exportar ranking",
+                               data=to_excel_bytes(_rank_rent, "Ranking_Clientes"),
+                               file_name=f"ranking_clientes_{_camp_sel}_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                               key="dl_rank_rent")
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # R_TAB 13 — PRODUCTO POR ZONA
+    # ══════════════════════════════════════════════════════════════════════════
+    with r_tab13:
+        st.write("### 🗺️ Producto más vendido por Zona")
+        st.caption("Cruce entre localidad del cliente y productos comprados. Identifica qué se vende más en cada zona.")
+
+        _df_vd_zona = obtener_ventas_detalle()
+        if _df_vd_zona.empty:
+            st.info("Sin datos de ventas. Importá desde Plan Comercial → Cartera de Clientes.")
+        else:
+            _camp_zona = st.selectbox("Campaña", sorted(_df_vd_zona["campana"].dropna().unique(), reverse=True),
+                                      key="zona_camp")
+            _df_zona = _df_vd_zona[(_df_vd_zona["campana"] == _camp_zona) &
+                                    (_df_vd_zona["localidad"].notna()) &
+                                    (_df_vd_zona["localidad"] != "")].copy()
+
+            if _df_zona.empty:
+                st.warning("Sin datos de localidad en esta campaña. Verificá que el campo Localidad esté cargado al importar.")
+            else:
+                _zc1, _zc2 = st.columns(2)
+                with _zc1:
+                    _zona_sel = st.selectbox("Filtrar por localidad",
+                                             ["Todas"] + sorted(_df_zona["localidad"].unique().tolist()),
+                                             key="zona_loc")
+                with _zc2:
+                    _top_n_zona = st.slider("Top N productos", 5, 20, 10, key="zona_topn")
+
+                _df_zona_f = _df_zona if _zona_sel == "Todas" else _df_zona[_df_zona["localidad"] == _zona_sel]
+
+                # Heatmap zona × producto
+                _pivot = (_df_zona_f.groupby(["localidad","descripcion"])["cantidad"]
+                          .sum().reset_index())
+                _top_prods_zona = (_pivot.groupby("descripcion")["cantidad"].sum()
+                                   .nlargest(_top_n_zona).index.tolist())
+                _pivot_top = _pivot[_pivot["descripcion"].isin(_top_prods_zona)]
+                _heat_df   = _pivot_top.pivot_table(index="localidad", columns="descripcion",
+                                                     values="cantidad", aggfunc="sum", fill_value=0)
+
+                if not _heat_df.empty:
+                    _fig_heat = px.imshow(
+                        _heat_df,
+                        color_continuous_scale=["#0E1117", _LC_NAVY, _LC_YELLOW],
+                        title=f"Volumen por Zona × Producto — Top {_top_n_zona}",
+                        aspect="auto",
+                        text_auto=".0f"
+                    )
+                    _fig_heat.update_layout(
+                        height=max(350, len(_heat_df) * 30),
+                        margin=dict(l=10,r=10,t=40,b=10),
+                        paper_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA",
+                        coloraxis_colorbar=dict(title="Unidades")
+                    )
+                    st.plotly_chart(_fig_heat, use_container_width=True)
+
+                # Ranking por localidad
+                st.markdown("#### 🏆 Producto líder por localidad")
+                _lider_zona = (_df_zona_f.groupby(["localidad","descripcion"])["cantidad"]
+                               .sum().reset_index()
+                               .sort_values("cantidad", ascending=False)
+                               .groupby("localidad").first()
+                               .reset_index()
+                               .rename(columns={"descripcion":"Producto líder","cantidad":"Unidades"})
+                               .sort_values("Unidades", ascending=False))
+                st.dataframe(_lider_zona, use_container_width=True, hide_index=True)
+
+                # Gráfico barras apiladas top zonas
+                _top_zonas = (_df_zona_f.groupby("localidad")["cantidad"].sum()
+                              .nlargest(12).index.tolist())
+                _df_stack = (_df_zona_f[_df_zona_f["localidad"].isin(_top_zonas) &
+                                        _df_zona_f["descripcion"].isin(_top_prods_zona)]
+                             .groupby(["localidad","descripcion"])["cantidad"].sum().reset_index())
+                if not _df_stack.empty:
+                    _fig_stack = px.bar(
+                        _df_stack, x="localidad", y="cantidad", color="descripcion",
+                        title="Top 12 Zonas — Composición por Producto",
+                        labels={"cantidad":"Unidades","localidad":"Localidad","descripcion":"Producto"},
+                        barmode="stack"
+                    )
+                    _fig_stack.update_layout(
+                        height=420, margin=dict(l=10,r=10,t=40,b=10),
+                        legend=dict(orientation="h", y=-0.3),
+                        paper_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA",
+                        plot_bgcolor="rgba(0,0,0,0)"
+                    )
+                    st.plotly_chart(_fig_stack, use_container_width=True)
+
+                st.download_button("📥 Exportar datos por zona",
+                                   data=to_excel_bytes(_pivot_top, "Producto_Zona"),
+                                   file_name=f"producto_zona_{_camp_zona}_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                                   key="dl_zona")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 9 — CONFIGURACIÓN
