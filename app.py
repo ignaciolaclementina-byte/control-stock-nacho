@@ -1,5 +1,5 @@
 """
-Control de Depósito Inteligente — La Clementina S.A.
+Control de Depósito Inteligente — La Clementina S.A. SAN JORGE
 Versión PRO: auth, transferencias, valorización, rotación,
              reportes, email, importación incremental, PDF.
 
