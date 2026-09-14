@@ -2284,7 +2284,7 @@ st.markdown(f"""
 
 # session_state para cache lazy por tab (se carga la primera vez que se abre cada tab)
 
-tab1, tab11, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab12 = st.tabs([
+tab1, tab11, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab12, tab_traz = st.tabs([
     "⚡ Panel",
     "🔄 Sin Entregar MG",
     "📦 LC / LCAGRO",
@@ -2297,6 +2297,7 @@ tab1, tab11, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab12 = st.t
     "⚙️ Configuración",
     "📊 Plan Comercial",
     "🏷️ Lista de Precios",
+    "🔍 Trazabilidad",
 ])
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -7489,3 +7490,224 @@ with tab11: _render_tab11()
 
 
 with tab12: _render_tab12()
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TAB TRAZABILIDAD
+# ═══════════════════════════════════════════════════════════════════════════════
+with tab_traz:
+    st.subheader("🔍 Trazabilidad de Lotes y Movimientos")
+
+    # ── Cargar datos base ──────────────────────────────────────────────────────
+    @st.cache_data(ttl=120, show_spinner=False)
+    def _traz_movimientos():
+        conn = conectar_db()
+        ph = "%s" if IS_POSTGRES else "?"
+        df = _rsql("""
+            SELECT m.id_movimiento, m.fecha_hora, m.tipo_movimiento,
+                   p.nombre producto, p.codigo, p.unidad,
+                   m.cantidad, m.lote, m.deposito,
+                   m.referencia, m.origen, m.usuario,
+                   COALESCE(m.anulado,0) anulado
+            FROM movimientos m
+            JOIN productos p ON m.id_producto = p.id_producto
+            ORDER BY m.fecha_hora DESC
+        """, conn)
+        conn.close()
+        return df
+
+    df_traz = _traz_movimientos()
+
+    if df_traz.empty:
+        st.warning("Sin datos. Importá el stock primero.")
+        st.stop()
+
+    # Normalizar
+    df_traz["lote"] = df_traz["lote"].fillna("S/L").astype(str).str.strip()
+    df_traz["lote"] = df_traz["lote"].replace({"": "S/L", "nan": "S/L"})
+    df_traz["cantidad"] = pd.to_numeric(df_traz["cantidad"], errors="coerce").fillna(0)
+    df_traz["neta"] = df_traz.apply(
+        lambda r: r["cantidad"] if r["tipo_movimiento"] == "Entrada" else -r["cantidad"], axis=1
+    )
+
+    # ── Filtros de búsqueda ────────────────────────────────────────────────────
+    st.markdown("### 🔎 Buscar")
+    _tc1, _tc2, _tc3 = st.columns(3)
+    with _tc1:
+        _t_prod = st.selectbox("Producto", ["Todos"] + sorted(df_traz["producto"].unique().tolist()), key="traz_prod")
+    with _tc2:
+        _lotes_disp = sorted(df_traz["lote"].unique().tolist())
+        _t_lote = st.selectbox("Lote", ["Todos"] + _lotes_disp, key="traz_lote")
+    with _tc3:
+        # Buscar clientes desde entregas
+        try:
+            _conn_e = conectar_db()
+            _df_cli = _rsql("SELECT DISTINCT cliente FROM entregas WHERE cliente IS NOT NULL ORDER BY cliente", _conn_e)
+            _conn_e.close()
+            _clientes = _df_cli["cliente"].tolist() if not _df_cli.empty else []
+        except Exception:
+            _clientes = []
+        _t_cli = st.selectbox("Cliente", ["Todos"] + _clientes, key="traz_cli")
+
+    _tc4, _tc5 = st.columns(2)
+    with _tc4:
+        _t_dep = st.selectbox("Depósito", ["Todos"] + sorted(df_traz["deposito"].dropna().unique().tolist()), key="traz_dep")
+    with _tc5:
+        _t_texto = st.text_input("Buscar texto libre (producto, lote, referencia)", key="traz_texto")
+
+    # ── Aplicar filtros ────────────────────────────────────────────────────────
+    df_f = df_traz[df_traz["anulado"] == 0].copy()
+    if _t_prod != "Todos":
+        df_f = df_f[df_f["producto"] == _t_prod]
+    if _t_lote != "Todos":
+        df_f = df_f[df_f["lote"] == _t_lote]
+    if _t_dep != "Todos":
+        df_f = df_f[df_f["deposito"].astype(str) == str(_t_dep)]
+    if _t_texto:
+        _mask = (
+            df_f["producto"].str.contains(_t_texto, case=False, na=False) |
+            df_f["lote"].str.contains(_t_texto, case=False, na=False) |
+            df_f["referencia"].astype(str).str.contains(_t_texto, case=False, na=False)
+        )
+        df_f = df_f[_mask]
+
+    # Filtro por cliente: buscar entregas del cliente y filtrar por producto
+    if _t_cli != "Todos":
+        try:
+            _conn_ec = conectar_db()
+            _ph2 = "%s" if IS_POSTGRES else "?"
+            _df_ec = _rsql(f"SELECT DISTINCT producto FROM entregas WHERE cliente={_ph2}", _conn_ec, params=(_t_cli,))
+            _conn_ec.close()
+            if not _df_ec.empty:
+                _prods_cli = _df_ec["producto"].tolist()
+                df_f = df_f[df_f["producto"].isin(_prods_cli)]
+        except Exception:
+            pass
+
+    st.markdown(f"**{len(df_f)} movimientos encontrados**")
+
+    # ── Resumen por producto+lote ──────────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("### 📦 Stock actual por Producto / Lote / Depósito")
+    if not df_f.empty:
+        _resumen = (df_f.groupby(["producto", "lote", "deposito"])["neta"]
+                    .sum().reset_index()
+                    .rename(columns={"neta": "Stock Actual"}))
+        _resumen = _resumen[_resumen["Stock Actual"] != 0].sort_values(
+            ["producto", "lote", "deposito"]
+        )
+        if not _resumen.empty:
+            st.dataframe(_resumen, use_container_width=True, hide_index=True)
+        else:
+            st.info("Stock neto cero para la selección.")
+
+    # ── Timeline de movimientos ────────────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("### 📋 Línea de vida — Movimientos detallados")
+    if not df_f.empty:
+        _cols_show = ["fecha_hora", "tipo_movimiento", "producto", "lote",
+                      "deposito", "cantidad", "referencia", "usuario"]
+        _df_show = df_f[_cols_show].copy()
+        _df_show.columns = ["Fecha", "Tipo", "Producto", "Lote",
+                             "Depósito", "Cantidad", "Referencia", "Usuario"]
+        _df_show = _df_show.sort_values("Fecha", ascending=False)
+
+        # Color por tipo
+        def _color_tipo(row):
+            if row["Tipo"] == "Entrada":
+                return ["background-color: #1a3a1a"] * len(row)
+            elif row["Tipo"] == "Salida":
+                return ["background-color: #3a1a1a"] * len(row)
+            return [""] * len(row)
+
+        st.dataframe(
+            _df_show.style.apply(_color_tipo, axis=1),
+            use_container_width=True,
+            hide_index=True,
+            height=400
+        )
+
+    # ── Entregas por cliente (si hay filtro de producto o lote) ───────────────
+    if _t_prod != "Todos" or _t_lote != "Todos":
+        st.markdown("---")
+        st.markdown("### 🚚 Entregas registradas a clientes")
+        try:
+            _conn_ent = conectar_db()
+            _ent_sql = "SELECT fecha_pedido, cliente, producto, lote, cant_entregada, deposito FROM entregas WHERE 1=1"
+            _ent_params = []
+            if _t_prod != "Todos":
+                _ent_sql += f" AND producto = {'%s' if IS_POSTGRES else '?'}"
+                _ent_params.append(_t_prod)
+            if _t_lote != "Todos":
+                _ent_sql += f" AND lote = {'%s' if IS_POSTGRES else '?'}"
+                _ent_params.append(_t_lote)
+            _ent_sql += " ORDER BY fecha_pedido DESC"
+            _df_ent = _rsql(_ent_sql, _conn_ent, params=_ent_params if _ent_params else None)
+            _conn_ent.close()
+            if not _df_ent.empty:
+                st.dataframe(_df_ent, use_container_width=True, hide_index=True)
+            else:
+                st.info("Sin entregas registradas para este filtro.")
+        except Exception as _e:
+            st.info(f"No se pudieron cargar entregas: {_e}")
+
+    # ── Exportar ───────────────────────────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("### 📥 Exportar trazabilidad")
+    _ec1, _ec2 = st.columns(2)
+    with _ec1:
+        if not df_f.empty:
+            _xlsx_traz = to_excel_bytes(df_f[[
+                "fecha_hora","tipo_movimiento","producto","codigo","lote",
+                "deposito","cantidad","referencia","usuario"
+            ]].rename(columns={
+                "fecha_hora":"Fecha","tipo_movimiento":"Tipo","producto":"Producto",
+                "codigo":"Código","lote":"Lote","deposito":"Depósito",
+                "cantidad":"Cantidad","referencia":"Referencia","usuario":"Usuario"
+            }), "Trazabilidad")
+            st.download_button(
+                "📊 Descargar Excel",
+                data=_xlsx_traz,
+                file_name=f"trazabilidad_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="dl_traz_xlsx"
+            )
+    with _ec2:
+        if PDF_AVAILABLE and not df_f.empty:
+            try:
+                _buf_pdf = io.BytesIO()
+                _doc = SimpleDocTemplate(_buf_pdf, pagesize=landscape(A4),
+                                         leftMargin=1*cm, rightMargin=1*cm,
+                                         topMargin=1.5*cm, bottomMargin=1*cm)
+                _styles = getSampleStyleSheet()
+                _elems = []
+                _elems.append(Paragraph(
+                    f"Trazabilidad — La Clementina S.A. — {datetime.now().strftime('%d/%m/%Y %H:%M')}",
+                    _styles["Heading2"]
+                ))
+                _elems.append(Spacer(1, 0.3*cm))
+                _pdf_df = df_f[["fecha_hora","tipo_movimiento","producto","lote",
+                                 "deposito","cantidad","referencia"]].head(500)
+                _pdf_df.columns = ["Fecha","Tipo","Producto","Lote","Depósito","Cantidad","Referencia"]
+                _data_pdf = [list(_pdf_df.columns)] + _pdf_df.values.tolist()
+                _tbl = Table(_data_pdf, repeatRows=1)
+                _tbl.setStyle(TableStyle([
+                    ("BACKGROUND",  (0,0), (-1,0),  rl_colors.HexColor("#1B5E20")),
+                    ("TEXTCOLOR",   (0,0), (-1,0),  rl_colors.white),
+                    ("FONTSIZE",    (0,0), (-1,-1), 7),
+                    ("GRID",        (0,0), (-1,-1), 0.3, rl_colors.grey),
+                    ("ROWBACKGROUNDS", (0,1), (-1,-1), [rl_colors.white, rl_colors.HexColor("#F1F8E9")]),
+                ]))
+                _elems.append(_tbl)
+                _doc.build(_elems)
+                _buf_pdf.seek(0)
+                st.download_button(
+                    "📄 Descargar PDF",
+                    data=_buf_pdf,
+                    file_name=f"trazabilidad_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
+                    mime="application/pdf",
+                    key="dl_traz_pdf"
+                )
+            except Exception as _ep:
+                st.caption(f"PDF no disponible: {_ep}")
+        elif not PDF_AVAILABLE:
+            st.caption("PDF no disponible (reportlab no instalado)")
