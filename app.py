@@ -5172,23 +5172,25 @@ with tab9:
                     _prog.progress(45, "Insertando productos (batch)...")
                     productos_uniq = {r["nom"]: r for r in filas_raw}
                     prod_batch = [(p["nom"], p["uni"], p["cod"]) for p in productos_uniq.values()]
-                    conn.cursor().executemany(
-                        "INSERT OR IGNORE INTO productos (nombre,unidad,codigo) VALUES (?,?,?)",
-                        prod_batch
-                    )
-                    conn.commit()
+                    _cur2 = conn._raw.cursor()
+                    _sql_ins_prod = "INSERT OR IGNORE INTO productos (nombre,unidad,codigo) VALUES (?,?,?)"
+                    if getattr(conn, "_pg", False):
+                        _sql_ins_prod = _adapt_pg(_sql_ins_prod)
+                    _cur2.executemany(_sql_ins_prod, prod_batch)
+                    conn._raw.commit()
                     pa = len(prod_batch)
 
-                    # ── Paso 3: cargar mapa nombre → id_producto ───────────────
-                    # Usamos SELECT * sin filtro IN para evitar problemas con listas grandes
+                    # ── Paso 3: cerrar y reabrir conexión para ver los productos recién insertados ──
                     _prog.progress(60, "Mapeando IDs de productos...")
-                    id_map_rows = conn.execute(
+                    conn.close()
+                    conn = conectar_db()
+                    id_map_rows = conn._raw.execute(
                         "SELECT id_producto, nombre FROM productos"
                     ).fetchall()
                     id_map = {r[1]: r[0] for r in id_map_rows}
 
                     # ── Paso 4: insertar movimientos en batch ──────────────────
-                    _prog.progress(70, "Insertando movimientos (batch)...")
+                    _prog.progress(70, f"Insertando movimientos (id_map={len(id_map)} productos)...")
                     mov_batch = []
                     for r in filas_raw:
                         pid = id_map.get(r["nom"])
@@ -5199,14 +5201,15 @@ with tab9:
                             r["stk"], r["lot"], "Saldo Inicial",
                             r["dep"], "excel", _usu
                         ))
-                    conn.cursor().executemany(
-                        """INSERT INTO movimientos
+                    _cur4 = conn._raw.cursor()
+                    _sql_ins_mov = """INSERT INTO movimientos
                            (fecha_hora,tipo_movimiento,id_producto,cantidad,lote,
                             referencia,deposito,origen,usuario)
-                           VALUES (?,?,?,?,?,?,?,?,?)""",
-                        mov_batch
-                    )
-                    conn.commit()
+                           VALUES (?,?,?,?,?,?,?,?,?)"""
+                    if getattr(conn, "_pg", False):
+                        _sql_ins_mov = _adapt_pg(_sql_ins_mov)
+                    _cur4.executemany(_sql_ins_mov, mov_batch)
+                    conn._raw.commit()
                     mo = len(mov_batch)
                     conn.close()
                     _prog.progress(100, "¡Listo!")
