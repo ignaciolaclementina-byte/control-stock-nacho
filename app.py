@@ -5205,16 +5205,23 @@ with tab9:
                     _prog.progress(45, "Insertando productos (batch)...")
                     productos_uniq = {r["nom"]: r for r in filas_raw}
                     prod_batch = [(p["nom"], p["uni"], p["cod"]) for p in productos_uniq.values()]
-                    conn.cursor().executemany(
-                        "INSERT OR IGNORE INTO productos (nombre,unidad,codigo) VALUES (?,?,?)",
-                        prod_batch
-                    )
+                    if IS_POSTGRES:
+                        from psycopg2.extras import execute_values as _ev
+                        _rc = conn._raw.cursor()
+                        _ev(_rc,
+                            "INSERT INTO productos (nombre,unidad,codigo) VALUES %s ON CONFLICT (nombre) DO NOTHING",
+                            prod_batch)
+                    else:
+                        conn.cursor().executemany(
+                            "INSERT OR IGNORE INTO productos (nombre,unidad,codigo) VALUES (?,?,?)",
+                            prod_batch
+                        )
                     conn.commit()
                     pa = len(prod_batch)
 
                     # ── Paso 3: cargar mapa nombre → id_producto ───────────────────────────────
                     _prog.progress(60, "Mapeando IDs de productos...")
-                    noms_sql = ",".join(["?"] * len(productos_uniq))
+                    noms_sql = ",".join(["?" if not IS_POSTGRES else "%s"] * len(productos_uniq))
                     id_map_rows = conn.execute(
                         f"SELECT id_producto, nombre FROM productos WHERE nombre IN ({noms_sql})",
                         list(productos_uniq.keys())
@@ -5233,13 +5240,23 @@ with tab9:
                             r["stk"], r["lot"], "Saldo Inicial",
                             r["dep"], "excel", _usu
                         ))
-                    conn.cursor().executemany(
-                        """INSERT INTO movimientos
-                           (fecha_hora,tipo_movimiento,id_producto,cantidad,lote,
-                            referencia,deposito,origen,usuario)
-                           VALUES (?,?,?,?,?,?,?,?,?)""",
-                        mov_batch
-                    )
+                    if IS_POSTGRES:
+                        from psycopg2.extras import execute_values as _ev
+                        _rc2 = conn._raw.cursor()
+                        _ev(_rc2,
+                            """INSERT INTO movimientos
+                               (fecha_hora,tipo_movimiento,id_producto,cantidad,lote,
+                                referencia,deposito,origen,usuario)
+                               VALUES %s""",
+                            mov_batch)
+                    else:
+                        conn.cursor().executemany(
+                            """INSERT INTO movimientos
+                               (fecha_hora,tipo_movimiento,id_producto,cantidad,lote,
+                                referencia,deposito,origen,usuario)
+                               VALUES (?,?,?,?,?,?,?,?,?)""",
+                            mov_batch
+                        )
                     conn.commit()
                     mo = len(mov_batch)
                     conn.close()
