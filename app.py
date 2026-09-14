@@ -7491,40 +7491,44 @@ with tab11: _render_tab11()
 
 with tab12: _render_tab12()
 
+# ── Función global cacheada para trazabilidad ─────────────────────────────────
+@st.cache_data(ttl=180, show_spinner=False)
+def obtener_trazabilidad_completa():
+    conn = conectar_db()
+    df = _rsql("""
+        SELECT m.id_movimiento, m.fecha_hora, m.tipo_movimiento,
+               p.nombre producto, p.codigo, p.unidad,
+               m.cantidad, m.lote, m.deposito,
+               m.referencia, m.origen, m.usuario,
+               COALESCE(m.anulado,0) anulado
+        FROM movimientos m
+        JOIN productos p ON m.id_producto = p.id_producto
+        ORDER BY m.fecha_hora DESC
+    """, conn)
+    conn.close()
+    if df.empty:
+        return df
+    df["lote"] = df["lote"].fillna("S/L").astype(str).str.strip()
+    df["lote"] = df["lote"].replace({"": "S/L", "nan": "S/L"})
+    df["cantidad"] = pd.to_numeric(df["cantidad"], errors="coerce").fillna(0)
+    df["neta"] = df.apply(
+        lambda r: r["cantidad"] if r["tipo_movimiento"] == "Entrada" else -r["cantidad"], axis=1
+    )
+    return df
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB TRAZABILIDAD
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab_traz:
     st.subheader("🔍 Trazabilidad de Lotes y Movimientos")
 
-    # ── Cargar datos base ──────────────────────────────────────────────────────
-    @st.cache_data(ttl=120, show_spinner=False)
-    def _traz_movimientos():
-        conn = conectar_db()
-        ph = "%s" if IS_POSTGRES else "?"
-        df = _rsql("""
-            SELECT m.id_movimiento, m.fecha_hora, m.tipo_movimiento,
-                   p.nombre producto, p.codigo, p.unidad,
-                   m.cantidad, m.lote, m.deposito,
-                   m.referencia, m.origen, m.usuario,
-                   COALESCE(m.anulado,0) anulado
-            FROM movimientos m
-            JOIN productos p ON m.id_producto = p.id_producto
-            ORDER BY m.fecha_hora DESC
-        """, conn)
-        conn.close()
-        return df
-
-    df_traz = _traz_movimientos()
+    # ── Cargar datos base (cacheado globalmente) ───────────────────────────────
+    df_traz = obtener_trazabilidad_completa()
 
     if df_traz.empty:
         st.warning("Sin datos. Importá el stock primero.")
         st.stop()
 
-    # Normalizar
-    df_traz["lote"] = df_traz["lote"].fillna("S/L").astype(str).str.strip()
-    df_traz["lote"] = df_traz["lote"].replace({"": "S/L", "nan": "S/L"})
-    df_traz["cantidad"] = pd.to_numeric(df_traz["cantidad"], errors="coerce").fillna(0)
     df_traz["neta"] = df_traz.apply(
         lambda r: r["cantidad"] if r["tipo_movimiento"] == "Entrada" else -r["cantidad"], axis=1
     )
@@ -7543,7 +7547,7 @@ with tab_traz:
             _conn_e = conectar_db()
             _df_cli = _rsql("SELECT DISTINCT cliente FROM entregas WHERE cliente IS NOT NULL ORDER BY cliente", _conn_e)
             _conn_e.close()
-            _clientes = _df_cli["cliente"].tolist() if not _df_cli.empty else []
+            _clientes = sorted(_df_cli["cliente"].dropna().tolist()) if not _df_cli.empty else []
         except Exception:
             _clientes = []
         _t_cli = st.selectbox("Cliente", ["Todos"] + _clientes, key="traz_cli")
