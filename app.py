@@ -336,6 +336,7 @@ class _DB:
             url = _DB_URL.replace("postgres://", "postgresql://", 1)
             try:
                 self._raw = psycopg2.connect(url, connect_timeout=8)
+                self._raw.autocommit = True
                 self._pg  = True
             except Exception as _pg_err:
                 import streamlit as _st_warn
@@ -360,7 +361,10 @@ class _DB:
         cur.execute(sql, params if params else None)
         return cur
 
-    def commit(self): self._raw.commit()
+    def commit(self):
+        # Con autocommit=True en PostgreSQL, cada statement se commitea solo
+        if not self._pg:
+            self._raw.commit()
     def close(self):
         # En PostgreSQL usamos conexión cacheada — no cerrar
         if not self._pg:
@@ -400,7 +404,12 @@ def _rsql(sql: str, conn, params=None) -> pd.DataFrame:
         if params:
             return pd.read_sql_query(sql, raw, params=list(params))
         return pd.read_sql_query(sql, raw)
-    except Exception:
+    except Exception as _e:
+        # En PostgreSQL: rollback para recuperar la conexión del estado aborted
+        try:
+            raw.rollback()
+        except Exception:
+            pass
         return pd.DataFrame()
 
 
