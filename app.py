@@ -1,9 +1,9 @@
-"""
-Control de Depósito Inteligente — La Clementina S.A.
-Versión PRO: auth, transferencias, valorización, rotación,
-             reportes, email, importación incremental, PDF.
+﻿"""
+Control de DepÃ³sito Inteligente â€” La Clementina S.A.
+VersiÃ³n PRO: auth, transferencias, valorizaciÃ³n, rotaciÃ³n,
+             reportes, email, importaciÃ³n incremental, PDF.
 
-Dependencias adicionales (instalar si no están):
+Dependencias adicionales (instalar si no estÃ¡n):
     pip install streamlit pandas plotly numpy opencv-python pillow openpyxl
     pip install reportlab          # PDF reports (opcional)
     # Para PostgreSQL (opcional):
@@ -41,11 +41,11 @@ try:
 except ImportError:
     PDF_AVAILABLE = False
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 1. CONFIGURACIÓN DE PÁGINA Y CSS
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# 1. CONFIGURACIÃ“N DE PÃGINA Y CSS
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-# Escribir config.toml con dark mode LC si no existe o está desactualizado
+# Escribir config.toml con dark mode LC si no existe o estÃ¡ desactualizado
 _cfg_dir  = os.path.join(os.path.dirname(__file__), ".streamlit")
 _cfg_file = os.path.join(_cfg_dir, "config.toml")
 _cfg_content = """[theme]
@@ -69,8 +69,8 @@ except Exception:
     pass
 
 st.set_page_config(
-    page_title="La Clementina — Control de Depósito",
-    page_icon="🌿",
+    page_title="La Clementina â€” Control de DepÃ³sito",
+    page_icon="ðŸŒ¿",
     layout="wide"
 )
 
@@ -81,7 +81,7 @@ _LC_LIGHT  = "#FFF8E7"
 
 st.markdown(f"""
 <style>
-/* ── Forzar dark mode en toda la app ── */
+/* â”€â”€ Forzar dark mode en toda la app â”€â”€ */
 html, body, [data-testid="stAppViewContainer"],
 [data-testid="stHeader"], .main, .block-container {{
     background-color: #0E1117 !important;
@@ -98,7 +98,7 @@ details, [data-testid="stExpander"] > div:first-child {{
     border-radius: 8px !important;
 }}
 
-/* Métricas */
+/* MÃ©tricas */
 [data-testid="metric-container"] {{
     background-color: #1C2333 !important;
     border: 1px solid #2D3748 !important;
@@ -106,7 +106,7 @@ details, [data-testid="stExpander"] > div:first-child {{
     padding: 12px !important;
 }}
 
-/* ── Solo elementos HTML custom — */
+/* â”€â”€ Solo elementos HTML custom â€” */
 
 /* Botones LC */
 .stButton>button{{
@@ -211,7 +211,7 @@ details, [data-testid="stExpander"] > div:first-child {{
 .login-box {{max-width:400px;margin:80px auto;padding:30px;background:#1C2333;
              border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,.4);border:1px solid #2D3748}}
 
-/* Semáforos */
+/* SemÃ¡foros */
 .semaforo-verde    {{background:#1a2e1a;border-left:6px solid #38a169;padding:8px 14px;border-radius:6px;margin:3px 0}}
 .semaforo-amarillo {{background:#2d2010;border-left:6px solid {_LC_YELLOW};padding:8px 14px;border-radius:6px;margin:3px 0}}
 .semaforo-rojo     {{background:#2d1212;border-left:6px solid #e53e3e;padding:8px 14px;border-radius:6px;margin:3px 0}}
@@ -237,11 +237,11 @@ details, [data-testid="stExpander"] > div:first-child {{
 </style>
 """, unsafe_allow_html=True)
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 2. CAPA DE DATOS — SQLite (local/dev) o PostgreSQL/Supabase (producción)
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# 2. CAPA DE DATOS â€” SQLite (local/dev) o PostgreSQL/Supabase (producciÃ³n)
 #    Configurar: st.secrets["DATABASE_URL"] = "postgresql://user:pass@host/db"
-#    o variable de entorno DATABASE_URL en Streamlit Cloud Settings → Secrets
-# ─────────────────────────────────────────────────────────────────────────────
+#    o variable de entorno DATABASE_URL en Streamlit Cloud Settings â†’ Secrets
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _get_db_url() -> str:
     try:
@@ -252,7 +252,7 @@ def _get_db_url() -> str:
 _DB_URL     = _get_db_url()
 IS_POSTGRES = bool(_DB_URL and "postgres" in _DB_URL.lower())
 
-# Reglas de conflicto para INSERT OR REPLACE / INSERT OR IGNORE → PostgreSQL
+# Reglas de conflicto para INSERT OR REPLACE / INSERT OR IGNORE â†’ PostgreSQL
 _UPSERT_CONF = {
     "metadata":         ["clave"],
     "usuarios":         ["username"],
@@ -274,7 +274,7 @@ _OR_IGNORE_RE = _re.compile(
 )
 
 def _adapt_pg(sql: str) -> str:
-    """Traduce SQL SQLite → PostgreSQL: placeholders y variantes INSERT."""
+    """Traduce SQL SQLite â†’ PostgreSQL: placeholders y variantes INSERT."""
     sql = sql.replace("?", "%s")
     m = _OR_REPLACE_RE.match(sql.strip())
     if m:
@@ -298,7 +298,7 @@ def _adapt_pg(sql: str) -> str:
 
 
 class _Cur:
-    """Cursor normalizado que adapta SQL según el backend."""
+    """Cursor normalizado que adapta SQL segÃºn el backend."""
     __slots__ = ("_c", "_pg")
 
     def __init__(self, raw_cursor, pg: bool):
@@ -328,7 +328,7 @@ class _Cur:
 
 
 class _DB:
-    """Conexión unificada: sqlite3 o psycopg2 según DATABASE_URL."""
+    """ConexiÃ³n unificada: sqlite3 o psycopg2 segÃºn DATABASE_URL."""
 
     def __init__(self):
         if IS_POSTGRES:
@@ -342,9 +342,9 @@ class _DB:
                 import streamlit as _st_warn
                 if not _st_warn.session_state.get("_supabase_warn_shown"):
                     _st_warn.warning(
-                        f"⚠️ Supabase no disponible ({_pg_err.__class__.__name__}). "
-                        "Usando base de datos local (SQLite). Los datos no se sincronizarán hasta que Supabase vuelva.",
-                        icon="🗄️",
+                        f"âš ï¸ Supabase no disponible ({_pg_err.__class__.__name__}). "
+                        "Usando base de datos local (SQLite). Los datos no se sincronizarÃ¡n hasta que Supabase vuelva.",
+                        icon="ðŸ—„ï¸",
                     )
                     _st_warn.session_state["_supabase_warn_shown"] = True
                 self._raw = sqlite3.connect("stock_agroquimicos.db", check_same_thread=False)
@@ -366,7 +366,7 @@ class _DB:
         if not self._pg:
             self._raw.commit()
     def close(self):
-        # En PostgreSQL usamos conexión cacheada — no cerrar
+        # En PostgreSQL usamos conexiÃ³n cacheada â€” no cerrar
         if not self._pg:
             self._raw.close()
 
@@ -379,13 +379,13 @@ class _DB:
 
 @st.cache_resource
 def _get_cached_db() -> _DB:
-    """Conexión única reutilizable (PostgreSQL connection pooling)."""
+    """ConexiÃ³n Ãºnica reutilizable (PostgreSQL connection pooling)."""
     return _DB()
 
 def conectar_db() -> _DB:
     if IS_POSTGRES:
         db = _get_cached_db()
-        # Reconectar si la conexión se cerró
+        # Reconectar si la conexiÃ³n se cerrÃ³
         try:
             db._raw.cursor().execute("SELECT 1")
         except Exception:
@@ -418,7 +418,7 @@ def _rsql(sql: str, conn, params=None) -> pd.DataFrame:
 
 
 def _changes(conn, cur) -> int:
-    """Filas afectadas por último INSERT OR IGNORE."""
+    """Filas afectadas por Ãºltimo INSERT OR IGNORE."""
     if IS_POSTGRES:
         return cur.rowcount if cur else 0
     row = conn._raw.execute("SELECT changes()").fetchone()
@@ -670,7 +670,7 @@ def inicializar_db():
             try:  c.execute(m)
             except: pass
 
-    # Índices para acelerar queries sobre tablas grandes
+    # Ãndices para acelerar queries sobre tablas grandes
     for idx_sql in [
         "CREATE INDEX IF NOT EXISTS idx_mov_producto ON movimientos(id_producto)",
         "CREATE INDEX IF NOT EXISTS idx_mov_origen   ON movimientos(origen)",
@@ -702,9 +702,9 @@ def inicializar_db():
     conn.commit()
     conn.close()
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 3. CRUD BÁSICO
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# 3. CRUD BÃSICO
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def guardar_metadata(clave, valor):
     conn = conectar_db()
     conn.execute("INSERT OR REPLACE INTO metadata (clave,valor) VALUES (?,?)", (clave, valor))
@@ -730,9 +730,9 @@ def borrar_solo_importacion():
     conn.commit(); conn.close()
     limpiar_cache()
 
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # NOTAS POR CLIENTE
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def obtener_notas_cliente(cliente):
     try:
         conn = conectar_db()
@@ -761,14 +761,14 @@ def eliminar_nota_cliente(id_nota):
     conn.execute(f"DELETE FROM notas_cliente WHERE id_nota={ph}", (id_nota,))
     conn.commit(); conn.close()
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 4. QUERIES CON CACHÉ
-# ─────────────────────────────────────────────────────────────────────────────
-@st.cache_data(ttl=300, show_spinner=False)
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# 4. QUERIES CON CACHÃ‰
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+@st.cache_data(ttl=600, show_spinner=False)
 def obtener_stock_con_lote():
     conn  = conectar_db()
     query = """
-        SELECT p.nombre "Producto", p.codigo "Código", p.unidad "Unidad",
+        SELECT p.nombre "Producto", p.codigo "CÃ³digo", p.unidad "Unidad",
                m.lote "Lote", m.deposito "Deposito",
                m.tipo_movimiento, m.cantidad
         FROM movimientos m JOIN productos p ON m.id_producto=p.id_producto
@@ -780,22 +780,22 @@ def obtener_stock_con_lote():
     df["neta"] = df.apply(
         lambda r: r["cantidad"] if r["tipo_movimiento"]=="Entrada" else -r["cantidad"], axis=1
     )
-    return (df.groupby(["Producto","Código","Unidad","Lote","Deposito"])["neta"]
+    return (df.groupby(["Producto","CÃ³digo","Unidad","Lote","Deposito"])["neta"]
               .sum().reset_index().rename(columns={"neta":"Stock Actual"}))
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=600, show_spinner=False)
 def obtener_stock_full():
     df = obtener_stock_con_lote()
     if df.empty: return df
-    return df.groupby(["Producto","Código","Unidad","Deposito"])["Stock Actual"].sum().reset_index()
+    return df.groupby(["Producto","CÃ³digo","Unidad","Deposito"])["Stock Actual"].sum().reset_index()
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=600, show_spinner=False)
 def obtener_historial_movimientos():
     conn  = conectar_db()
     query = """
         SELECT m.id_movimiento "ID", m.fecha_hora "Fecha", m.tipo_movimiento "Tipo",
-               p.nombre "Producto", p.codigo "Código", m.cantidad "Cantidad",
-               p.unidad "Unidad", m.lote "Lote", m.deposito "Depósito",
+               p.nombre "Producto", p.codigo "CÃ³digo", m.cantidad "Cantidad",
+               p.unidad "Unidad", m.lote "Lote", m.deposito "DepÃ³sito",
                m.referencia "Referencia", COALESCE(m.origen,'excel') "Origen",
                COALESCE(m.anulado,0) "Anulado", COALESCE(m.usuario,'') "Usuario"
         FROM movimientos m JOIN productos p ON m.id_producto=p.id_producto
@@ -806,14 +806,14 @@ def obtener_historial_movimientos():
     conn.close()
     return df
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=600, show_spinner=False)
 def obtener_lista_precios():
     conn = conectar_db()
     df = _rsql("SELECT * FROM lista_precios ORDER BY rubro, producto", conn)
     conn.close()
     return df
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=600, show_spinner=False)
 def obtener_entregas(hoja=None):
     conn = conectar_db()
     if hoja and hoja != "Todas":
@@ -823,14 +823,14 @@ def obtener_entregas(hoja=None):
     conn.close()
     return df
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=600, show_spinner=False)
 def obtener_productos_completo():
     conn = conectar_db()
     df = _rsql("SELECT * FROM productos ORDER BY nombre", conn)
     conn.close()
     return df
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=600, show_spinner=False)
 def calcular_rotacion_stock(dias=90):
     conn           = conectar_db()
     fecha_corte_dt = datetime.now() - timedelta(days=dias)
@@ -857,19 +857,19 @@ def calcular_rotacion_stock(dias=90):
     else:
         df_r["Total_Salidas"] = 0
     df_r["Sal_Diarias"]  = df_r["Total_Salidas"] / dias
-    df_r["Días_Cobertura"] = df_r.apply(
+    df_r["DÃ­as_Cobertura"] = df_r.apply(
         lambda r: round(r["Stock Actual"] / r["Sal_Diarias"])
                   if r["Sal_Diarias"] > 0 else None, axis=1
     )
-    df_r["Rotación_Anual"] = df_r.apply(
-        lambda r: round(365 / r["Días_Cobertura"], 1)
-                  if r["Días_Cobertura"] and r["Días_Cobertura"] > 0 else None, axis=1
+    df_r["RotaciÃ³n_Anual"] = df_r.apply(
+        lambda r: round(365 / r["DÃ­as_Cobertura"], 1)
+                  if r["DÃ­as_Cobertura"] and r["DÃ­as_Cobertura"] > 0 else None, axis=1
     )
-    return df_r.sort_values("Días_Cobertura", na_position="last")
+    return df_r.sort_values("DÃ­as_Cobertura", na_position="last")
 
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # 5. STOCK CON COMPROMISOS
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def obtener_stock_con_compromisos():
     stock = obtener_stock_full()
     if stock.empty: return stock
@@ -886,9 +886,9 @@ def obtener_stock_con_compromisos():
     stock["Disponible Neto"] = stock["Stock Actual"] - stock["Comprometido"]
     return stock
 
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # 6. AUTH
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def hash_pwd(pwd):
     return hashlib.sha256(pwd.encode()).hexdigest()
 
@@ -904,14 +904,14 @@ def verificar_usuario(username, password):
 def mostrar_login():
     st.markdown("""
     <div style="max-width:400px;margin:60px auto;text-align:center">
-        <h1>🧪 Control de Depósito</h1>
+        <h1>ðŸ§ª Control de DepÃ³sito</h1>
         <p style="color:#6c757d">La Clementina S.A.</p>
     </div>
     """, unsafe_allow_html=True)
     col = st.columns([1, 2, 1])[1]
     with col:
         user = st.text_input("Usuario", key="login_user")
-        pwd  = st.text_input("Contraseña", type="password", key="login_pwd")
+        pwd  = st.text_input("ContraseÃ±a", type="password", key="login_pwd")
         if st.button("Ingresar", type="primary"):
             result = verificar_usuario(user, pwd)
             if result:
@@ -921,12 +921,12 @@ def mostrar_login():
                 st.session_state.username       = user
                 st.rerun()
             else:
-                st.error("Usuario o contraseña incorrectos.")
-        st.caption("Usuario inicial: **admin** / Contraseña: **admin123**")
+                st.error("Usuario o contraseÃ±a incorrectos.")
+        st.caption("Usuario inicial: **admin** / ContraseÃ±a: **admin123**")
 
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # 7. HELPERS
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def limpiar_cache():
     """Invalida todas las caches de datos. Llamar tras cualquier escritura en DB."""
     st.cache_data.clear()
@@ -968,11 +968,11 @@ def _similitud(a, b):
     return difflib.SequenceMatcher(None, a.lower(), b.lower()).ratio()
 
 def _filtro_fonetico(serie, query, umbral=0.82):
-    """Retorna máscara booleana con coincidencias exactas + fonéticas."""
+    """Retorna mÃ¡scara booleana con coincidencias exactas + fonÃ©ticas."""
     q = query.lower()
     exacta = serie.fillna("").str.lower().str.contains(q, na=False)
     if len(q) < 5:
-        return exacta  # búsquedas cortas: solo exacta
+        return exacta  # bÃºsquedas cortas: solo exacta
     fonetica = serie.fillna("").apply(
         lambda x: any(_similitud(q, word) >= umbral for word in x.lower().split())
     )
@@ -999,9 +999,9 @@ def decodificar_qr_reforzado(foto_input):
         return val.strip() if val else None
     except: return None
 
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # 8. EXPORTS
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def to_excel_bytes(df, sheet_name="Hoja1"):
     out = io.BytesIO()
     with pd.ExcelWriter(out, engine="openpyxl") as w:
@@ -1013,7 +1013,7 @@ def hash_dataframe(df: pd.DataFrame) -> str:
     return hashlib.sha1(pd.util.hash_pandas_object(df, index=True).values.tobytes()).hexdigest()[:12]
 
 def siguiente_numero_remito() -> str:
-    """Genera el próximo número correlativo de remito: R-00001, R-00002..."""
+    """Genera el prÃ³ximo nÃºmero correlativo de remito: R-00001, R-00002..."""
     conn = conectar_db()
     try:
         row = conn.execute("SELECT COUNT(*) FROM remitos").fetchone()
@@ -1066,7 +1066,7 @@ def generar_orden_compra_pdf(productos_bajo: pd.DataFrame, proveedor="Bayer Crop
     styles = getSampleStyleSheet()
     elems  = []
 
-    elems.append(Paragraph("<b>La Clementina S.A.</b> — Orden de Compra Sugerida", styles["Title"]))
+    elems.append(Paragraph("<b>La Clementina S.A.</b> â€” Orden de Compra Sugerida", styles["Title"]))
     elems.append(Paragraph(
         f"Fecha: <b>{datetime.now().strftime('%d/%m/%Y')}</b> &nbsp;&nbsp; "
         f"Proveedor: <b>{proveedor}</b> &nbsp;&nbsp; "
@@ -1092,14 +1092,14 @@ def generar_orden_compra_pdf(productos_bajo: pd.DataFrame, proveedor="Bayer Crop
     elems.append(_tbl)
     elems.append(Spacer(1, 1*cm))
     elems.append(Paragraph(
-        f"<font size=7 color=grey>Generado automáticamente — La Clementina S.A. · {datetime.now().strftime('%d/%m/%Y %H:%M')}</font>",
+        f"<font size=7 color=grey>Generado automÃ¡ticamente â€” La Clementina S.A. Â· {datetime.now().strftime('%d/%m/%Y %H:%M')}</font>",
         styles["Normal"]
     ))
     doc.build(elems)
     return buf.getvalue()
 
 def calcular_forecast(dias_proyeccion=30) -> pd.DataFrame:
-    """Proyecta cuánto se necesita comprar en los próximos N días según consumo histórico."""
+    """Proyecta cuÃ¡nto se necesita comprar en los prÃ³ximos N dÃ­as segÃºn consumo histÃ³rico."""
     rot = calcular_rotacion_stock(90)
     stk = obtener_stock_full()
     if rot.empty or stk.empty:
@@ -1109,7 +1109,7 @@ def calcular_forecast(dias_proyeccion=30) -> pd.DataFrame:
     df_fc = stk_sum.merge(rot_sum, on="Producto", how="left").fillna(0)
     df_fc["Consumo_Proyectado"] = (df_fc["Sal_Diarias"] * dias_proyeccion).round(1)
     df_fc["Necesidad_Compra"]   = (df_fc["Consumo_Proyectado"] - df_fc["Stock Actual"]).clip(lower=0).round(1)
-    df_fc["Días_Cobertura"]     = df_fc.apply(
+    df_fc["DÃ­as_Cobertura"]     = df_fc.apply(
         lambda r: round(r["Stock Actual"] / r["Sal_Diarias"]) if r["Sal_Diarias"] > 0 else None, axis=1
     )
     return df_fc[df_fc["Necesidad_Compra"] > 0].sort_values("Necesidad_Compra", ascending=False)
@@ -1131,7 +1131,7 @@ def generar_remito_pdf(numero: str, cliente: str, deposito: str,
 
     # Encabezado
     elems.append(Paragraph(
-        "<b>La Clementina S.A.</b> — Remito de Salida de Depósito",
+        "<b>La Clementina S.A.</b> â€” Remito de Salida de DepÃ³sito",
         styles["Title"]
     ))
     elems.append(Spacer(1, .3*cm))
@@ -1140,7 +1140,7 @@ def generar_remito_pdf(numero: str, cliente: str, deposito: str,
         f" &nbsp;&nbsp; Operador: <b>{usuario}</b>",
         styles["Normal"]
     ))
-    elems.append(Paragraph(f"Cliente: <b>{cliente}</b> &nbsp;&nbsp; Depósito: <b>{deposito}</b>",
+    elems.append(Paragraph(f"Cliente: <b>{cliente}</b> &nbsp;&nbsp; DepÃ³sito: <b>{deposito}</b>",
                             styles["Normal"]))
     if observaciones:
         elems.append(Paragraph(f"Observaciones: {observaciones}", styles["Normal"]))
@@ -1165,7 +1165,7 @@ def generar_remito_pdf(numero: str, cliente: str, deposito: str,
 
     # Firmas
     _firma = Table(
-        [["Entregó:", "", "Recibió:"],
+        [["EntregÃ³:", "", "RecibiÃ³:"],
          ["_________________________", "  ", "_________________________"],
          [usuario, "", cliente]],
         colWidths=[6*cm, 3*cm, 6*cm]
@@ -1173,7 +1173,7 @@ def generar_remito_pdf(numero: str, cliente: str, deposito: str,
     elems.append(_firma)
     elems.append(Spacer(1, .5*cm))
     elems.append(Paragraph(
-        f"<font size=7 color=grey>Generado por Sistema de Gestión — La Clementina S.A. · {datetime.now().strftime('%d/%m/%Y %H:%M')}</font>",
+        f"<font size=7 color=grey>Generado por Sistema de GestiÃ³n â€” La Clementina S.A. Â· {datetime.now().strftime('%d/%m/%Y %H:%M')}</font>",
         styles["Normal"]
     ))
     doc.build(elems)
@@ -1182,7 +1182,7 @@ def generar_remito_pdf(numero: str, cliente: str, deposito: str,
 def descargar_excel_agrupado(df):
     if df.empty: return b""
     pivot = df.pivot_table(
-        index=["Producto","Código","Unidad"], columns="Deposito",
+        index=["Producto","CÃ³digo","Unidad"], columns="Deposito",
         values="Stock Actual", aggfunc="sum"
     ).fillna(0)
     pivot["TOTAL GENERAL"] = pivot.sum(axis=1)
@@ -1190,14 +1190,14 @@ def descargar_excel_agrupado(df):
 
 def descargar_planilla_inventario(df):
     d = df.copy()
-    d["CONTEO FÍSICO"] = ""; d["DIFERENCIA"] = ""; d["OBSERVACIONES"] = ""
+    d["CONTEO FÃSICO"] = ""; d["DIFERENCIA"] = ""; d["OBSERVACIONES"] = ""
     return to_excel_bytes(d, "Toma_Stock")
 
 def generar_orden_reposicion(stock_df, umbral, consumo_df):
-    """Excel con productos bajo umbral y cantidad sugerida (30 días de cobertura)."""
+    """Excel con productos bajo umbral y cantidad sugerida (30 dÃ­as de cobertura)."""
     prod_df = obtener_productos_completo()
     bajo = stock_df[stock_df["Stock Actual"] < umbral].copy()
-    bajo = bajo.groupby(["Producto","Código","Unidad","Deposito"])["Stock Actual"].sum().reset_index()
+    bajo = bajo.groupby(["Producto","CÃ³digo","Unidad","Deposito"])["Stock Actual"].sum().reset_index()
     if not consumo_df.empty:
         bajo = bajo.merge(
             consumo_df[["Producto","Sal_Diarias"]].groupby("Producto")["Sal_Diarias"].mean().reset_index(),
@@ -1215,7 +1215,7 @@ def generar_orden_reposicion(stock_df, umbral, consumo_df):
     return to_excel_bytes(bajo, "Orden_Reposicion")
 
 def generar_reporte_excel():
-    """Reporte mensual consolidado en múltiples hojas."""
+    """Reporte mensual consolidado en mÃºltiples hojas."""
     stock = obtener_stock_full()
     hist  = obtener_historial_movimientos()
     ent   = obtener_entregas()
@@ -1241,7 +1241,7 @@ def generar_reporte_excel():
     return out.getvalue()
 
 def generar_reporte_pdf():
-    """PDF mensual con reportlab. Devuelve bytes o None si no está disponible."""
+    """PDF mensual con reportlab. Devuelve bytes o None si no estÃ¡ disponible."""
     if not PDF_AVAILABLE: return None
     stock = obtener_stock_full()
     ent   = obtener_entregas()
@@ -1251,8 +1251,8 @@ def generar_reporte_pdf():
     styles = getSampleStyleSheet()
     elems  = []
 
-    # Título
-    elems.append(Paragraph("Control de Depósito — La Clementina S.A.", styles["Title"]))
+    # TÃ­tulo
+    elems.append(Paragraph("Control de DepÃ³sito â€” La Clementina S.A.", styles["Title"]))
     elems.append(Paragraph(f"Reporte generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}",
                             styles["Normal"]))
     elems.append(Spacer(1, 0.5*cm))
@@ -1263,7 +1263,7 @@ def generar_reporte_pdf():
         kpi_data = [
             ["Indicador", "Valor"],
             ["Total Productos",  str(stock["Producto"].nunique())],
-            ["Depósitos",        str(stock["Deposito"].nunique())],
+            ["DepÃ³sitos",        str(stock["Deposito"].nunique())],
             ["Volumen Total",    f"{stock['Stock Actual'].sum():,.0f}"],
             ["Stock Bajo",       str(len(stock[(stock["Stock Actual"] >= 0) & (stock["Stock Actual"] < U)]))],
             ["Stock Negativo",   str(len(stock[stock["Stock Actual"] < 0]))],
@@ -1285,7 +1285,7 @@ def generar_reporte_pdf():
         elems.append(Paragraph("Stock Bajo Umbral", styles["Heading2"]))
         bajo = stock[stock["Stock Actual"] < int(obtener_metadata("umbral_alerta") or 20)]
         if not bajo.empty:
-            rows = [["Producto","Depósito","Stock","Unidad"]]
+            rows = [["Producto","DepÃ³sito","Stock","Unidad"]]
             for _, r in bajo.head(20).iterrows():
                 rows.append([r["Producto"][:35], r["Deposito"], f"{r['Stock Actual']:,.1f}", r["Unidad"]])
             t2 = Table(rows, colWidths=[9*cm, 3.5*cm, 2.5*cm, 2.5*cm])
@@ -1348,7 +1348,7 @@ def registrar_cambio_precio(producto: str, precio_nuevo: float, moneda: str, usu
     conn.close()
 
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=600, show_spinner=False)
 def obtener_historial_precios(producto: str = "") -> pd.DataFrame:
     conn = conectar_db()
     try:
@@ -1384,7 +1384,7 @@ def generar_presupuesto_pdf(cliente: str, items: list, usuario: str, obs: str = 
             _img_p = RLImage(_logo_path_p, width=2*cm, height=2*cm, kind="proportional")
             _ht = Table([[_img_p,
                 Paragraph("<font color='#3D4E6B' size=15><b>La Clementina S.A.</b></font><br/>"
-                          "<font color='#888' size=9>Insumos Agropecuarios · San Jorge, Santa Fe</font>",
+                          "<font color='#888' size=9>Insumos Agropecuarios Â· San Jorge, Santa Fe</font>",
                           styles["Normal"]),
                 Paragraph(f"<font color='#888' size=9>PRESUPUESTO<br/>"
                           f"{datetime.now().strftime('%d/%m/%Y')}</font>", styles["Normal"])
@@ -1398,18 +1398,18 @@ def generar_presupuesto_pdf(cliente: str, items: list, usuario: str, obs: str = 
             ]))
             elems.append(_ht)
         except Exception:
-            elems.append(Paragraph("La Clementina S.A. — Presupuesto", styles["Title"]))
+            elems.append(Paragraph("La Clementina S.A. â€” Presupuesto", styles["Title"]))
     elems.append(Spacer(1, 0.3*cm))
 
     # Cliente y fecha
     elems.append(Paragraph(f"<b>Cliente:</b> {cliente}", styles["Normal"]))
-    elems.append(Paragraph(f"<b>Fecha:</b> {datetime.now().strftime('%d/%m/%Y')}  ·  "
+    elems.append(Paragraph(f"<b>Fecha:</b> {datetime.now().strftime('%d/%m/%Y')}  Â·  "
                            f"<b>Elaborado por:</b> {usuario}", styles["Normal"]))
     if obs:
         elems.append(Paragraph(f"<b>Observaciones:</b> {obs}", styles["Normal"]))
     elems.append(Spacer(1, 0.3*cm))
 
-    # Tabla de ítems
+    # Tabla de Ã­tems
     _rows = [["#", "Producto", "Cantidad", "Precio Unit.", "Moneda", "Total"]]
     _total_usd = 0.0
     _total_ars = 0.0
@@ -1448,12 +1448,12 @@ def generar_presupuesto_pdf(cliente: str, items: list, usuario: str, obs: str = 
     elems.append(Spacer(1, 0.5*cm))
     elems.append(Paragraph(
         "<font size=8 color='#888'>Precios expresados en la moneda indicada. "
-        "Sujeto a disponibilidad de stock. Válido por 7 días hábiles.</font>",
+        "Sujeto a disponibilidad de stock. VÃ¡lido por 7 dÃ­as hÃ¡biles.</font>",
         styles["Normal"]
     ))
     elems.append(Spacer(1, 0.3*cm))
     elems.append(Paragraph(
-        f"<font size=8 color='#888'>La Clementina S.A. — San Jorge, Santa Fe | "
+        f"<font size=8 color='#888'>La Clementina S.A. â€” San Jorge, Santa Fe | "
         f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}</font>",
         styles["Normal"]
     ))
@@ -1465,7 +1465,7 @@ def generar_qr_lote(producto: str, lote: str, vencimiento: str, deposito: str) -
     """Genera imagen PNG de QR con datos del lote. Requiere qrcode."""
     try:
         import qrcode as _qr
-        _data = f"Producto: {producto}\nLote: {lote}\nVence: {vencimiento}\nDepósito: {deposito}"
+        _data = f"Producto: {producto}\nLote: {lote}\nVence: {vencimiento}\nDepÃ³sito: {deposito}"
         _img  = _qr.make(_data)
         _buf  = io.BytesIO()
         _img.save(_buf, format="PNG")
@@ -1493,8 +1493,8 @@ def conciliar_stock_vs_lotes() -> pd.DataFrame:
     _merge = _sys.merge(_lot, on="Producto", how="outer").fillna(0)
     _merge["Diferencia"] = _merge["Stock Sistema"] - _merge["Stock Lotes"]
     _merge["Estado"] = _merge["Diferencia"].apply(
-        lambda d: "✅ Coincide" if abs(d) < 0.01 else
-                  ("📈 Sobrante en sistema" if d > 0 else "📉 Faltante en sistema")
+        lambda d: "âœ… Coincide" if abs(d) < 0.01 else
+                  ("ðŸ“ˆ Sobrante en sistema" if d > 0 else "ðŸ“‰ Faltante en sistema")
     )
     return _merge.sort_values("Diferencia", key=abs, ascending=False)
 
@@ -1516,7 +1516,7 @@ def generar_vencimientos_timeline() -> pd.DataFrame:
 
 
 def generar_venc_excel_baja(lotes_venc: pd.DataFrame) -> bytes:
-    """Excel con lotes vencidos para gestión de baja."""
+    """Excel con lotes vencidos para gestiÃ³n de baja."""
     _out = io.BytesIO()
     with pd.ExcelWriter(_out, engine="openpyxl") as _w:
         lotes_venc.to_excel(_w, index=False, sheet_name="Lotes_Para_Baja")
@@ -1537,7 +1537,7 @@ def generar_ejecutivo_pdf() -> bytes:
     styles = getSampleStyleSheet()
     elems  = []
 
-    # ── Header con logo ──────────────────────────────────────────────────────
+    # â”€â”€ Header con logo â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     _logo_path_ej = os.path.join(os.path.dirname(__file__), "logo.png")
     _header_data = []
     if os.path.exists(_logo_path_ej):
@@ -1546,7 +1546,7 @@ def generar_ejecutivo_pdf() -> bytes:
             _img = RLImage(_logo_path_ej, width=2.5*cm, height=2.5*cm, kind="proportional")
             _header_data = [[_img,
                 Paragraph("<font color='#3D4E6B' size=16><b>La Clementina S.A.</b></font><br/>"
-                          "<font color='#555' size=10>Reporte Ejecutivo de Depósito</font>",
+                          "<font color='#555' size=10>Reporte Ejecutivo de DepÃ³sito</font>",
                           styles["Normal"]),
                 Paragraph(f"<font color='#888' size=9>{datetime.now().strftime('%d/%m/%Y %H:%M')}</font>",
                           styles["Normal"])]]
@@ -1563,22 +1563,22 @@ def generar_ejecutivo_pdf() -> bytes:
         ]))
         elems.append(_ht)
     else:
-        elems.append(Paragraph("La Clementina S.A. — Reporte Ejecutivo", styles["Title"]))
+        elems.append(Paragraph("La Clementina S.A. â€” Reporte Ejecutivo", styles["Title"]))
         elems.append(Paragraph(datetime.now().strftime("%d/%m/%Y %H:%M"), styles["Normal"]))
     elems.append(Spacer(1, 0.4*cm))
 
-    # ── KPIs Stock ───────────────────────────────────────────────────────────
+    # â”€â”€ KPIs Stock â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if not stock.empty:
-        elems.append(Paragraph("Stock — Indicadores Clave", styles["Heading2"]))
+        elems.append(Paragraph("Stock â€” Indicadores Clave", styles["Heading2"]))
         _neg = int((stock["Stock Actual"] < 0).sum())
         _bajo = int((stock["Stock Actual"].between(0, U, inclusive="left")).sum())
         _comp = int((stock["Disponible Neto"] < 0).sum()) if "Disponible Neto" in stock.columns else 0
         _kpi = [
-            ["Productos únicos", str(stock["Producto"].nunique()),
+            ["Productos Ãºnicos", str(stock["Producto"].nunique()),
              "Volumen total", f"{stock['Stock Actual'].sum():,.0f}"],
-            ["Depósitos activos", str(stock["Deposito"].nunique()),
-             "Stock negativo 🔴", str(_neg)],
-            ["Bajo umbral 🟡", str(_bajo),
+            ["DepÃ³sitos activos", str(stock["Deposito"].nunique()),
+             "Stock negativo ðŸ”´", str(_neg)],
+            ["Bajo umbral ðŸŸ¡", str(_bajo),
              "Comprometido sin stock", str(_comp)],
         ]
         _t = Table(_kpi, colWidths=[5*cm, 3*cm, 5*cm, 4*cm])
@@ -1596,11 +1596,11 @@ def generar_ejecutivo_pdf() -> bytes:
         ]))
         elems.append(_t); elems.append(Spacer(1, 0.3*cm))
 
-        # Críticos
+        # CrÃ­ticos
         _crit = stock[stock["Stock Actual"] < U].sort_values("Stock Actual").head(12)
         if not _crit.empty:
-            elems.append(Paragraph("Productos Críticos (bajo umbral o negativos)", styles["Heading2"]))
-            _rows = [["Producto", "Depósito", "Stock", "Disponible"]]
+            elems.append(Paragraph("Productos CrÃ­ticos (bajo umbral o negativos)", styles["Heading2"]))
+            _rows = [["Producto", "DepÃ³sito", "Stock", "Disponible"]]
             for _, r in _crit.iterrows():
                 _dn = r.get("Disponible Neto", r["Stock Actual"])
                 _rows.append([r["Producto"][:40], r["Deposito"],
@@ -1615,9 +1615,9 @@ def generar_ejecutivo_pdf() -> bytes:
             ]))
             elems.append(_tc); elems.append(Spacer(1, 0.3*cm))
 
-    # ── Entregas pendientes ──────────────────────────────────────────────────
+    # â”€â”€ Entregas pendientes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if not ent.empty:
-        elems.append(Paragraph("Entregas Pendientes — Resumen por Producto", styles["Heading2"]))
+        elems.append(Paragraph("Entregas Pendientes â€” Resumen por Producto", styles["Heading2"]))
         _pend_g = (ent[ent["pendiente"] > 0]
                    .groupby("producto")
                    .agg(Clientes=("cliente","nunique"), Pendiente=("pendiente","sum"))
@@ -1637,11 +1637,11 @@ def generar_ejecutivo_pdf() -> bytes:
             ]))
             elems.append(_te); elems.append(Spacer(1, 0.3*cm))
 
-    # ── Sin Entregar MG ──────────────────────────────────────────────────────
+    # â”€â”€ Sin Entregar MG â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if not mg.empty:
         _mg_p = mg[mg["pendiente"] > 0]
         if not _mg_p.empty:
-            elems.append(Paragraph(f"Sin Entregar MacroGest — {len(_mg_p)} pendientes", styles["Heading2"]))
+            elems.append(Paragraph(f"Sin Entregar MacroGest â€” {len(_mg_p)} pendientes", styles["Heading2"]))
             _id_col_mg = "rto" if "rto" in _mg_p.columns else (_mg_p.columns[0] if len(_mg_p.columns) else "pendiente")
             _mg_top = (_mg_p.groupby("cliente")
                        .agg(Items=(_id_col_mg,"nunique"), Pendiente=("pendiente","sum"))
@@ -1660,10 +1660,10 @@ def generar_ejecutivo_pdf() -> bytes:
             ]))
             elems.append(_tmg); elems.append(Spacer(1, 0.3*cm))
 
-    # ── Footer ───────────────────────────────────────────────────────────────
+    # â”€â”€ Footer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     elems.append(Spacer(1, 0.5*cm))
     elems.append(Paragraph(
-        f"<font size=8 color='#888'>La Clementina S.A. — San Jorge, Santa Fe | "
+        f"<font size=8 color='#888'>La Clementina S.A. â€” San Jorge, Santa Fe | "
         f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')} | Confidencial</font>",
         styles["Normal"]
     ))
@@ -1671,7 +1671,7 @@ def generar_ejecutivo_pdf() -> bytes:
     return buf.getvalue()
 
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=600, show_spinner=False)
 def obtener_lotes_vencimiento() -> pd.DataFrame:
     conn = conectar_db()
     df = _rsql("""SELECT codigo, producto, unidad, deposito, lote,
@@ -1697,14 +1697,14 @@ def importar_lotes_vencimiento(df_raw: pd.DataFrame) -> tuple[int, int]:
 
     # Mapeo flexible de columnas
     _col_map = {
-        "codigo":    next((c for c in df_raw.columns if c in ["codigo","código"]), None),
-        "producto":  next((c for c in df_raw.columns if "descripcion" in c or "descripción" in c or "producto" in c), None),
+        "codigo":    next((c for c in df_raw.columns if c in ["codigo","cÃ³digo"]), None),
+        "producto":  next((c for c in df_raw.columns if "descripcion" in c or "descripciÃ³n" in c or "producto" in c), None),
         "unidad":    next((c for c in df_raw.columns if "unidad" in c), None),
-        "deposito":  next((c for c in df_raw.columns if "deposito" in c or "depósito" in c), None),
+        "deposito":  next((c for c in df_raw.columns if "deposito" in c or "depÃ³sito" in c), None),
         "lote":      next((c for c in df_raw.columns if c == "serie" or c == "lote"), None),
         "stock":     next((c for c in df_raw.columns if c in ["antidad","cantidad","stock","stock_actual","existencia","saldo","qty"]), None),
         "venc":      next((c for c in df_raw.columns if "vencimiento" in c and "muestra" not in c), None),
-        "fabric":    next((c for c in df_raw.columns if "fabricacion" in c or "fabricación" in c), None),
+        "fabric":    next((c for c in df_raw.columns if "fabricacion" in c or "fabricaciÃ³n" in c), None),
     }
 
     if not _col_map["producto"]:
@@ -1759,20 +1759,20 @@ def importar_lotes_vencimiento(df_raw: pd.DataFrame) -> tuple[int, int]:
 
 
 def exportar_macrogest_format(stock_df):
-    """Excel en el formato de importación de MacroGest."""
+    """Excel en el formato de importaciÃ³n de MacroGest."""
     if stock_df.empty: return b""
     df = stock_df.copy()
     # Aseguramos stock por lote si disponible
     stk_lote = obtener_stock_con_lote()
     if not stk_lote.empty:
         out_df = stk_lote.rename(columns={
-            "Código": "codigo", "Producto": "descripcion_1",
+            "CÃ³digo": "codigo", "Producto": "descripcion_1",
             "Unidad": "unidad_medida", "Lote": "lote",
             "Deposito": "deposito", "Stock Actual": "stock_actual"
         })[["codigo","descripcion_1","unidad_medida","deposito","lote","stock_actual"]]
     else:
         out_df = df.rename(columns={
-            "Código": "codigo", "Producto": "descripcion_1",
+            "CÃ³digo": "codigo", "Producto": "descripcion_1",
             "Unidad": "unidad_medida",
             "Deposito": "deposito", "Stock Actual": "stock_actual"
         })
@@ -1780,9 +1780,9 @@ def exportar_macrogest_format(stock_df):
         out_df = out_df[["codigo","descripcion_1","unidad_medida","deposito","lote","stock_actual"]]
     return to_excel_bytes(out_df, "Exportacion_MacroGest")
 
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # 9. EMAIL
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def enviar_email_alerta(stock_bajo, pendientes_viejos):
     smtp_server = obtener_metadata("smtp_server") or ""
     smtp_port   = int(obtener_metadata("smtp_port") or 587)
@@ -1790,10 +1790,10 @@ def enviar_email_alerta(stock_bajo, pendientes_viejos):
     smtp_pass   = obtener_metadata("smtp_pass")   or ""
     dest        = obtener_metadata("email_dest")  or ""
     if not all([smtp_server, smtp_user, smtp_pass, dest]):
-        return False, "Configuración SMTP incompleta. Completar en Configuración → Email."
+        return False, "ConfiguraciÃ³n SMTP incompleta. Completar en ConfiguraciÃ³n â†’ Email."
     try:
         msg = MIMEMultipart("alternative")
-        msg["Subject"] = f"⚠️ Alerta Stock — La Clementina S.A. — {datetime.now().strftime('%d/%m/%Y')}"
+        msg["Subject"] = f"âš ï¸ Alerta Stock â€” La Clementina S.A. â€” {datetime.now().strftime('%d/%m/%Y')}"
         msg["From"]    = smtp_user
         msg["To"]      = dest
 
@@ -1806,16 +1806,16 @@ def enviar_email_alerta(stock_bajo, pendientes_viejos):
 
         html = f"""
         <html><body style="font-family:Arial,sans-serif;color:#333">
-        <h2>⚠️ Reporte de Alertas — La Clementina S.A.</h2>
+        <h2>âš ï¸ Reporte de Alertas â€” La Clementina S.A.</h2>
         <p>Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}</p>
-        <h3>📦 Stock Bajo / Negativo</h3>
+        <h3>ðŸ“¦ Stock Bajo / Negativo</h3>
         <table border=1 cellpadding=6 cellspacing=0 style="border-collapse:collapse;width:100%">
-        <tr style="background:#007bff;color:white"><th>Producto</th><th>Depósito</th><th>Stock</th></tr>
+        <tr style="background:#007bff;color:white"><th>Producto</th><th>DepÃ³sito</th><th>Stock</th></tr>
         {html_rows_stock}
         </table>
         """
         if pendientes_viejos > 0:
-            html += f"<h3>⏳ Entregas con +30 días pendientes: <b style='color:red'>{pendientes_viejos}</b></h3>"
+            html += f"<h3>â³ Entregas con +30 dÃ­as pendientes: <b style='color:red'>{pendientes_viejos}</b></h3>"
         html += "</body></html>"
 
         msg.attach(MIMEText(html, "html"))
@@ -1827,9 +1827,9 @@ def enviar_email_alerta(stock_bajo, pendientes_viejos):
     except Exception as e:
         return False, str(e)
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 10. PARSER ENTREGAS EXCEL (igual que versión anterior)
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# 10. PARSER ENTREGAS EXCEL (igual que versiÃ³n anterior)
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def parsear_entregas_excel(archivo):
     registros = []
 
@@ -1890,35 +1890,35 @@ def parsear_entregas_excel(archivo):
 
     return pd.DataFrame(registros) if registros else pd.DataFrame()
 
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # 10b. QUERIES PLAN COMERCIAL
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 CAMPANA_ACTUAL = "2026-2027"
 
 PRODUCTOS_FOCO_DEFAULT = [
-    ("Semilla Maíz (Híbridos Bayer)", "Bolsas"),
-    ("Semilla Soja (Autógamas)",       "Bolsas"),
+    ("Semilla MaÃ­z (HÃ­bridos Bayer)", "Bolsas"),
+    ("Semilla Soja (AutÃ³gamas)",       "Bolsas"),
     ("Round Up / Glifosato",           "Litros"),
-    ("Fungicidas Línea Bayer",         "Litros"),
-    ("Adengo (Herbicida Maíz)",        "Litros"),
+    ("Fungicidas LÃ­nea Bayer",         "Litros"),
+    ("Adengo (Herbicida MaÃ­z)",        "Litros"),
     ("Seegrown (Estimulante)",         "Litros"),
 ]
 
 DISTRIBUCION_OBJETIVO = {
-    "Semillas autógamas": 30,
-    "Agroquímicos":        30,
+    "Semillas autÃ³gamas": 30,
+    "AgroquÃ­micos":        30,
     "Fertilizantes":       30,
     "Otros / Servicios":   10,
 }
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=600, show_spinner=False)
 def obtener_metas_campana(campana=CAMPANA_ACTUAL):
     conn = conectar_db()
     df = _rsql("SELECT * FROM metas_campana WHERE campana=?", conn, params=(campana,))
     conn.close()
     return df
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=600, show_spinner=False)
 def obtener_cartera(vendedor=None, campana=CAMPANA_ACTUAL):
     conn = conectar_db()
     if vendedor:
@@ -1930,7 +1930,7 @@ def obtener_cartera(vendedor=None, campana=CAMPANA_ACTUAL):
     conn.close()
     return df
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=600, show_spinner=False)
 def obtener_reportes(vendedor=None, campana=CAMPANA_ACTUAL):
     conn = conectar_db()
     if vendedor:
@@ -1942,7 +1942,7 @@ def obtener_reportes(vendedor=None, campana=CAMPANA_ACTUAL):
     conn.close()
     return df
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=600, show_spinner=False)
 def obtener_productos_foco(campana=CAMPANA_ACTUAL):
     conn = conectar_db()
     df = _rsql("SELECT * FROM productos_foco WHERE campana=? ORDER BY prioridad", conn, params=(campana,))
@@ -1960,7 +1960,7 @@ def obtener_productos_foco(campana=CAMPANA_ACTUAL):
         conn3.close()
     return df
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=600, show_spinner=False)
 def obtener_ventas_detalle(vendedor=None, campana=CAMPANA_ACTUAL):
     conn = conectar_db()
     if vendedor:
@@ -1974,7 +1974,7 @@ def obtener_ventas_detalle(vendedor=None, campana=CAMPANA_ACTUAL):
 
 def parsear_macrogest_ventas(archivo, vendedor, campana=CAMPANA_ACTUAL):
     """
-    Lee exportación MacroGest con columnas:
+    Lee exportaciÃ³n MacroGest con columnas:
     cuenta, deno_cuenta, cuit_cuenta, articulo, descripcion,
     precio, cantidad, entregada, fecha, localidad, observaciones_gen, numero
     Devuelve (df_cartera, df_ventas) listos para insertar.
@@ -2036,7 +2036,7 @@ def parsear_macrogest_ventas(archivo, vendedor, campana=CAMPANA_ACTUAL):
                 fecha=("fecha","max"),
             ).reset_index())
 
-    # Clasificación automática Pareto 80/20
+    # ClasificaciÃ³n automÃ¡tica Pareto 80/20
     cart = cart.sort_values("importe_total", ascending=False).reset_index(drop=True)
     total_imp = cart["importe_total"].sum()
     cart["acum"] = cart["importe_total"].cumsum()
@@ -2160,9 +2160,9 @@ def gauge_kpi(valor, meta, titulo, unidad=""):
     fig.update_layout(height=220, margin=dict(l=10, r=10, t=40, b=10))
     return fig
 
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # 11. INIT
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 inicializar_db()
 
 # Session state
@@ -2184,23 +2184,23 @@ for k, v in _defaults.items():
     if k not in st.session_state:
         st.session_state[k] = v
 
-# Cargar parámetros persistidos desde DB (solo primera vez)
+# Cargar parÃ¡metros persistidos desde DB (solo primera vez)
 if st.session_state.wa_numero is None:
     st.session_state.wa_numero = obtener_metadata("wa_numero") or "5493406123456"
 if st.session_state.umbral_alerta is None:
     stored = obtener_metadata("umbral_alerta")
     st.session_state.umbral_alerta = int(stored) if stored else 20
 
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # 12. AUTH GATE
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 auth_enabled = obtener_metadata("auth_enabled") == "1"
 if auth_enabled and not st.session_state.get("authenticated"):
     mostrar_login()
     st.stop()
 
 # Header con usuario logueado + modo oscuro
-# Filtro de depósito global
+# Filtro de depÃ³sito global
 _deps_global_opts = ["Todos"]
 try:
     _stk_deps = obtener_stock_full()
@@ -2211,13 +2211,13 @@ except Exception:
 
 _head_cols = st.columns([3, 2, 1, 1, 1])
 with _head_cols[1]:
-    _dep_sel = st.selectbox("🏭 Depósito", _deps_global_opts, key="deposito_global",
+    _dep_sel = st.selectbox("ðŸ­ DepÃ³sito", _deps_global_opts, key="deposito_global",
                              label_visibility="collapsed",
-                             help="Filtro global de depósito — afecta Panel, Stock Físico e Historial")
+                             help="Filtro global de depÃ³sito â€” afecta Panel, Stock FÃ­sico e Historial")
 with _head_cols[2]:
     if "dark_mode" not in st.session_state:
         st.session_state.dark_mode = False
-    if st.toggle("🌙", value=st.session_state.dark_mode, key="dark_toggle", help="Modo oscuro"):
+    if st.toggle("ðŸŒ™", value=st.session_state.dark_mode, key="dark_toggle", help="Modo oscuro"):
         st.session_state.dark_mode = True
         st.markdown("""<style>
         .main{background:#1a1c21!important;color:#e0e0e0!important}
@@ -2230,7 +2230,7 @@ with _head_cols[2]:
     else:
         st.session_state.dark_mode = False
 with _head_cols[3]:
-    _auto_ref = st.selectbox("⏱️ Auto", ["Off", "5 min", "10 min", "30 min"],
+    _auto_ref = st.selectbox("â±ï¸ Auto", ["Off", "5 min", "10 min", "30 min"],
                               key="auto_refresh_sel", label_visibility="collapsed",
                               help="Auto-actualizar datos")
     if _auto_ref != "Off":
@@ -2239,7 +2239,7 @@ with _head_cols[3]:
                     unsafe_allow_html=True)
 with _head_cols[2]:
     if auth_enabled and st.session_state.get("authenticated"):
-        st.caption(f"👤 {st.session_state.user_nombre}")
+        st.caption(f"ðŸ‘¤ {st.session_state.user_nombre}")
         if st.button("Salir", key="logout_btn"):
             for k in ("authenticated","user_rol","user_nombre","username"):
                 st.session_state[k] = "" if k != "authenticated" else False
@@ -2247,9 +2247,9 @@ with _head_cols[2]:
 if auth_enabled and st.session_state.get("authenticated"):
     pass  # ya manejado arriba
 
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # 13. TABS PRINCIPALES
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 # Header corporativo con logo
 _logo_path = os.path.join(os.path.dirname(__file__), "logo.png")
@@ -2268,15 +2268,15 @@ _logo_html = (
 
 _user_info = ""
 if st.session_state.get("authenticated"):
-    _user_info = (f'<span class="lc-badge">👤 {st.session_state.user_nombre}'
-                  f' &nbsp;·&nbsp; {st.session_state.user_rol}</span>')
+    _user_info = (f'<span class="lc-badge">ðŸ‘¤ {st.session_state.user_nombre}'
+                  f' &nbsp;Â·&nbsp; {st.session_state.user_rol}</span>')
 
 st.markdown(f"""
 <div class="lc-header">
     {_logo_html}
     <div style="flex:1">
-        <p class="lc-header-title">Control de Depósito — La Clementina S.A.</p>
-        <p class="lc-header-sub">Insumos Agropecuarios · Bayer CropScience / Monsanto-Bayer · San Jorge, Santa Fe</p>
+        <p class="lc-header-title">Control de DepÃ³sito â€” La Clementina S.A.</p>
+        <p class="lc-header-sub">Insumos Agropecuarios Â· Bayer CropScience / Monsanto-Bayer Â· San Jorge, Santa Fe</p>
     </div>
     {_user_info}
 </div>
@@ -2285,40 +2285,40 @@ st.markdown(f"""
 # session_state para cache lazy por tab (se carga la primera vez que se abre cada tab)
 
 tab1, tab11, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab12, tab_traz = st.tabs([
-    "⚡ Panel",
-    "🔄 Sin Entregar MG",
-    "📦 LC / LCAGRO",
-    "🌿 Bayer DEP55",
-    "🚚 Bayer Directa",
-    "📋 Stock Físico",
-    "📜 Historial",
-    "💲 Valorización",
-    "📈 Reportes",
-    "⚙️ Configuración",
-    "📊 Plan Comercial",
-    "🏷️ Lista de Precios",
-    "🔍 Trazabilidad",
+    "âš¡ Panel",
+    "ðŸ”„ Sin Entregar MG",
+    "ðŸ“¦ LC / LCAGRO",
+    "ðŸŒ¿ Bayer DEP55",
+    "ðŸšš Bayer Directa",
+    "ðŸ“‹ Stock FÃ­sico",
+    "ðŸ“œ Historial",
+    "ðŸ’² ValorizaciÃ³n",
+    "ðŸ“ˆ Reportes",
+    "âš™ï¸ ConfiguraciÃ³n",
+    "ðŸ“Š Plan Comercial",
+    "ðŸ·ï¸ Lista de Precios",
+    "ðŸ” Trazabilidad",
 ])
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# TAB 1 — PANEL DE CONTROL
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# TAB 1 â€” PANEL DE CONTROL
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 with tab1:
     stock_df = obtener_stock_con_compromisos()
-    # Aplicar filtro global de depósito
+    # Aplicar filtro global de depÃ³sito
     _dep_global = st.session_state.get("deposito_global", "Todos")
     if _dep_global != "Todos" and not stock_df.empty:
         stock_df = stock_df[stock_df["Deposito"] == _dep_global]
 
     if stock_df.empty:
-        st.warning("⚠️ Sin datos. Subí el archivo en Configuración.")
-        st.caption("Para empezar, andá a ⚙️ Configuración → Importar Stock desde MacroGest y subí el archivo de saldos.")
+        st.warning("âš ï¸ Sin datos. SubÃ­ el archivo en ConfiguraciÃ³n.")
+        st.caption("Para empezar, andÃ¡ a âš™ï¸ ConfiguraciÃ³n â†’ Importar Stock desde MacroGest y subÃ­ el archivo de saldos.")
     else:
         U = st.session_state.umbral_alerta
         for meta, caption in [
-            ("ultima_importacion",          "🕐 Última importación stock"),
-            ("ultima_importacion_entregas",  "📦 Última importación entregas"),
-            ("ultima_importacion_mg",        "🔄 Última importación MacroGest"),
+            ("ultima_importacion",          "ðŸ• Ãšltima importaciÃ³n stock"),
+            ("ultima_importacion_entregas",  "ðŸ“¦ Ãšltima importaciÃ³n entregas"),
+            ("ultima_importacion_mg",        "ðŸ”„ Ãšltima importaciÃ³n MacroGest"),
         ]:
             val = obtener_metadata(meta)
             if val: st.caption(f"{caption}: **{val}**")
@@ -2334,7 +2334,7 @@ with tab1:
             ent_panel["dias_p"] = ent_panel["dia_recibido"].apply(dias_desde)
             venc30 = len(ent_panel[(ent_panel["pendiente"] > 0) & (ent_panel["dias_p"] > 30)])
 
-        # ── KPI TopBar visual prominente ──────────────────────────────────────
+        # â”€â”€ KPI TopBar visual prominente â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         _vol_total = stock_df["Stock Actual"].sum()
         _mg_cache  = st.session_state.get("df_mg_cache")
         _pend_mg   = int(_mg_cache["pendiente"].sum()) if _mg_cache is not None and not _mg_cache.empty else 0
@@ -2355,10 +2355,10 @@ with tab1:
         if neg_n > 0:
             _neg_prods = stock_df[stock_df["Stock Actual"] < 0]["Producto"].unique()
             st.error(
-                f"🚨 **{neg_n} productos con stock negativo:** "
-                + " · ".join(_neg_prods[:8])
+                f"ðŸš¨ **{neg_n} productos con stock negativo:** "
+                + " Â· ".join(_neg_prods[:8])
                 + (" ..." if len(_neg_prods) > 8 else ""),
-                icon="🚨"
+                icon="ðŸš¨"
             )
 
         # Alerta lotes vencidos con stock positivo
@@ -2376,65 +2376,65 @@ with tab1:
                                     (_lotes_panel["_dias"] < 30) &
                                     (_lotes_panel["stock"] > 0)]
             if not _lv_venc.empty:
-                st.error(f"⚗️ **{len(_lv_venc)} lotes VENCIDOS con stock positivo** "
-                         f"({_lv_venc['stock'].sum():,.1f} unidades) — ver tab Reportes → Vencimientos",
-                         icon="⚗️")
+                st.error(f"âš—ï¸ **{len(_lv_venc)} lotes VENCIDOS con stock positivo** "
+                         f"({_lv_venc['stock'].sum():,.1f} unidades) â€” ver tab Reportes â†’ Vencimientos",
+                         icon="âš—ï¸")
             elif not _lv_crit.empty:
-                st.warning(f"⏰ **{len(_lv_crit)} lotes vencen en menos de 30 días** "
-                           f"({_lv_crit['stock'].sum():,.1f} unidades) — ver Reportes → Vencimientos")
+                st.warning(f"â° **{len(_lv_crit)} lotes vencen en menos de 30 dÃ­as** "
+                           f"({_lv_crit['stock'].sum():,.1f} unidades) â€” ver Reportes â†’ Vencimientos")
 
         c1, c2, c3, c4, c5, c6, c7 = st.columns(7)
         with c1: st.metric("Productos",     stock_df["Producto"].nunique(),
                             help="Total de productos distintos con movimientos registrados")
         with c2: st.metric("Volumen Total", f"{stock_df['Stock Actual'].sum():,.0f}",
-                            help="Suma de stock actual de todos los productos y depósitos")
+                            help="Suma de stock actual de todos los productos y depÃ³sitos")
         with c3: st.metric("Stock Bajo",    bajo_n,  delta=-bajo_n,  delta_color="inverse",
-                            help=f"Productos con stock entre 0 y el umbral ({U}). Atención pero no crítico.")
-        with c4: st.metric("Negativo ⚠️",   neg_n,   delta=-neg_n,   delta_color="inverse",
-                            help="Productos con stock menor a 0. Requiere corrección inmediata.")
+                            help=f"Productos con stock entre 0 y el umbral ({U}). AtenciÃ³n pero no crÃ­tico.")
+        with c4: st.metric("Negativo âš ï¸",   neg_n,   delta=-neg_n,   delta_color="inverse",
+                            help="Productos con stock menor a 0. Requiere correcciÃ³n inmediata.")
         with c5: st.metric("Comprometido",  comp_n,  delta=-comp_n,  delta_color="inverse",
                             help="Productos donde el stock disponible neto es negativo (stock < compromisos pendientes)")
-        with c6: st.metric("Depósitos",     stock_df["Deposito"].nunique(),
-                            help="Cantidad de depósitos/ubicaciones con stock registrado")
-        with c7: st.metric("Pend. +30d ⏳", venc30,  delta=-venc30,  delta_color="inverse",
-                            help="Pedidos de entrega con más de 30 días de antigüedad sin completar")
+        with c6: st.metric("DepÃ³sitos",     stock_df["Deposito"].nunique(),
+                            help="Cantidad de depÃ³sitos/ubicaciones con stock registrado")
+        with c7: st.metric("Pend. +30d â³", venc30,  delta=-venc30,  delta_color="inverse",
+                            help="Pedidos de entrega con mÃ¡s de 30 dÃ­as de antigÃ¼edad sin completar")
 
-        # WhatsApp: alerta crítica + resumen KPIs del día
+        # WhatsApp: alerta crÃ­tica + resumen KPIs del dÃ­a
         wa = st.session_state.wa_numero
         _wa_col1, _wa_col2 = st.columns(2)
         if wa:
             with _wa_col1:
                 if neg_n > 0 or bajo_n > 0:
                     alertas_wa = stock_df[stock_df["Stock Actual"] < U].head(15)
-                    lineas = [f"⚠️ *Alerta Stock* — {datetime.now().strftime('%d/%m/%Y')}",
+                    lineas = [f"âš ï¸ *Alerta Stock* â€” {datetime.now().strftime('%d/%m/%Y')}",
                               f"La Clementina S.A."]
                     for _, r in alertas_wa.iterrows():
-                        lineas.append(f"• {r['Producto']}: {r['Stock Actual']:,.1f} {r['Unidad']} ({r['Deposito']})")
-                    st.link_button("📱 Enviar alerta WhatsApp",
+                        lineas.append(f"â€¢ {r['Producto']}: {r['Stock Actual']:,.1f} {r['Unidad']} ({r['Deposito']})")
+                    st.link_button("ðŸ“± Enviar alerta WhatsApp",
                                    f"https://wa.me/{wa}?text={urllib.parse.quote(chr(10).join(lineas))}",
                                    use_container_width=True)
                 else:
-                    st.caption("✅ Sin alertas críticas de stock")
+                    st.caption("âœ… Sin alertas crÃ­ticas de stock")
             with _wa_col2:
                 _ent_wa = obtener_entregas()
                 _pend_wa = int(_ent_wa["pendiente"].sum()) if not _ent_wa.empty else 0
                 _kpi_lines = [
-                    f"📊 *Resumen LC — {datetime.now().strftime('%d/%m/%Y %H:%M')}*",
-                    f"Productos: {stock_df['Producto'].nunique()} · Vol: {stock_df['Stock Actual'].sum():,.0f}",
-                    f"🔴 Negativos: {neg_n} · 🟡 Bajo umbral: {bajo_n}",
-                    f"📦 Entregas pendientes: {_pend_wa:,}",
-                    f"_La Clementina S.A. — San Jorge_",
+                    f"ðŸ“Š *Resumen LC â€” {datetime.now().strftime('%d/%m/%Y %H:%M')}*",
+                    f"Productos: {stock_df['Producto'].nunique()} Â· Vol: {stock_df['Stock Actual'].sum():,.0f}",
+                    f"ðŸ”´ Negativos: {neg_n} Â· ðŸŸ¡ Bajo umbral: {bajo_n}",
+                    f"ðŸ“¦ Entregas pendientes: {_pend_wa:,}",
+                    f"_La Clementina S.A. â€” San Jorge_",
                 ]
-                st.link_button("📤 Compartir KPIs del día",
+                st.link_button("ðŸ“¤ Compartir KPIs del dÃ­a",
                                f"https://wa.me/{wa}?text={urllib.parse.quote(chr(10).join(_kpi_lines))}",
                                use_container_width=True)
         else:
-            st.caption("Configurá tu número WhatsApp en ⚙️ Configuración para habilitar compartir.")
+            st.caption("ConfigurÃ¡ tu nÃºmero WhatsApp en âš™ï¸ ConfiguraciÃ³n para habilitar compartir.")
 
         st.markdown("---")
 
-        # Semáforos por producto — tabla compacta y filtrable
-        with st.expander("🚦 Estado de Stock por Producto", expanded=False):
+        # SemÃ¡foros por producto â€” tabla compacta y filtrable
+        with st.expander("ðŸš¦ Estado de Stock por Producto", expanded=False):
             _prod_comp = obtener_productos_completo()
             _stk_sem = stock_df.groupby(["Producto","Unidad"])["Stock Actual"].sum().reset_index()
             if not _prod_comp.empty and "stock_minimo" in _prod_comp.columns:
@@ -2448,34 +2448,34 @@ with tab1:
 
             def _estado_sem(row):
                 _u = row["stock_minimo"] if row["stock_minimo"] > 0 else U
-                if row["Stock Actual"] < 0:        return "🔴 Negativo"
-                elif row["Stock Actual"] < _u:     return "🟡 Bajo umbral"
-                else:                              return "🟢 OK"
+                if row["Stock Actual"] < 0:        return "ðŸ”´ Negativo"
+                elif row["Stock Actual"] < _u:     return "ðŸŸ¡ Bajo umbral"
+                else:                              return "ðŸŸ¢ OK"
 
             _stk_sem["Estado"]  = _stk_sem.apply(_estado_sem, axis=1)
-            _stk_sem["Mínimo"]  = _stk_sem["stock_minimo"].apply(lambda x: int(x) if x > 0 else f"global ({U})")
+            _stk_sem["MÃ­nimo"]  = _stk_sem["stock_minimo"].apply(lambda x: int(x) if x > 0 else f"global ({U})")
             _stk_sem = _stk_sem.sort_values(
-                "Estado", key=lambda s: s.map({"🔴 Negativo": 0, "🟡 Bajo umbral": 1, "🟢 OK": 2})
+                "Estado", key=lambda s: s.map({"ðŸ”´ Negativo": 0, "ðŸŸ¡ Bajo umbral": 1, "ðŸŸ¢ OK": 2})
             )
 
             # Resumen por estado
             _cnt = _stk_sem["Estado"].value_counts()
             _sa, _sb, _sc = st.columns(3)
-            _sa.metric("🔴 Negativos",    _cnt.get("🔴 Negativo", 0))
-            _sb.metric("🟡 Bajo umbral",  _cnt.get("🟡 Bajo umbral", 0))
-            _sc.metric("🟢 OK",           _cnt.get("🟢 OK", 0))
+            _sa.metric("ðŸ”´ Negativos",    _cnt.get("ðŸ”´ Negativo", 0))
+            _sb.metric("ðŸŸ¡ Bajo umbral",  _cnt.get("ðŸŸ¡ Bajo umbral", 0))
+            _sc.metric("ðŸŸ¢ OK",           _cnt.get("ðŸŸ¢ OK", 0))
 
             st.markdown("---")
             # Filtro por estado
-            _fil_est = st.radio("Mostrar", ["Todos", "🔴 Negativos", "🟡 Bajo umbral", "🟢 OK"],
+            _fil_est = st.radio("Mostrar", ["Todos", "ðŸ”´ Negativos", "ðŸŸ¡ Bajo umbral", "ðŸŸ¢ OK"],
                                 horizontal=True, key="sem_filtro")
             _df_sem_show = _stk_sem.copy()
-            if _fil_est == "🔴 Negativos":    _df_sem_show = _df_sem_show[_df_sem_show["Estado"] == "🔴 Negativo"]
-            elif _fil_est == "🟡 Bajo umbral": _df_sem_show = _df_sem_show[_df_sem_show["Estado"] == "🟡 Bajo umbral"]
-            elif _fil_est == "🟢 OK":          _df_sem_show = _df_sem_show[_df_sem_show["Estado"] == "🟢 OK"]
+            if _fil_est == "ðŸ”´ Negativos":    _df_sem_show = _df_sem_show[_df_sem_show["Estado"] == "ðŸ”´ Negativo"]
+            elif _fil_est == "ðŸŸ¡ Bajo umbral": _df_sem_show = _df_sem_show[_df_sem_show["Estado"] == "ðŸŸ¡ Bajo umbral"]
+            elif _fil_est == "ðŸŸ¢ OK":          _df_sem_show = _df_sem_show[_df_sem_show["Estado"] == "ðŸŸ¢ OK"]
 
             st.dataframe(
-                _df_sem_show[["Estado","Producto","Unidad","Stock Actual","Mínimo"]]
+                _df_sem_show[["Estado","Producto","Unidad","Stock Actual","MÃ­nimo"]]
                 .rename(columns={"Stock Actual":"Stock"}),
                 use_container_width=True, hide_index=True,
                 column_config={
@@ -2484,55 +2484,55 @@ with tab1:
                 }
             )
             if not _df_sem_show.empty:
-                st.download_button("📥 Exportar estado de stock",
-                                   data=to_excel_bytes(_df_sem_show[["Estado","Producto","Unidad","Stock Actual","Mínimo"]], "Estado_Stock"),
+                st.download_button("ðŸ“¥ Exportar estado de stock",
+                                   data=to_excel_bytes(_df_sem_show[["Estado","Producto","Unidad","Stock Actual","MÃ­nimo"]], "Estado_Stock"),
                                    file_name=f"estado_stock_{datetime.now().strftime('%Y%m%d')}.xlsx",
                                    key="dl_sem")
 
-        # Proyección de agotamiento
-        with st.expander("📅 Proyección de Agotamiento", expanded=False):
-            st.caption("Estimación de días de cobertura por producto basada en salidas de los últimos 90 días.")
+        # ProyecciÃ³n de agotamiento
+        with st.expander("ðŸ“… ProyecciÃ³n de Agotamiento", expanded=False):
+            st.caption("EstimaciÃ³n de dÃ­as de cobertura por producto basada en salidas de los Ãºltimos 90 dÃ­as.")
             _rot = calcular_rotacion_stock(90)
             if _rot.empty:
-                st.info("Sin historial de movimientos para calcular proyección.")
+                st.info("Sin historial de movimientos para calcular proyecciÃ³n.")
             else:
-                _rot_show = _rot[_rot["Días_Cobertura"].notna()].copy()
-                _rot_show["Alerta"] = _rot_show["Días_Cobertura"].apply(
-                    lambda d: "🔴 Crítico (<15d)" if d < 15 else ("🟡 Bajo (<45d)" if d < 45 else "🟢 OK")
+                _rot_show = _rot[_rot["DÃ­as_Cobertura"].notna()].copy()
+                _rot_show["Alerta"] = _rot_show["DÃ­as_Cobertura"].apply(
+                    lambda d: "ðŸ”´ CrÃ­tico (<15d)" if d < 15 else ("ðŸŸ¡ Bajo (<45d)" if d < 45 else "ðŸŸ¢ OK")
                 )
                 _rp1, _rp2 = st.columns([2, 1])
                 with _rp1:
                     fig_rot = px.bar(
-                        _rot_show.sort_values("Días_Cobertura").head(20),
-                        x="Días_Cobertura", y="Producto", orientation="h",
-                        color="Días_Cobertura",
+                        _rot_show.sort_values("DÃ­as_Cobertura").head(20),
+                        x="DÃ­as_Cobertura", y="Producto", orientation="h",
+                        color="DÃ­as_Cobertura",
                         color_continuous_scale=["#dc3545","#ffc107","#28a745"],
-                        title="Días de cobertura — Top 20 productos más críticos",
-                        labels={"Días_Cobertura": "Días"}
+                        title="DÃ­as de cobertura â€” Top 20 productos mÃ¡s crÃ­ticos",
+                        labels={"DÃ­as_Cobertura": "DÃ­as"}
                     )
                     fig_rot.update_layout(height=420, showlegend=False, margin=dict(l=0,r=0,t=40,b=0))
                     st.plotly_chart(fig_rot, use_container_width=True)
                 with _rp2:
                     st.dataframe(
-                        _rot_show[["Producto","Stock Actual","Sal_Diarias","Días_Cobertura","Alerta"]]
-                        .rename(columns={"Stock Actual":"Stock","Sal_Diarias":"Sal/día","Días_Cobertura":"Días"})
+                        _rot_show[["Producto","Stock Actual","Sal_Diarias","DÃ­as_Cobertura","Alerta"]]
+                        .rename(columns={"Stock Actual":"Stock","Sal_Diarias":"Sal/dÃ­a","DÃ­as_Cobertura":"DÃ­as"})
                         .round(1),
                         use_container_width=True, hide_index=True
                     )
-                st.download_button("📥 Exportar Proyección (.xlsx)",
+                st.download_button("ðŸ“¥ Exportar ProyecciÃ³n (.xlsx)",
                                    data=to_excel_bytes(_rot_show, "Proyeccion"),
                                    file_name="proyeccion_agotamiento.xlsx")
 
-        # Gráficos
-        with st.expander("📊 Gráficos y Comparativas", expanded=False):
-            _gtabs = st.tabs(["📦 Por Depósito", "🏆 Top Productos", "⚖️ Stock vs Compromisos", "📈 Evolución", "🔤 Clasificación ABC", "🗺️ Treemap"])
+        # GrÃ¡ficos
+        with st.expander("ðŸ“Š GrÃ¡ficos y Comparativas", expanded=False):
+            _gtabs = st.tabs(["ðŸ“¦ Por DepÃ³sito", "ðŸ† Top Productos", "âš–ï¸ Stock vs Compromisos", "ðŸ“ˆ EvoluciÃ³n", "ðŸ”¤ ClasificaciÃ³n ABC", "ðŸ—ºï¸ Treemap"])
 
             with _gtabs[0]:
                 cg1, cg2 = st.columns(2)
                 with cg1:
                     dep_g = stock_df.groupby("Deposito")["Stock Actual"].sum().reset_index()
                     fig   = px.bar(dep_g.sort_values("Stock Actual"), x="Stock Actual", y="Deposito",
-                                   orientation="h", title="Stock por Depósito", color="Stock Actual",
+                                   orientation="h", title="Stock por DepÃ³sito", color="Stock Actual",
                                    color_continuous_scale="Blues")
                     fig.update_layout(height=300, showlegend=False, margin=dict(l=0,r=0,t=40,b=0))
                     st.plotly_chart(fig, use_container_width=True)
@@ -2556,8 +2556,8 @@ with tab1:
                 st.plotly_chart(fig2, use_container_width=True)
 
             with _gtabs[2]:
-                # Stock vs Compromisos por depósito
-                st.caption("Compara el stock disponible contra los compromisos pendientes de entrega en cada depósito.")
+                # Stock vs Compromisos por depÃ³sito
+                st.caption("Compara el stock disponible contra los compromisos pendientes de entrega en cada depÃ³sito.")
                 _dep_comp = stock_df.groupby("Deposito").agg(
                     Stock=("Stock Actual","sum"),
                     Comprometido=("Comprometido","sum")
@@ -2565,7 +2565,7 @@ with tab1:
                 _dep_comp["Disponible"] = (_dep_comp["Stock"] - _dep_comp["Comprometido"]).clip(lower=0)
                 _dep_comp = _dep_comp.sort_values("Stock", ascending=False)
                 fig_comp = px.bar(_dep_comp, x="Deposito", y=["Disponible","Comprometido"],
-                                  barmode="stack", title="Stock Disponible vs Comprometido por Depósito",
+                                  barmode="stack", title="Stock Disponible vs Comprometido por DepÃ³sito",
                                   color_discrete_map={"Disponible":"#28a745","Comprometido":"#fd7e14"},
                                   labels={"value":"Unidades","variable":""})
                 fig_comp.update_layout(height=350, margin=dict(l=0,r=0,t=40,b=0))
@@ -2576,8 +2576,8 @@ with tab1:
                 )
 
             with _gtabs[3]:
-                # Evolución del stock de un producto
-                st.caption("Seleccioná un producto para ver cómo evolucionó su stock en el tiempo.")
+                # EvoluciÃ³n del stock de un producto
+                st.caption("SeleccionÃ¡ un producto para ver cÃ³mo evolucionÃ³ su stock en el tiempo.")
                 hist_evo = obtener_historial_movimientos()
                 if hist_evo.empty:
                     st.info("Sin historial de movimientos.")
@@ -2598,7 +2598,7 @@ with tab1:
                         df_evo["Stock Acumulado"] = df_evo["Delta"].cumsum()
                         df_evo["Fecha Mov"] = df_evo["_dt"].dt.strftime("%d/%m/%Y")
                         fig_evo = px.area(df_evo, x="_dt", y="Stock Acumulado",
-                                          title=f"Evolución de stock — {prod_evo}",
+                                          title=f"EvoluciÃ³n de stock â€” {prod_evo}",
                                           color_discrete_sequence=["#007bff"],
                                           labels={"_dt":"Fecha","Stock Acumulado":"Unidades"})
                         fig_evo.add_scatter(x=df_evo["_dt"], y=df_evo["Stock Acumulado"],
@@ -2610,11 +2610,11 @@ with tab1:
                                             customdata=df_evo["Tipo"] + " " + df_evo["Cantidad"].astype(str))
                         fig_evo.update_layout(height=350, margin=dict(l=0,r=0,t=40,b=0))
                         st.plotly_chart(fig_evo, use_container_width=True)
-                        st.caption(f"Verde = Entrada · Rojo = Salida · {len(df_evo)} movimientos registrados")
+                        st.caption(f"Verde = Entrada Â· Rojo = Salida Â· {len(df_evo)} movimientos registrados")
 
             with _gtabs[4]:
-                # Clasificación ABC por valor de stock
-                st.caption("ABC: A = productos que concentran el 80% del stock (los más críticos), B = 15%, C = el resto.")
+                # ClasificaciÃ³n ABC por valor de stock
+                st.caption("ABC: A = productos que concentran el 80% del stock (los mÃ¡s crÃ­ticos), B = 15%, C = el resto.")
                 _abc = stock_df.groupby("Producto")["Stock Actual"].sum().reset_index()
                 _abc = _abc[_abc["Stock Actual"] > 0].sort_values("Stock Actual", ascending=False)
                 if _abc.empty:
@@ -2622,7 +2622,7 @@ with tab1:
                 else:
                     _abc["Acum %"] = _abc["Stock Actual"].cumsum() / _abc["Stock Actual"].sum() * 100
                     _abc["Clase"] = _abc["Acum %"].apply(
-                        lambda x: "A — Crítico" if x <= 80 else ("B — Importante" if x <= 95 else "C — Bajo impacto"))
+                        lambda x: "A â€” CrÃ­tico" if x <= 80 else ("B â€” Importante" if x <= 95 else "C â€” Bajo impacto"))
                     _col_abc1, _col_abc2 = st.columns(2)
                     with _col_abc1:
                         abc_res = _abc.groupby("Clase").agg(
@@ -2630,12 +2630,12 @@ with tab1:
                             Stock_Total=("Stock Actual","sum")
                         ).reset_index()
                         fig_abc = px.pie(abc_res, names="Clase", values="Productos",
-                                         title="Distribución ABC (por cantidad de productos)",
+                                         title="DistribuciÃ³n ABC (por cantidad de productos)",
                                          color="Clase",
                                          color_discrete_map={
-                                             "A — Crítico":"#dc3545",
-                                             "B — Importante":"#ffc107",
-                                             "C — Bajo impacto":"#28a745"})
+                                             "A â€” CrÃ­tico":"#dc3545",
+                                             "B â€” Importante":"#ffc107",
+                                             "C â€” Bajo impacto":"#28a745"})
                         fig_abc.update_layout(height=300, margin=dict(l=0,r=0,t=40,b=0))
                         st.plotly_chart(fig_abc, use_container_width=True)
                     with _col_abc2:
@@ -2647,21 +2647,21 @@ with tab1:
                         ).round(1),
                         use_container_width=True, hide_index=True
                     )
-                    st.download_button("📥 Exportar clasificación ABC",
+                    st.download_button("ðŸ“¥ Exportar clasificaciÃ³n ABC",
                                        data=to_excel_bytes(_abc, "ABC"),
                                        file_name=f"abc_{datetime.now().strftime('%Y%m%d')}.xlsx")
 
             with _gtabs[5]:
-                # Treemap: producto × depósito, tamaño = stock, color = estado
-                st.caption("Cada rectángulo = un producto. Tamaño proporcional al stock. Color por estado.")
+                # Treemap: producto Ã— depÃ³sito, tamaÃ±o = stock, color = estado
+                st.caption("Cada rectÃ¡ngulo = un producto. TamaÃ±o proporcional al stock. Color por estado.")
                 _tm_df = stock_df.copy()
                 _tm_df = _tm_df[_tm_df["Stock Actual"] > 0]
                 if _tm_df.empty:
                     st.info("Sin stock positivo para mostrar.")
                 else:
                     _tm_df["Estado"] = _tm_df.apply(
-                        lambda r: "🔴 Negativo" if r["Stock Actual"] < 0
-                        else ("🟡 Bajo" if r["Stock Actual"] < U else "🟢 OK"), axis=1
+                        lambda r: "ðŸ”´ Negativo" if r["Stock Actual"] < 0
+                        else ("ðŸŸ¡ Bajo" if r["Stock Actual"] < U else "ðŸŸ¢ OK"), axis=1
                     )
                     _fig_tm = px.treemap(
                         _tm_df,
@@ -2669,7 +2669,7 @@ with tab1:
                         values="Stock Actual",
                         color="Stock Actual",
                         color_continuous_scale=["#e53e3e", _LC_YELLOW, "#38a169"],
-                        title="Mapa de calor — Stock por Depósito y Producto",
+                        title="Mapa de calor â€” Stock por DepÃ³sito y Producto",
                         hover_data={"Stock Actual": ":.1f", "Unidad": True}
                     )
                     _fig_tm.update_layout(
@@ -2684,8 +2684,8 @@ with tab1:
 
         st.markdown("---")
 
-        # ── Novedades del día ─────────────────────────────────────────────────
-        with st.expander("📅 Novedades del día", expanded=False):
+        # â”€â”€ Novedades del dÃ­a â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        with st.expander("ðŸ“… Novedades del dÃ­a", expanded=False):
             _hoy_str = datetime.now().strftime("%d/%m/%Y")
             _hist_hoy = obtener_historial_movimientos()
             if not _hist_hoy.empty:
@@ -2701,15 +2701,15 @@ with tab1:
                     _nd2.metric("Entradas",  int((_hoy_df["Tipo"]=="Entrada").sum()))
                     _nd3.metric("Salidas",   int((_hoy_df["Tipo"]=="Salida").sum()))
                     st.dataframe(
-                        _hoy_df[["Fecha","Tipo","Producto","Cantidad","Unidad","Lote","Depósito","Referencia","Usuario"]]
+                        _hoy_df[["Fecha","Tipo","Producto","Cantidad","Unidad","Lote","DepÃ³sito","Referencia","Usuario"]]
                         .head(50),
                         use_container_width=True, hide_index=True
                     )
             else:
                 st.info("Sin historial registrado.")
 
-        # ── Tendencias mes a mes ──────────────────────────────────────────────
-        with st.expander("📈 Tendencias Mensuales", expanded=False):
+        # â”€â”€ Tendencias mes a mes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        with st.expander("ðŸ“ˆ Tendencias Mensuales", expanded=False):
             st.caption("Compara el volumen de movimientos mes a mes para detectar tendencias de consumo.")
             _hist_tend = obtener_historial_movimientos()
             if _hist_tend.empty:
@@ -2753,15 +2753,15 @@ with tab1:
                     if not _sal_mes.empty:
                         fig_est = px.area(
                             _sal_mes, x="Mes", y="Cantidad",
-                            title=f"Salidas mensuales — {'Todos los productos' if _prod_tend=='Todos' else _prod_tend}",
+                            title=f"Salidas mensuales â€” {'Todos los productos' if _prod_tend=='Todos' else _prod_tend}",
                             color_discrete_sequence=["#F5A800"]
                         )
                         fig_est.update_layout(height=260, margin=dict(l=0,r=0,t=40,b=0))
                         st.plotly_chart(fig_est, use_container_width=True)
 
-        # ── Buscador Global mejorado ──────────────────────────────────────────
-        with st.expander("🔎 Buscador Global", expanded=False):
-            st.caption("Busca simultáneamente en stock, entregas (todas las hojas) y pedidos MacroGest.")
+        # â”€â”€ Buscador Global mejorado â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        with st.expander("ðŸ”Ž Buscador Global", expanded=False):
+            st.caption("Busca simultÃ¡neamente en stock, entregas (todas las hojas) y pedidos MacroGest.")
             _bg_c1, _bg_c2 = st.columns([4, 1])
             with _bg_c1:
                 q_glob = st.text_input("Buscar producto o cliente...", key="busq_global",
@@ -2773,10 +2773,10 @@ with tab1:
                 _bg_total = 0
 
                 # Stock
-                st.markdown("##### 📦 Stock")
+                st.markdown("##### ðŸ“¦ Stock")
                 _bg_stk = stock_df[
                     stock_df["Producto"].str.contains(q_glob, case=False, na=False) |
-                    stock_df["Código"].astype(str).str.contains(q_glob, case=False, na=False)
+                    stock_df["CÃ³digo"].astype(str).str.contains(q_glob, case=False, na=False)
                 ][["Producto","Deposito","Stock Actual","Comprometido","Disponible Neto"]]
                 if _bg_stk.empty:
                     st.caption("Sin resultados en stock.")
@@ -2785,7 +2785,7 @@ with tab1:
                     _bg_total += len(_bg_stk)
 
                 # Entregas todas las hojas
-                st.markdown("##### 📋 Entregas (LC/LCAGRO · Bayer DEP55 · Bayer Directa)")
+                st.markdown("##### ðŸ“‹ Entregas (LC/LCAGRO Â· Bayer DEP55 Â· Bayer Directa)")
                 _bg_ent_all = []
                 for _hk_bg in ["LA CLEMENTINA S.A", "BAYER DEP55", "BAYER DIRECTA"]:
                     _ck_bg = f"df_ent_cache_{_hk_bg}"
@@ -2811,7 +2811,7 @@ with tab1:
                     st.caption("Sin resultados en entregas.")
 
                 # MacroGest
-                st.markdown("##### 🔄 MacroGest — Sin Entregar")
+                st.markdown("##### ðŸ”„ MacroGest â€” Sin Entregar")
                 _bg_mg_cached = st.session_state.get("df_mg_cache")
                 _bg_mg = _bg_mg_cached if (_bg_mg_cached is not None) else obtener_entregas("MACROGEST")
                 if not _bg_mg.empty:
@@ -2832,22 +2832,22 @@ with tab1:
 
                 st.success(f"Total de coincidencias: **{_bg_total}** registros")
 
-        # ── Comparativo entre Campañas ────────────────────────────────────────
-        with st.expander("📊 Comparativo entre Campañas", expanded=False):
-            st.caption("Compara volumen de ventas y pendiente entre campañas registradas en MacroGest.")
+        # â”€â”€ Comparativo entre CampaÃ±as â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        with st.expander("ðŸ“Š Comparativo entre CampaÃ±as", expanded=False):
+            st.caption("Compara volumen de ventas y pendiente entre campaÃ±as registradas en MacroGest.")
             _df_vd_comp = obtener_ventas_detalle()
             if _df_vd_comp.empty:
-                st.info("Sin datos de ventas. Importá desde Plan Comercial → Cartera de Clientes.")
+                st.info("Sin datos de ventas. ImportÃ¡ desde Plan Comercial â†’ Cartera de Clientes.")
             else:
                 _campanas_disp = sorted(_df_vd_comp["campana"].dropna().unique().tolist(), reverse=True)
                 if len(_campanas_disp) < 2:
-                    st.info("Se necesitan al menos 2 campañas importadas para comparar.")
+                    st.info("Se necesitan al menos 2 campaÃ±as importadas para comparar.")
                 else:
                     _cc1, _cc2 = st.columns(2)
                     with _cc1:
-                        _camp_a = st.selectbox("Campaña A", _campanas_disp, index=0, key="comp_camp_a")
+                        _camp_a = st.selectbox("CampaÃ±a A", _campanas_disp, index=0, key="comp_camp_a")
                     with _cc2:
-                        _camp_b = st.selectbox("Campaña B", _campanas_disp, index=min(1, len(_campanas_disp)-1), key="comp_camp_b")
+                        _camp_b = st.selectbox("CampaÃ±a B", _campanas_disp, index=min(1, len(_campanas_disp)-1), key="comp_camp_b")
 
                     _df_a = _df_vd_comp[_df_vd_comp["campana"] == _camp_a]
                     _df_b = _df_vd_comp[_df_vd_comp["campana"] == _camp_b]
@@ -2866,15 +2866,15 @@ with tab1:
                     _comp_b_prod = _df_b.groupby("descripcion")["cantidad"].sum().reset_index()
                     _comp_b_prod.columns = ["Producto", _camp_b]
                     _comp_merge = _comp_a_prod.merge(_comp_b_prod, on="Producto", how="outer").fillna(0)
-                    _comp_merge["Variación"] = _comp_merge[_camp_a] - _comp_merge[_camp_b]
+                    _comp_merge["VariaciÃ³n"] = _comp_merge[_camp_a] - _comp_merge[_camp_b]
                     _comp_merge["Var %"] = (
                         (_comp_merge[_camp_a] / _comp_merge[_camp_b].replace(0, 1) - 1) * 100
                     ).round(1)
-                    _comp_merge = _comp_merge.sort_values("Variación", ascending=False)
+                    _comp_merge = _comp_merge.sort_values("VariaciÃ³n", ascending=False)
 
                     _top10_comp = _comp_merge.head(10)
-                    _fig_comp = px.bar(_top10_comp, x="Variación", y="Producto", orientation="h",
-                                       color="Variación",
+                    _fig_comp = px.bar(_top10_comp, x="VariaciÃ³n", y="Producto", orientation="h",
+                                       color="VariaciÃ³n",
                                        color_continuous_scale=["#dc3545", "#ffffff", "#28a745"],
                                        color_continuous_midpoint=0,
                                        title=f"Top 10 variaciones: {_camp_a} vs {_camp_b}")
@@ -2883,40 +2883,40 @@ with tab1:
                     st.plotly_chart(_fig_comp, use_container_width=True)
                     st.dataframe(_comp_merge.round(1), use_container_width=True, hide_index=True)
 
-        st.subheader("🔍 Filtros")
+        st.subheader("ðŸ” Filtros")
 
-        search_q = st.text_input("⌨️ Buscar por nombre o código", placeholder="Escribí aquí...", key="search_p1")
+        search_q = st.text_input("âŒ¨ï¸ Buscar por nombre o cÃ³digo", placeholder="EscribÃ­ aquÃ­...", key="search_p1")
 
-        with st.expander("📷 Escanear QR"):
+        with st.expander("ðŸ“· Escanear QR"):
             c_cam, c_fil = st.columns(2)
             with c_cam:
-                foto_cam = st.camera_input("Cámara", key="qr_cam")
+                foto_cam = st.camera_input("CÃ¡mara", key="qr_cam")
             with c_fil:
-                foto_fil = st.file_uploader("O subí imagen", type=["png","jpg","jpeg"], key="qr_fil")
+                foto_fil = st.file_uploader("O subÃ­ imagen", type=["png","jpg","jpeg"], key="qr_fil")
             foto_qr = foto_cam or foto_fil
             if foto_qr:
                 res_qr = decodificar_qr_reforzado(foto_qr)
                 if res_qr:
                     qr_clean = res_qr.strip().replace("\n","").replace("\r","")
-                    st.success(f"✅ QR: {qr_clean}")
+                    st.success(f"âœ… QR: {qr_clean}")
                     if st.session_state.ultimo_qr_procesado != qr_clean:
                         st.session_state.ultimo_qr_procesado = qr_clean
                         m = stock_df[
                             stock_df["Producto"].str.contains(qr_clean, case=False, na=False) |
-                            stock_df["Código"].astype(str).str.contains(qr_clean, case=False, na=False)
+                            stock_df["CÃ³digo"].astype(str).str.contains(qr_clean, case=False, na=False)
                         ].copy()
                         if len(m) == 1:
                             st.session_state.qr_detectado = m.iloc[0]["Producto"]
                             st.rerun()
                         elif len(m) > 1:
                             opciones_qr = m["Producto"].unique().tolist()
-                            st.info(f"Se encontraron {len(opciones_qr)} productos con ese código. Seleccioná uno:")
+                            st.info(f"Se encontraron {len(opciones_qr)} productos con ese cÃ³digo. SeleccionÃ¡ uno:")
                             elegido_qr = st.selectbox("Producto del QR", opciones_qr, key="qr_multi_sel")
-                            if st.button("✅ Usar este producto", key="qr_multi_btn"):
+                            if st.button("âœ… Usar este producto", key="qr_multi_btn"):
                                 st.session_state.qr_detectado = elegido_qr
                                 st.rerun()
                         else:
-                            st.info("QR leído pero sin coincidencia en el stock actual.")
+                            st.info("QR leÃ­do pero sin coincidencia en el stock actual.")
                 else:
                     st.warning("QR no detectado.")
 
@@ -2929,18 +2929,18 @@ with tab1:
             st.session_state.qr_detectado = f_prod
         with cf2:
             lista_d = sorted(stock_df["Deposito"].dropna().unique().tolist())
-            f_dep   = st.selectbox("Depósito principal", ["Todos"] + lista_d, key="dep_principal")
+            f_dep   = st.selectbox("DepÃ³sito principal", ["Todos"] + lista_d, key="dep_principal")
         with cf3:
             hide_neg       = st.toggle("Solo stock positivo",       value=True)
-            filter_reponer = st.toggle(f"🚨 Reponer (<{U})",        value=False)
-            show_neg_f     = st.toggle("⚠️ Mostrar negativos",       value=True)
-            show_comp_f    = st.toggle("🔒 Solo comprometidos",      value=False)
+            filter_reponer = st.toggle(f"ðŸš¨ Reponer (<{U})",        value=False)
+            show_neg_f     = st.toggle("âš ï¸ Mostrar negativos",       value=True)
+            show_comp_f    = st.toggle("ðŸ”’ Solo comprometidos",      value=False)
         with cf4:
             pass
 
-        # ── Selector múltiple de depósitos ────────────────────────────────────
-        with st.expander("🏭 Filtrar por depósitos", expanded=True):
-            st.caption("Marcá los depósitos que querés ver. Si no marcás ninguno, se muestran todos.")
+        # â”€â”€ Selector mÃºltiple de depÃ³sitos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        with st.expander("ðŸ­ Filtrar por depÃ³sitos", expanded=True):
+            st.caption("MarcÃ¡ los depÃ³sitos que querÃ©s ver. Si no marcÃ¡s ninguno, se muestran todos.")
             _chk_cols = st.columns(min(len(lista_d), 10)) if lista_d else []
             _deps_extra = []
             for _di, _dn in enumerate(lista_d):
@@ -2949,18 +2949,18 @@ with tab1:
                     if st.checkbox(_lbl, key=f"dep_chk_{_dn}"):
                         _deps_extra.append(_dn)
             if _deps_extra:
-                st.caption(f"✅ Mostrando: {', '.join(str(d) for d in _deps_extra)}")
+                st.caption(f"âœ… Mostrando: {', '.join(str(d) for d in _deps_extra)}")
             else:
-                st.caption("Mostrando todos los depósitos")
+                st.caption("Mostrando todos los depÃ³sitos")
 
         df_f = stock_df.copy()
         if search_q:
             df_f = df_f[df_f["Producto"].str.contains(search_q, case=False, na=False) |
-                        df_f["Código"].astype(str).str.contains(search_q, case=False, na=False)]
+                        df_f["CÃ³digo"].astype(str).str.contains(search_q, case=False, na=False)]
         if f_prod != "Todos" and not search_q:
             df_f = df_f[df_f["Producto"] == f_prod]
         agrupar_prod = False
-        # Aplicar filtro de depósito: checkboxes tienen prioridad; si ninguno marcado, usar selector principal
+        # Aplicar filtro de depÃ³sito: checkboxes tienen prioridad; si ninguno marcado, usar selector principal
         _deps_filtro = set(_deps_extra)
         if not _deps_filtro and f_dep != "Todos":
             _deps_filtro.add(f_dep)
@@ -2978,7 +2978,7 @@ with tab1:
         if agrupar_prod and not df_f.empty:
             df_f = (df_f.groupby("Producto", as_index=False)
                     .agg({
-                        "Código":          "first",
+                        "CÃ³digo":          "first",
                         "Unidad":          "first",
                         "Stock Actual":    "sum",
                         "Comprometido":    "sum",
@@ -2989,7 +2989,7 @@ with tab1:
         if not df_f.empty:
             excel_b = descargar_excel_agrupado(df_f)
             if excel_b:
-                st.download_button("📥 Descargar Comparativa", data=excel_b,
+                st.download_button("ðŸ“¥ Descargar Comparativa", data=excel_b,
                                    file_name="stock_agrupado.xlsx")
 
             prod_df_venc = obtener_productos_completo()
@@ -3015,10 +3015,10 @@ with tab1:
                                 dias_v = dias_hasta(fv)
                                 if dias_v <= 90:
                                     color_v = "red" if dias_v <= 30 else "orange"
-                                    venc_info = f'<br><span style="color:{color_v};font-size:.75rem">⏰ Vence en {dias_v}d ({fv})</span>'
+                                    venc_info = f'<br><span style="color:{color_v};font-size:.75rem">â° Vence en {dias_v}d ({fv})</span>'
                                     b_comp += '<span class="venc-badge">VENCE</span>'
 
-                    comp_line = (f"<br><b>🔒 Comprometido:</b> {comp:,.1f} | "
+                    comp_line = (f"<br><b>ðŸ”’ Comprometido:</b> {comp:,.1f} | "
                                  f"<b>Disp.Neto:</b> {disp:,.1f}") if comp > 0 else ""
 
                     # Clientes con entrega pendiente para este producto
@@ -3067,7 +3067,7 @@ with tab1:
                         '<span class="stock-value">' + f"{stk:,.1f}" + ' <small class="stock-unit">' + str(item["Unidad"]) + '</small></span>'
                         + _progress_html +
                         '<div class="stock-info">'
-                        '<b>ID</b> ' + str(item["Código"]) + '<br>'
+                        '<b>ID</b> ' + str(item["CÃ³digo"]) + '<br>'
                         '<b>Dep.</b> <span class="label-blue">' + str(item["Deposito"]) + '</span>'
                         + comp_line + venc_info + clientes_pend_line +
                         '</div>'
@@ -3078,7 +3078,7 @@ with tab1:
         st.markdown("---")
 
         # Movimiento manual
-        with st.expander("➕ Registrar movimiento manual"):
+        with st.expander("âž• Registrar movimiento manual"):
             st.markdown('<p class="seccion-titulo">Movimiento Manual de Stock</p>', unsafe_allow_html=True)
             cm1, cm2 = st.columns(2)
             with cm1:
@@ -3086,7 +3086,7 @@ with tab1:
                 tipo_m  = st.radio("Tipo", ["Entrada","Salida"], horizontal=True, key="mov_tipo")
             with cm2:
                 cant_m  = st.number_input("Cantidad", min_value=0.01, step=0.5, key="mov_cant")
-                dep_m   = st.selectbox("Depósito", sorted(stock_df["Deposito"].unique()), key="mov_dep")
+                dep_m   = st.selectbox("DepÃ³sito", sorted(stock_df["Deposito"].unique()), key="mov_dep")
             cm3, cm4 = st.columns(2)
             with cm3:
                 lote_m = st.text_input("Lote", value="S/L", key="mov_lote")
@@ -3101,14 +3101,14 @@ with tab1:
                 stk_disp = float(stock_df[
                     (stock_df["Producto"] == prod_m) & (stock_df["Deposito"] == dep_m)
                 ]["Stock Actual"].sum()) if not stock_df.empty else 0.0
-                st.metric("Stock disponible en depósito seleccionado", f"{stk_disp:,.1f}",
-                          help="Cantidad actual en el depósito antes de esta salida")
+                st.metric("Stock disponible en depÃ³sito seleccionado", f"{stk_disp:,.1f}",
+                          help="Cantidad actual en el depÃ³sito antes de esta salida")
                 if cant_m > stk_disp:
-                    st.warning(f"⚠️ La cantidad ingresada ({cant_m:,.1f}) supera el stock disponible ({stk_disp:,.1f}). El stock quedará negativo.")
+                    st.warning(f"âš ï¸ La cantidad ingresada ({cant_m:,.1f}) supera el stock disponible ({stk_disp:,.1f}). El stock quedarÃ¡ negativo.")
                 if stk_disp <= 0:
-                    st.error("🚫 El stock en este depósito ya es cero o negativo.")
+                    st.error("ðŸš« El stock en este depÃ³sito ya es cero o negativo.")
             if st.session_state.mov_pendiente is None:
-                if st.button("📋 Preparar movimiento"):
+                if st.button("ðŸ“‹ Preparar movimiento"):
                     st.session_state.mov_pendiente = dict(
                         producto=prod_m, tipo=tipo_m, cantidad=cant_m,
                         deposito=dep_m, lote=lote_m, referencia=ref_m,
@@ -3118,11 +3118,11 @@ with tab1:
                     st.rerun()
             else:
                 p = st.session_state.mov_pendiente
-                st.warning(f"**¿Confirmar?** {p['tipo']} | {p['producto']} | "
+                st.warning(f"**Â¿Confirmar?** {p['tipo']} | {p['producto']} | "
                            f"{p['cantidad']:,.2f} | {p['deposito']}")
                 cc1, cc2 = st.columns(2)
                 with cc1:
-                    if st.button("✅ Confirmar", type="primary"):
+                    if st.button("âœ… Confirmar", type="primary"):
                         conn = conectar_db()
                         id_p = conn.execute("SELECT id_producto FROM productos WHERE nombre=?",
                                             (p["producto"],)).fetchone()
@@ -3161,33 +3161,33 @@ with tab1:
                         conn.close()
                         limpiar_cache()
                         st.session_state.mov_pendiente = None
-                        st.success("✅ Registrado.")
+                        st.success("âœ… Registrado.")
                         if _remito_bytes:
-                            st.download_button("🖨️ Descargar Remito PDF",
+                            st.download_button("ðŸ–¨ï¸ Descargar Remito PDF",
                                                data=_remito_bytes,
                                                file_name=f"remito_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
                                                mime="application/pdf")
                         st.rerun()
                 with cc2:
-                    if st.button("❌ Cancelar"):
+                    if st.button("âŒ Cancelar"):
                         st.session_state.mov_pendiente = None
                         st.rerun()
 
-        # Transferencias entre depósitos
+        # Transferencias entre depÃ³sitos
         st.markdown("---")
-        with st.expander("↔️ Transferencia entre Depósitos"):
+        with st.expander("â†”ï¸ Transferencia entre DepÃ³sitos"):
             ct1, ct2 = st.columns(2)
             with ct1:
                 prod_t = st.selectbox("Producto", sorted(stock_df["Producto"].unique()), key="trans_prod")
                 dep_t_options = sorted(stock_df[stock_df["Producto"]==prod_t]["Deposito"].unique().tolist())
-                dep_origen = st.selectbox("Depósito Origen", dep_t_options, key="trans_origen")
+                dep_origen = st.selectbox("DepÃ³sito Origen", dep_t_options, key="trans_origen")
                 stk_orig = float(stock_df[
                     (stock_df["Producto"]==prod_t) & (stock_df["Deposito"]==dep_origen)
                 ]["Stock Actual"].sum())
                 st.info(f"Stock disponible en origen: **{stk_orig:,.1f}**")
             with ct2:
                 todos_deps = sorted(stock_df["Deposito"].unique().tolist())
-                dep_destino = st.selectbox("Depósito Destino", todos_deps, key="trans_destino")
+                dep_destino = st.selectbox("DepÃ³sito Destino", todos_deps, key="trans_destino")
                 cant_t  = st.number_input("Cantidad", min_value=0.01,
                                           max_value=max(stk_orig, 0.01), step=0.5, key="trans_cant")
                 lote_t  = st.text_input("Lote", value="S/L", key="trans_lote")
@@ -3198,15 +3198,15 @@ with tab1:
             else:
                 if st.session_state.trans_pendiente is None:
                     if not es_admin():
-                        cod_sup_t = st.text_input("Código de supervisor", type="password",
+                        cod_sup_t = st.text_input("CÃ³digo de supervisor", type="password",
                                                    key="cod_sup_trans",
-                                                   help="Requerido para operadores. Los admins no necesitan código.")
+                                                   help="Requerido para operadores. Los admins no necesitan cÃ³digo.")
                         puede_transferir = cod_sup_t == (obtener_metadata("codigo_supervisor") or "1234")
                         if cod_sup_t and not puede_transferir:
-                            st.error("❌ Código de supervisor incorrecto.")
+                            st.error("âŒ CÃ³digo de supervisor incorrecto.")
                     else:
                         puede_transferir = True
-                    if st.button("↔️ Preparar transferencia", disabled=not puede_transferir):
+                    if st.button("â†”ï¸ Preparar transferencia", disabled=not puede_transferir):
                         st.session_state.trans_pendiente = dict(
                             producto=prod_t, dep_origen=dep_origen, dep_destino=dep_destino,
                             cantidad=cant_t, lote=lote_t, referencia=ref_t
@@ -3215,18 +3215,18 @@ with tab1:
                 else:
                     tp = st.session_state.trans_pendiente
                     st.warning(
-                        f"**¿Confirmar?** {tp['cantidad']:,.1f} × {tp['producto']} | "
-                        f"{tp['dep_origen']} → {tp['dep_destino']}"
+                        f"**Â¿Confirmar?** {tp['cantidad']:,.1f} Ã— {tp['producto']} | "
+                        f"{tp['dep_origen']} â†’ {tp['dep_destino']}"
                     )
                     tc1, tc2 = st.columns(2)
                     with tc1:
-                        if st.button("✅ Confirmar transferencia", type="primary"):
+                        if st.button("âœ… Confirmar transferencia", type="primary"):
                             conn = conectar_db()
                             id_p = conn.execute("SELECT id_producto FROM productos WHERE nombre=?",
                                                 (tp["producto"],)).fetchone()
                             if id_p:
                                 ts  = datetime.now().strftime("%d/%m/%Y %H:%M")
-                                ref = tp["referencia"] or f"Transferencia {tp['dep_origen']} → {tp['dep_destino']}"
+                                ref = tp["referencia"] or f"Transferencia {tp['dep_origen']} â†’ {tp['dep_destino']}"
                                 usu = usuario_actual()
                                 for tipo, dep in [("Salida", tp["dep_origen"]), ("Entrada", tp["dep_destino"])]:
                                     conn.execute("""INSERT INTO movimientos
@@ -3241,35 +3241,35 @@ with tab1:
                                 conn.commit()
                             conn.close()
                             limpiar_cache()
-                            st.success(f"✅ Transferencia ejecutada.")
+                            st.success(f"âœ… Transferencia ejecutada.")
                             st.session_state.trans_pendiente = None
                             st.rerun()
                     with tc2:
-                        if st.button("❌ Cancelar transferencia"):
+                        if st.button("âŒ Cancelar transferencia"):
                             st.session_state.trans_pendiente = None
                             st.rerun()
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# FUNCIÓN REUTILIZABLE: ENTREGAS
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# FUNCIÃ“N REUTILIZABLE: ENTREGAS
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 @st.fragment
 def mostrar_tab_entregas(hoja_nombre, titulo):
     st.subheader(titulo)
     if hoja_nombre == "LA CLEMENTINA S.A":
-        with st.expander("📂 Importar TODAS las hojas", expanded=False):
-            st.info("Subí el archivo completo de entregas Monsanto/Bayer (4 hojas).")
+        with st.expander("ðŸ“‚ Importar TODAS las hojas", expanded=False):
+            st.info("SubÃ­ el archivo completo de entregas Monsanto/Bayer (4 hojas).")
             arch = st.file_uploader("Archivo entregas (.xlsx)", type=["xlsx","xls"],
                                     key="uploader_entregas_global")
             co1, co2 = st.columns(2)
             with co1:
-                descontar = st.toggle("🔄 Registrar como Salidas", value=False, key="tog_descontar")
+                descontar = st.toggle("ðŸ”„ Registrar como Salidas", value=False, key="tog_descontar")
             with co2:
                 sf       = obtener_stock_full()
                 dep_opts = sf["Deposito"].unique().tolist() if not sf.empty else ["0"]
-                dep_sal  = st.selectbox("Depósito origen", dep_opts, key="dep_sal_g") if descontar else None
+                dep_sal  = st.selectbox("DepÃ³sito origen", dep_opts, key="dep_sal_g") if descontar else None
 
-            if arch and st.button("🚀 IMPORTAR", type="primary"):
+            if arch and st.button("ðŸš€ IMPORTAR", type="primary"):
                 try:
                     df_u = parsear_entregas_excel(arch)
                     if df_u.empty:
@@ -3321,7 +3321,7 @@ def mostrar_tab_entregas(hoja_nombre, titulo):
                         guardar_metadata("ultima_importacion_entregas",
                                          datetime.now().strftime("%d/%m/%Y %H:%M"))
                         limpiar_cache()
-                        msg = f"✅ {ok} registros. {sal} salidas." if descontar else f"✅ {ok} registros."
+                        msg = f"âœ… {ok} registros. {sal} salidas." if descontar else f"âœ… {ok} registros."
                         st.success(msg)
                         if no_match: st.warning(f"Sin coincidencia: {', '.join(no_match)}")
                         st.rerun()
@@ -3336,15 +3336,15 @@ def mostrar_tab_entregas(hoja_nombre, titulo):
     _ult_ent = obtener_metadata("ultima_importacion_entregas")
     _hdr1, _hdr2 = st.columns([9, 1])
     with _hdr1:
-        if _ult_ent: st.caption(f"🕐 Última importación: **{_ult_ent}**")
+        if _ult_ent: st.caption(f"ðŸ• Ãšltima importaciÃ³n: **{_ult_ent}**")
     with _hdr2:
-        if st.button("🔄", key=f"ent_refresh_{hoja_nombre}", help="Actualizar datos"):
+        if st.button("ðŸ”„", key=f"ent_refresh_{hoja_nombre}", help="Actualizar datos"):
             st.session_state[_ent_cache_key] = obtener_entregas(hoja_nombre)
             df_h = st.session_state[_ent_cache_key]
             st.rerun()
 
     if df_h is None or df_h.empty:
-        st.info("Sin datos. Importá en 'LC / LCAGRO'.")
+        st.info("Sin datos. ImportÃ¡ en 'LC / LCAGRO'.")
         return
 
     df_h["dias_pend"] = df_h["dia_recibido"].apply(dias_desde)
@@ -3361,11 +3361,11 @@ def mostrar_tab_entregas(hoja_nombre, titulo):
     with k3: st.metric("Comprado",      f"{tc:,.0f}")
     with k4: st.metric("Entregado",     f"{te:,.0f}", delta=f"{pct:.1f}%")
     with k5: st.metric("Pendiente",     f"{tp:,.0f}", delta=f"-{tp:,.0f}" if tp>0 else "0", delta_color="inverse")
-    with k6: st.metric("⏳ +30d",       v30, delta=-v30, delta_color="inverse")
-    with k7: st.metric("🔴 +60d",       v60, delta=-v60, delta_color="inverse")
+    with k6: st.metric("â³ +30d",       v30, delta=-v30, delta_color="inverse")
+    with k7: st.metric("ðŸ”´ +60d",       v60, delta=-v60, delta_color="inverse")
 
-    if v60 > 0: st.error(f"🔴 {v60} entrega(s) con más de 60 días sin completar.")
-    elif v30>0: st.warning(f"⚠️ {v30} entrega(s) con más de 30 días pendiente.")
+    if v60 > 0: st.error(f"ðŸ”´ {v60} entrega(s) con mÃ¡s de 60 dÃ­as sin completar.")
+    elif v30>0: st.warning(f"âš ï¸ {v30} entrega(s) con mÃ¡s de 30 dÃ­as pendiente.")
 
     st.markdown("---")
     cf1,cf2,cf3,cf4,cf5 = st.columns(5)
@@ -3380,13 +3380,13 @@ def mostrar_tab_entregas(hoja_nombre, titulo):
                             ["Todos"]+sorted(df_h["vendedor"].dropna().replace("","S/V").unique().tolist()),
                             key=f"fvend_{hoja_nombre}")
     with cf4:
-        f_cli = st.text_input("🔍 Cliente", placeholder="Buscar...", key=f"fcli_{hoja_nombre}")
+        f_cli = st.text_input("ðŸ” Cliente", placeholder="Buscar...", key=f"fcli_{hoja_nombre}")
     with cf5:
-        f_edad = st.selectbox("Antigüedad",
-                              ["Todos","Normal (≤30d)","Demorado (30-60d)","Crítico (>60d)"],
+        f_edad = st.selectbox("AntigÃ¼edad",
+                              ["Todos","Normal (â‰¤30d)","Demorado (30-60d)","CrÃ­tico (>60d)"],
                               key=f"fedad_{hoja_nombre}")
 
-    # Pre-calcular columna lowercase para búsqueda instantánea por cliente
+    # Pre-calcular columna lowercase para bÃºsqueda instantÃ¡nea por cliente
     _ent_cli_key = f"ent_cli_lower_{hoja_nombre}"
     _ent_id_key  = f"ent_cache_id_{hoja_nombre}"
     if _ent_cli_key not in st.session_state or st.session_state.get(_ent_id_key) != id(df_h):
@@ -3400,9 +3400,9 @@ def mostrar_tab_entregas(hoja_nombre, titulo):
     if f_cli:            _mask2 &= st.session_state[_ent_cli_key].str.contains(f_cli.lower(), na=False)
 
     df_f2 = df_h[_mask2].copy()
-    if   f_edad == "Normal (≤30d)":       df_f2 = df_f2[df_f2["dias_pend"] <= 30]
+    if   f_edad == "Normal (â‰¤30d)":       df_f2 = df_f2[df_f2["dias_pend"] <= 30]
     elif f_edad == "Demorado (30-60d)":   df_f2 = df_f2[(df_f2["dias_pend"]>30) & (df_f2["dias_pend"]<=60)]
-    elif f_edad == "Crítico (>60d)":      df_f2 = df_f2[df_f2["dias_pend"] > 60]
+    elif f_edad == "CrÃ­tico (>60d)":      df_f2 = df_f2[df_f2["dias_pend"] > 60]
 
     st.markdown(f"**{len(df_f2)} registros**")
     if not df_f2.empty:
@@ -3425,56 +3425,56 @@ def mostrar_tab_entregas(hoja_nombre, titulo):
             "dia_recibido":"Fecha","cliente":"Cliente","producto":"Producto",
             "cantidad_comprada":"Comprado","cant_entregada":"Entregado",
             "pendiente":"Pendiente","estado":"Estado","vendedor":"Vendedor",
-            "lote":"Lote","deposito":"Depósito","rto":"RTO","dias_pend":"Días"
+            "lote":"Lote","deposito":"DepÃ³sito","rto":"RTO","dias_pend":"DÃ­as"
         })
         st.dataframe(df_t, use_container_width=True, hide_index=True)
-        st.download_button("📥 Exportar Excel", data=to_excel_bytes(df_t, "Entregas"),
+        st.download_button("ðŸ“¥ Exportar Excel", data=to_excel_bytes(df_t, "Entregas"),
                            file_name=f"entregas_{hoja_nombre.replace(' ','_')}.xlsx")
 
 
-with tab2: mostrar_tab_entregas("LA CLEMENTINA S.A", "📋 Entregas — La Clementina / LCAgro")
-with tab3: mostrar_tab_entregas("BAYER DEP55",       "🌿 Consignado Bayer — Depósito 55")
-with tab4: mostrar_tab_entregas("BAYER DIRECTA",     "🚚 Facturación Directa Bayer 43-60")
+with tab2: mostrar_tab_entregas("LA CLEMENTINA S.A", "ðŸ“‹ Entregas â€” La Clementina / LCAgro")
+with tab3: mostrar_tab_entregas("BAYER DEP55",       "ðŸŒ¿ Consignado Bayer â€” DepÃ³sito 55")
+with tab4: mostrar_tab_entregas("BAYER DIRECTA",     "ðŸšš FacturaciÃ³n Directa Bayer 43-60")
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# TAB 5 — STOCK FÍSICO
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# TAB 5 â€” STOCK FÃSICO
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 with tab5:
-    st.subheader("📋 Toma de Stock Físico")
+    st.subheader("ðŸ“‹ Toma de Stock FÃ­sico")
     st_df = obtener_stock_full()
 
-    _inv_tabs = st.tabs(["📝 Conteo Individual", "📋 Conteo Masivo", "↩️ Devoluciones", "📊 Historial Auditorías", "🔀 Transferencia"])
+    _inv_tabs = st.tabs(["ðŸ“ Conteo Individual", "ðŸ“‹ Conteo Masivo", "â†©ï¸ Devoluciones", "ðŸ“Š Historial AuditorÃ­as", "ðŸ”€ Transferencia"])
 
     with _inv_tabs[0]:
         if not st_df.empty:
-            st.download_button("📥 Descargar Planilla de Conteo (.xlsx)",
+            st.download_button("ðŸ“¥ Descargar Planilla de Conteo (.xlsx)",
                                data=descargar_planilla_inventario(st_df),
                                file_name="Planilla_Toma_Stock.xlsx")
             st.markdown("---")
-            st.write("### 📝 Registrar Ajuste Auditado")
+            st.write("### ðŸ“ Registrar Ajuste Auditado")
             ci1, ci2, ci3 = st.columns(3)
             with ci1:
                 p_inv = st.selectbox("Producto", sorted(st_df["Producto"].unique()), key="inv_p")
             with ci2:
-                d_inv = st.selectbox("Depósito", sorted(st_df["Deposito"].unique()), key="inv_d")
+                d_inv = st.selectbox("DepÃ³sito", sorted(st_df["Deposito"].unique()), key="inv_d")
             with ci3:
                 filt_s   = st_df[(st_df["Producto"]==p_inv) & (st_df["Deposito"]==d_inv)]
                 val_sis  = filt_s.iloc[0]["Stock Actual"] if not filt_s.empty else 0.0
                 st.metric("Stock en Sistema", f"{val_sis:,.1f}")
             ci4, ci5 = st.columns(2)
             with ci4:
-                val_fis = st.number_input("Conteo Físico Real", min_value=0.0, step=1.0, value=float(val_sis))
+                val_fis = st.number_input("Conteo FÃ­sico Real", min_value=0.0, step=1.0, value=float(val_sis))
             with ci5:
                 obs_inv = st.text_input("Observaciones / Auditor")
             dif = val_fis - val_sis
             st.metric("Diferencia detectada", f"{dif:,.1f}", delta=dif)
             if dif != 0:
-                if dif > 0: st.info(f"📈 Sobrante de {dif:,.1f} — se registrará una Entrada de ajuste.")
-                else:       st.warning(f"📉 Faltante de {abs(dif):,.1f} — se registrará una Salida de ajuste.")
-            if st.button("💾 Guardar Auditoría", type="primary"):
+                if dif > 0: st.info(f"ðŸ“ˆ Sobrante de {dif:,.1f} â€” se registrarÃ¡ una Entrada de ajuste.")
+                else:       st.warning(f"ðŸ“‰ Faltante de {abs(dif):,.1f} â€” se registrarÃ¡ una Salida de ajuste.")
+            if st.button("ðŸ’¾ Guardar AuditorÃ­a", type="primary"):
                 conn   = conectar_db()
-                cod_p  = safe_str(st_df[st_df["Producto"]==p_inv].iloc[0]["Código"]) if not st_df[st_df["Producto"]==p_inv].empty else "S/C"
+                cod_p  = safe_str(st_df[st_df["Producto"]==p_inv].iloc[0]["CÃ³digo"]) if not st_df[st_df["Producto"]==p_inv].empty else "S/C"
                 conn.execute("""INSERT INTO inventario_fisico
                     (fecha_conteo,codigo,producto,deposito,stock_sistema,conteo_fisico,diferencia,observaciones)
                     VALUES (?,?,?,?,?,?,?,?)""",
@@ -3491,14 +3491,14 @@ with tab5:
                 conn.commit(); conn.close()
                 registrar_importacion_log("Ajuste Inventario", f"{p_inv}/{d_inv}", 1)
                 limpiar_cache()
-                st.success("✅ Auditoría guardada.")
+                st.success("âœ… AuditorÃ­a guardada.")
                 st.rerun()
         else:
             st.info("Sin datos de stock.")
 
     with _inv_tabs[1]:
-        st.write("### 📋 Conteo Masivo")
-        st.caption("Subí la planilla de conteo completada para registrar todos los ajustes de una vez.")
+        st.write("### ðŸ“‹ Conteo Masivo")
+        st.caption("SubÃ­ la planilla de conteo completada para registrar todos los ajustes de una vez.")
         if st_df.empty:
             st.info("Sin datos de stock.")
         else:
@@ -3509,9 +3509,9 @@ with tab5:
                     _df_conteo = (pd.read_excel(arch_conteo) if not arch_conteo.name.endswith(".csv")
                                   else pd.read_csv(arch_conteo))
                     _df_conteo.columns = [str(c).strip() for c in _df_conteo.columns]
-                    # Buscar columnas de conteo físico
+                    # Buscar columnas de conteo fÃ­sico
                     _col_conteo = next((c for c in _df_conteo.columns
-                                        if "conteo" in c.lower() or "fisico" in c.lower() or "físico" in c.lower()), None)
+                                        if "conteo" in c.lower() or "fisico" in c.lower() or "fÃ­sico" in c.lower()), None)
                     _col_prod   = next((c for c in _df_conteo.columns
                                         if "producto" in c.lower() or "nombre" in c.lower()), None)
                     _col_dep    = next((c for c in _df_conteo.columns
@@ -3522,7 +3522,7 @@ with tab5:
                         _df_conteo = _df_conteo[_df_conteo[_col_prod].notna()].copy()
                         st.caption(f"{len(_df_conteo)} productos en la planilla")
                         st.dataframe(_df_conteo.head(10), use_container_width=True, hide_index=True)
-                        if st.button("✅ Importar conteo masivo", type="primary", key="btn_conteo_masivo"):
+                        if st.button("âœ… Importar conteo masivo", type="primary", key="btn_conteo_masivo"):
                             conn = conectar_db()
                             _ok_c = 0
                             for _, _rc in _df_conteo.iterrows():
@@ -3534,7 +3534,7 @@ with tab5:
                                 if _dp: _filt = _filt[_filt["Deposito"]==_dp]
                                 _vs = float(_filt["Stock Actual"].sum()) if not _filt.empty else 0.0
                                 _dif = _cf - _vs
-                                _cod = safe_str(_filt.iloc[0]["Código"]) if not _filt.empty else "S/C"
+                                _cod = safe_str(_filt.iloc[0]["CÃ³digo"]) if not _filt.empty else "S/C"
                                 conn.execute("""INSERT INTO inventario_fisico
                                     (fecha_conteo,codigo,producto,deposito,stock_sistema,conteo_fisico,diferencia,observaciones)
                                     VALUES (?,?,?,?,?,?,?,?)""",
@@ -3554,14 +3554,14 @@ with tab5:
                             conn.commit(); conn.close()
                             registrar_importacion_log("Conteo Masivo", arch_conteo.name, _ok_c)
                             limpiar_cache()
-                            st.success(f"✅ {_ok_c} productos procesados.")
+                            st.success(f"âœ… {_ok_c} productos procesados.")
                             st.rerun()
                 except Exception as _ex:
                     st.error(f"Error: {_ex}")
 
     with _inv_tabs[2]:
-        st.write("### ↩️ Registrar Devolución")
-        st.caption("Registra la devolución de un producto por parte de un cliente. Incrementa el stock con tipo 'Devolución'.")
+        st.write("### â†©ï¸ Registrar DevoluciÃ³n")
+        st.caption("Registra la devoluciÃ³n de un producto por parte de un cliente. Incrementa el stock con tipo 'DevoluciÃ³n'.")
         if st_df.empty:
             st.info("Sin datos de stock.")
         else:
@@ -3572,13 +3572,13 @@ with tab5:
                                                 if not obtener_productos_completo().empty else []),
                                          key="dev_prod")
                 _cant_dev = st.number_input("Cantidad devuelta", min_value=0.01, step=1.0, key="dev_cant")
-                _dep_dev  = st.selectbox("Depósito destino", sorted(st_df["Deposito"].unique()), key="dev_dep")
+                _dep_dev  = st.selectbox("DepÃ³sito destino", sorted(st_df["Deposito"].unique()), key="dev_dep")
             with _dv2:
                 _cli_dev  = st.text_input("Cliente que devuelve", key="dev_cli")
                 _lote_dev = st.text_input("Lote", value="S/L", key="dev_lote")
-                _obs_dev  = st.text_area("Motivo de devolución", key="dev_obs", height=80)
-            _rem_dev  = st.text_input("N° Remito original (opcional)", key="dev_rem")
-            if st.button("💾 Registrar Devolución", type="primary", key="btn_dev"):
+                _obs_dev  = st.text_area("Motivo de devoluciÃ³n", key="dev_obs", height=80)
+            _rem_dev  = st.text_input("NÂ° Remito original (opcional)", key="dev_rem")
+            if st.button("ðŸ’¾ Registrar DevoluciÃ³n", type="primary", key="btn_dev"):
                 if _prod_dev and _cant_dev > 0:
                     conn = conectar_db()
                     _id_dev = conn.execute("SELECT id_producto FROM productos WHERE nombre=?",
@@ -3590,47 +3590,47 @@ with tab5:
                             VALUES (?,?,?,?,?,?,?,?,?,?)""",
                             (datetime.now().strftime("%d/%m/%Y %H:%M"), "Entrada",
                              _id_dev[0], _cant_dev, _lote_dev,
-                             f"Devolución — {_cli_dev}" + (f" / Rem: {_rem_dev}" if _rem_dev else ""),
+                             f"DevoluciÃ³n â€” {_cli_dev}" + (f" / Rem: {_rem_dev}" if _rem_dev else ""),
                              _dep_dev, "devolucion", usuario_actual(),
                              _obs_dev))
                         conn.commit()
                         conn.close()
                         limpiar_cache()
-                        st.success(f"✅ Devolución de {_cant_dev:,.1f} unidades de {_prod_dev} registrada.")
+                        st.success(f"âœ… DevoluciÃ³n de {_cant_dev:,.1f} unidades de {_prod_dev} registrada.")
                         st.rerun()
                     else:
                         conn.close()
                         st.error("Producto no encontrado.")
                 else:
-                    st.warning("Completá el producto y la cantidad.")
+                    st.warning("CompletÃ¡ el producto y la cantidad.")
 
     with _inv_tabs[3]:
-        st.write("### 📊 Historial de Auditorías de Inventario")
+        st.write("### ðŸ“Š Historial de AuditorÃ­as de Inventario")
         conn = conectar_db()
         df_inv_h2 = _rsql("SELECT * FROM inventario_fisico ORDER BY id_inventario DESC LIMIT 500", conn)
         conn.close()
         if df_inv_h2.empty:
-            st.info("Sin auditorías registradas aún.")
+            st.info("Sin auditorÃ­as registradas aÃºn.")
         else:
             _ai1, _ai2, _ai3 = st.columns(3)
-            _ai1.metric("Total auditorías", len(df_inv_h2))
+            _ai1.metric("Total auditorÃ­as", len(df_inv_h2))
             _ai2.metric("Con diferencia", int((df_inv_h2["diferencia"] != 0).sum()))
             _ai3.metric("Diferencia acumulada", f"{df_inv_h2['diferencia'].sum():,.1f}")
             st.dataframe(
                 df_inv_h2.rename(columns={
-                    "fecha_conteo":"Fecha","codigo":"Código","producto":"Producto",
-                    "deposito":"Depósito","stock_sistema":"Sistema","conteo_fisico":"Conteo",
+                    "fecha_conteo":"Fecha","codigo":"CÃ³digo","producto":"Producto",
+                    "deposito":"DepÃ³sito","stock_sistema":"Sistema","conteo_fisico":"Conteo",
                     "diferencia":"Dif","observaciones":"Notas"
                 }),
                 use_container_width=True, hide_index=True
             )
-            st.download_button("📥 Exportar auditorías (.xlsx)",
+            st.download_button("ðŸ“¥ Exportar auditorÃ­as (.xlsx)",
                                data=to_excel_bytes(df_inv_h2, "Auditorias"),
                                file_name=f"auditorias_{datetime.now().strftime('%Y%m%d')}.xlsx")
 
     with _inv_tabs[4]:
-        st.write("### 🔀 Transferencia entre Depósitos")
-        st.caption("Mover stock de un depósito a otro. Genera movimiento de Salida en origen y Entrada en destino.")
+        st.write("### ðŸ”€ Transferencia entre DepÃ³sitos")
+        st.caption("Mover stock de un depÃ³sito a otro. Genera movimiento de Salida en origen y Entrada en destino.")
         if st_df.empty:
             st.info("Sin datos de stock.")
         else:
@@ -3639,8 +3639,8 @@ with tab5:
             _tr1, _tr2 = st.columns(2)
             with _tr1:
                 _prod_tr = st.selectbox("Producto", _prods_tr, key="tr_prod")
-                _dep_orig_tr = st.selectbox("Depósito origen", _deps_tr, key="tr_orig")
-                _dep_dest_tr = st.selectbox("Depósito destino", _deps_tr, key="tr_dest")
+                _dep_orig_tr = st.selectbox("DepÃ³sito origen", _deps_tr, key="tr_orig")
+                _dep_dest_tr = st.selectbox("DepÃ³sito destino", _deps_tr, key="tr_dest")
             with _tr2:
                 _filt_tr = st_df[(st_df["Producto"]==_prod_tr) & (st_df["Deposito"]==_dep_orig_tr)]
                 _stk_orig_tr = float(_filt_tr["Stock Actual"].sum()) if not _filt_tr.empty else 0.0
@@ -3649,17 +3649,17 @@ with tab5:
                                            max_value=max(_stk_orig_tr, 0.01),
                                            step=1.0, key="tr_cant")
                 _motivo_tr = st.text_input("Motivo / Referencia", key="tr_motivo",
-                                           placeholder="ej: Reposición sucursal Las Varillas")
+                                           placeholder="ej: ReposiciÃ³n sucursal Las Varillas")
             if _dep_orig_tr == _dep_dest_tr:
-                st.warning("El depósito de origen y destino deben ser distintos.")
-            elif st.button("✅ Confirmar Transferencia", type="primary", key="btn_tr"):
+                st.warning("El depÃ³sito de origen y destino deben ser distintos.")
+            elif st.button("âœ… Confirmar Transferencia", type="primary", key="btn_tr"):
                 if _cant_tr > 0:
                     conn = conectar_db()
                     _id_tr = conn.execute("SELECT id_producto FROM productos WHERE nombre=?",
                                          (_prod_tr,)).fetchone()
                     if _id_tr:
                         _ts_tr = datetime.now().strftime("%d/%m/%Y %H:%M")
-                        _ref_tr = f"TRANSF: {_dep_orig_tr} → {_dep_dest_tr}" + (f" | {_motivo_tr}" if _motivo_tr else "")
+                        _ref_tr = f"TRANSF: {_dep_orig_tr} â†’ {_dep_dest_tr}" + (f" | {_motivo_tr}" if _motivo_tr else "")
                         conn.cursor().executemany(
                             """INSERT INTO movimientos
                                (fecha_hora,tipo_movimiento,id_producto,cantidad,lote,
@@ -3672,28 +3672,28 @@ with tab5:
                         )
                         conn.commit(); conn.close()
                         limpiar_cache()
-                        st.success(f"✅ Transferidos {_cant_tr:,.1f} de {_prod_tr}: {_dep_orig_tr} → {_dep_dest_tr}")
+                        st.success(f"âœ… Transferidos {_cant_tr:,.1f} de {_prod_tr}: {_dep_orig_tr} â†’ {_dep_dest_tr}")
                         st.rerun()
                     else:
                         conn.close()
                         st.error("Producto no encontrado.")
                 else:
-                    st.warning("Ingresá una cantidad mayor a cero.")
+                    st.warning("IngresÃ¡ una cantidad mayor a cero.")
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# TAB 6 — HISTORIAL
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# TAB 6 â€” HISTORIAL
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 with tab6:
-    st.subheader("📜 Historial de Movimientos")
+    st.subheader("ðŸ“œ Historial de Movimientos")
     _ult_h = obtener_metadata("ultima_importacion")
-    if _ult_h: st.caption(f"🕐 Última importación de stock: **{_ult_h}**")
+    if _ult_h: st.caption(f"ðŸ• Ãšltima importaciÃ³n de stock: **{_ult_h}**")
     hist_df = obtener_historial_movimientos()
 
     if hist_df.empty:
         st.info("Sin movimientos registrados.")
     else:
-        # KPIs rápidos
+        # KPIs rÃ¡pidos
         _hk1, _hk2, _hk3, _hk4 = st.columns(4)
         with _hk1: st.metric("Total movimientos", len(hist_df))
         with _hk2: st.metric("Entradas", int((hist_df["Tipo"]=="Entrada").sum()))
@@ -3706,7 +3706,7 @@ with tab6:
         ch1, ch2, ch3, ch4 = st.columns(4)
         with ch1: f_tipo_h = st.selectbox("Tipo", ["Todos","Entrada","Salida"])
         with ch2: f_orig_h = st.selectbox("Origen", ["Todos","excel","manual","entrega"])
-        with ch3: f_bus_h  = st.text_input("🔍 Buscar producto/lote")
+        with ch3: f_bus_h  = st.text_input("ðŸ” Buscar producto/lote")
         with ch4:
             usu_opts = ["Todos"] + sorted(hist_df["Usuario"].replace("","sistema").unique().tolist())
             f_usu_h  = st.selectbox("Operador", usu_opts)
@@ -3745,24 +3745,24 @@ with tab6:
         _total_pages_h = max(1, (_total_h + _PAGE_H - 1) // _PAGE_H)
         _ph1, _ph2, _ph3 = st.columns([1, 2, 1])
         with _ph1:
-            st.markdown(f"**{_total_h} movimientos** · {_total_pages_h} páginas")
+            st.markdown(f"**{_total_h} movimientos** Â· {_total_pages_h} pÃ¡ginas")
         with _ph2:
-            _page_h = st.number_input("Página", min_value=1, max_value=_total_pages_h,
+            _page_h = st.number_input("PÃ¡gina", min_value=1, max_value=_total_pages_h,
                                       value=1, step=1, key="hist_page", label_visibility="collapsed")
         with _ph3:
-            st.caption(f"pág {_page_h}/{_total_pages_h}")
+            st.caption(f"pÃ¡g {_page_h}/{_total_pages_h}")
         df_hf_page = df_hf.iloc[(_page_h - 1) * _PAGE_H : _page_h * _PAGE_H]
         st.dataframe(df_hf_page, use_container_width=True, hide_index=True)
 
         if not df_hf.empty:
             _dh1, _dh2 = st.columns(2)
             with _dh1:
-                st.download_button("📥 Exportar historial completo (.xlsx)",
+                st.download_button("ðŸ“¥ Exportar historial completo (.xlsx)",
                                    data=to_excel_bytes(df_hf, "Historial"),
                                    file_name=f"historial_{datetime.now().strftime('%Y%m%d')}.xlsx",
                                    use_container_width=True)
             with _dh2:
-                # Mini gráfico de actividad por día
+                # Mini grÃ¡fico de actividad por dÃ­a
                 if len(df_hf) > 1:
                     df_hf["_fdt2"] = df_hf["Fecha"].apply(parse_fh)
                     act_g = df_hf.groupby(["_fdt2","Tipo"]).size().reset_index(name="N")
@@ -3777,9 +3777,9 @@ with tab6:
         # Anular movimiento
         if es_admin():
             st.markdown("---")
-            with st.expander("🔄 Anular Movimiento"):
+            with st.expander("ðŸ”„ Anular Movimiento"):
                 id_an = st.number_input("ID del movimiento a anular", min_value=1, step=1, key="id_anular")
-                if st.button("🔄 Anular", key="btn_anular"):
+                if st.button("ðŸ”„ Anular", key="btn_anular"):
                     conn = conectar_db()
                     row_an = conn.execute(
                         "SELECT tipo_movimiento,id_producto,cantidad,lote,deposito,referencia,anulado "
@@ -3795,12 +3795,12 @@ with tab6:
                                 VALUES (?,?,?,?,?,?,?,?,?)""",
                                 (datetime.now().strftime("%d/%m/%Y %H:%M"), tipo_rev,
                                  row_an[1], row_an[2], row_an[3],
-                                 f"ANULACIÓN de ID {id_an}: {row_an[5]}", row_an[4], "manual",
+                                 f"ANULACIÃ“N de ID {id_an}: {row_an[5]}", row_an[4], "manual",
                                  usuario_actual()))
                             conn.execute("UPDATE movimientos SET anulado=1 WHERE id_movimiento=?", (int(id_an),))
                             conn.commit()
                             limpiar_cache()
-                            st.success(f"✅ Movimiento {id_an} anulado.")
+                            st.success(f"âœ… Movimiento {id_an} anulado.")
                     else:
                         st.error(f"ID {id_an} no encontrado.")
                     conn.close()
@@ -3808,9 +3808,9 @@ with tab6:
 
         # Trazabilidad por lote
         st.markdown("---")
-        with st.expander("🔍 Trazabilidad por Lote"):
-            st.caption("Buscá un número de lote y ves todos sus movimientos: de dónde vino y a dónde fue.")
-            _lote_q = st.text_input("Número de lote", key="trz_lote_input",
+        with st.expander("ðŸ” Trazabilidad por Lote"):
+            st.caption("BuscÃ¡ un nÃºmero de lote y ves todos sus movimientos: de dÃ³nde vino y a dÃ³nde fue.")
+            _lote_q = st.text_input("NÃºmero de lote", key="trz_lote_input",
                                     placeholder="ej: L2024-001, LOTE3...")
             if _lote_q and len(_lote_q) >= 2:
                 _df_trz = hist_df[
@@ -3827,10 +3827,10 @@ with tab6:
                     _tc3.metric("Salidas totales",  f"{_trz_sal:,.1f}")
                     _tc4.metric("Stock neto",       f"{_trz_ent - _trz_sal:,.1f}")
                     st.dataframe(
-                        _df_trz[["Fecha","Tipo","Producto","Cantidad","Unidad","Lote","Depósito","Referencia","Usuario","Anulado"]],
+                        _df_trz[["Fecha","Tipo","Producto","Cantidad","Unidad","Lote","DepÃ³sito","Referencia","Usuario","Anulado"]],
                         use_container_width=True, hide_index=True
                     )
-                    st.download_button("📥 Exportar trazabilidad (.xlsx)",
+                    st.download_button("ðŸ“¥ Exportar trazabilidad (.xlsx)",
                                        data=to_excel_bytes(_df_trz, "Trazabilidad"),
                                        file_name=f"trz_lote_{_lote_q}.xlsx")
 
@@ -3848,32 +3848,32 @@ with tab6:
 
         if not df_tr.empty:
             st.markdown("---")
-            st.subheader("↔️ Historial de Transferencias")
+            st.subheader("â†”ï¸ Historial de Transferencias")
             st.caption(f"{len(df_tr)} transferencias registradas")
             st.dataframe(df_tr, use_container_width=True, hide_index=True)
-            st.download_button("📥 Exportar transferencias (.xlsx)",
+            st.download_button("ðŸ“¥ Exportar transferencias (.xlsx)",
                                data=to_excel_bytes(df_tr, "Transferencias"),
                                file_name=f"transferencias_{datetime.now().strftime('%Y%m%d')}.xlsx")
 
         if not df_inv_h.empty:
             st.markdown("---")
-            st.subheader("📋 Auditorías de Inventario")
+            st.subheader("ðŸ“‹ AuditorÃ­as de Inventario")
             df_inv_show = df_inv_h.rename(columns={
-                "fecha_conteo":"Fecha","codigo":"Código","producto":"Producto","deposito":"Depósito",
+                "fecha_conteo":"Fecha","codigo":"CÃ³digo","producto":"Producto","deposito":"DepÃ³sito",
                 "stock_sistema":"Sistema","conteo_fisico":"Conteo","diferencia":"Dif","observaciones":"Notas"
             })
             st.dataframe(df_inv_show, use_container_width=True, hide_index=True)
-            st.download_button("📥 Exportar auditorías (.xlsx)",
+            st.download_button("ðŸ“¥ Exportar auditorÃ­as (.xlsx)",
                                data=to_excel_bytes(df_inv_show, "Auditorias"),
                                file_name=f"auditorias_{datetime.now().strftime('%Y%m%d')}.xlsx")
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# TAB 7 — VALORIZACIÓN Y PRECIOS
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# TAB 7 â€” VALORIZACIÃ“N Y PRECIOS
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 with tab7:
-    st.subheader("💲 Valorización de Inventario")
-    st.caption("Aquí podés asignar precios a cada producto para calcular el valor total del inventario en USD y ARS.")
+    st.subheader("ðŸ’² ValorizaciÃ³n de Inventario")
+    st.caption("AquÃ­ podÃ©s asignar precios a cada producto para calcular el valor total del inventario en USD y ARS.")
     stk_full = obtener_stock_full()
     prod_full = obtener_productos_completo()
 
@@ -3886,13 +3886,13 @@ with tab7:
             tc_stored = float(obtener_metadata("tipo_cambio") or 1000)
             tipo_cambio = st.number_input("Tipo de cambio ARS/USD",
                                           min_value=1.0, value=tc_stored, step=10.0, key="tc_val")
-            if st.button("💾 Guardar TC"):
+            if st.button("ðŸ’¾ Guardar TC"):
                 guardar_metadata("tipo_cambio", str(tipo_cambio))
                 st.success("Tipo de cambio actualizado.")
 
         st.markdown("---")
-        st.write("### 🏷️ Actualizar Precios por Producto")
-        st.caption("Editá directamente la tabla. Los precios se guardan al hacer clic en Guardar.")
+        st.write("### ðŸ·ï¸ Actualizar Precios por Producto")
+        st.caption("EditÃ¡ directamente la tabla. Los precios se guardan al hacer clic en Guardar.")
 
         if not prod_full.empty:
             cols_precio = ["nombre","precio_unitario","moneda_precio","proveedor","fecha_vencimiento"]
@@ -3913,7 +3913,7 @@ with tab7:
                 use_container_width=True,
                 key="editor_precios"
             )
-            if st.button("💾 Guardar Precios", type="primary"):
+            if st.button("ðŸ’¾ Guardar Precios", type="primary"):
                 conn = conectar_db()
                 for _, r in edited.iterrows():
                     precio = float(r["Precio"]) if r["Precio"] else 0.0
@@ -3934,11 +3934,11 @@ with tab7:
                                  usuario_actual()))
                 conn.commit(); conn.close()
                 limpiar_cache()
-                st.success("✅ Precios actualizados.")
+                st.success("âœ… Precios actualizados.")
                 st.rerun()
 
         st.markdown("---")
-        st.write("### 📊 Inventario Valorizado")
+        st.write("### ðŸ“Š Inventario Valorizado")
         prod_refr = obtener_productos_completo()
         if not prod_refr.empty:
             stk_val = stk_full.groupby(["Producto","Unidad"])["Stock Actual"].sum().reset_index()
@@ -3958,8 +3958,8 @@ with tab7:
             total_ars = stk_val["Valor_ARS"].sum()
 
             cv_kpi1, cv_kpi2 = st.columns(2)
-            with cv_kpi1: st.metric("💵 Valor Total USD", f"USD {total_usd:,.2f}")
-            with cv_kpi2: st.metric("💴 Valor Total ARS", f"ARS {total_ars:,.0f}")
+            with cv_kpi1: st.metric("ðŸ’µ Valor Total USD", f"USD {total_usd:,.2f}")
+            with cv_kpi2: st.metric("ðŸ’´ Valor Total ARS", f"ARS {total_ars:,.0f}")
 
             df_show = (stk_val[["Producto","Unidad","Stock Actual",
                                  "precio_unitario","moneda_precio","Valor_USD","Valor_ARS"]]
@@ -3969,16 +3969,16 @@ with tab7:
                            "Valor_USD":"Valor USD","Valor_ARS":"Valor ARS"
                        }))
             st.dataframe(df_show, use_container_width=True, hide_index=True)
-            st.download_button("📥 Exportar Valorización",
-                               data=to_excel_bytes(df_show, "Valorización"),
+            st.download_button("ðŸ“¥ Exportar ValorizaciÃ³n",
+                               data=to_excel_bytes(df_show, "ValorizaciÃ³n"),
                                file_name="valorizacion_stock.xlsx")
 
         st.markdown("---")
-        st.write("### 💹 Margen Bruto por Producto")
-        st.caption("Cruza el precio de costo (valorización) con el precio de venta (lista 2026) para estimar margen bruto.")
+        st.write("### ðŸ’¹ Margen Bruto por Producto")
+        st.caption("Cruza el precio de costo (valorizaciÃ³n) con el precio de venta (lista 2026) para estimar margen bruto.")
         lp_mg = obtener_lista_precios()
         if lp_mg.empty:
-            st.info("Cargá la Lista de Precios 2026 en la pestaña 🏷️ Lista de Precios para ver el margen.")
+            st.info("CargÃ¡ la Lista de Precios 2026 en la pestaÃ±a ðŸ·ï¸ Lista de Precios para ver el margen.")
         elif not prod_refr.empty:
             _stk_mg = stk_full.groupby(["Producto","Unidad"])["Stock Actual"].sum().reset_index()
             _stk_mg = _stk_mg.merge(
@@ -4002,7 +4002,7 @@ with tab7:
             _stk_mg["Stock_Valor_USD"] = _stk_mg["Stock Actual"] * _stk_mg["Costo_USD"]
             _stk_mg_show = _stk_mg[_stk_mg["Costo_USD"] > 0].sort_values("Margen_%", ascending=False)
             if _stk_mg_show.empty:
-                st.info("Asigná precios de costo en 'Actualizar Precios por Producto' para ver el margen.")
+                st.info("AsignÃ¡ precios de costo en 'Actualizar Precios por Producto' para ver el margen.")
             else:
                 _mg1, _mg2 = st.columns(2)
                 with _mg1:
@@ -4027,12 +4027,12 @@ with tab7:
                     .round(2),
                     use_container_width=True, hide_index=True
                 )
-                st.download_button("📥 Exportar Margen Bruto (.xlsx)",
+                st.download_button("ðŸ“¥ Exportar Margen Bruto (.xlsx)",
                                    data=to_excel_bytes(_stk_mg_show, "Margen"),
                                    file_name="margen_bruto.xlsx")
 
         st.markdown("---")
-        st.write("### 🛒 Orden de Reposición y Forecast")
+        st.write("### ðŸ›’ Orden de ReposiciÃ³n y Forecast")
         U_rep = st.session_state.umbral_alerta
         consumo_df = calcular_rotacion_stock()
         orden_bin  = generar_orden_reposicion(stk_full, U_rep, consumo_df)
@@ -4041,35 +4041,35 @@ with tab7:
         _fc1, _fc2, _fc3 = st.columns(3)
         with _fc1:
             dias_fc = st.selectbox("Horizonte de forecast", [15, 30, 60, 90], index=1,
-                                   help="Días hacia adelante para proyectar la necesidad de compra")
+                                   help="DÃ­as hacia adelante para proyectar la necesidad de compra")
         with _fc2:
             st.metric("Productos bajo umbral", bajo_n_rep,
                        help=f"Tienen menos de {U_rep} unidades en stock")
         with _fc3:
             df_fc_now = calcular_forecast(dias_fc)
-            st.metric("Necesitan reposición", len(df_fc_now),
-                       help=f"Productos que se agotarían en los próximos {dias_fc} días")
+            st.metric("Necesitan reposiciÃ³n", len(df_fc_now),
+                       help=f"Productos que se agotarÃ­an en los prÃ³ximos {dias_fc} dÃ­as")
 
         if not df_fc_now.empty:
             fig_fc = px.bar(
                 df_fc_now.head(20).sort_values("Necesidad_Compra", ascending=True),
                 x="Necesidad_Compra", y="Producto", orientation="h",
-                title=f"Necesidad de compra — próximos {dias_fc} días",
+                title=f"Necesidad de compra â€” prÃ³ximos {dias_fc} dÃ­as",
                 color="Necesidad_Compra", color_continuous_scale=["#ffc107","#dc3545"],
                 labels={"Necesidad_Compra":"Unidades a reponer"}
             )
             fig_fc.update_layout(height=380, showlegend=False, margin=dict(l=0,r=0,t=40,b=0))
             st.plotly_chart(fig_fc, use_container_width=True)
             st.dataframe(
-                df_fc_now[["Producto","Unidad","Stock Actual","Consumo_Proyectado","Necesidad_Compra","Días_Cobertura"]]
+                df_fc_now[["Producto","Unidad","Stock Actual","Consumo_Proyectado","Necesidad_Compra","DÃ­as_Cobertura"]]
                 .rename(columns={"Stock Actual":"Stock","Consumo_Proyectado":f"Consumo {dias_fc}d",
-                                  "Necesidad_Compra":"A Reponer","Días_Cobertura":"Días Cob."}),
+                                  "Necesidad_Compra":"A Reponer","DÃ­as_Cobertura":"DÃ­as Cob."}),
                 use_container_width=True, hide_index=True
             )
 
         _or1, _or2, _or3 = st.columns(3)
         with _or1:
-            st.download_button("📥 Orden de Reposición (.xlsx)",
+            st.download_button("ðŸ“¥ Orden de ReposiciÃ³n (.xlsx)",
                                data=orden_bin, file_name="orden_reposicion.xlsx",
                                use_container_width=True)
         with _or2:
@@ -4078,18 +4078,18 @@ with tab7:
                 proveedor="Bayer CropScience / Monsanto-Bayer"
             )
             if _oc_pdf:
-                st.download_button("🖨️ Orden de Compra PDF",
+                st.download_button("ðŸ–¨ï¸ Orden de Compra PDF",
                                    data=_oc_pdf, file_name="orden_compra.pdf",
                                    mime="application/pdf", use_container_width=True)
         with _or3:
-            st.download_button("📥 Forecast (.xlsx)",
+            st.download_button("ðŸ“¥ Forecast (.xlsx)",
                                data=to_excel_bytes(df_fc_now, "Forecast") if not df_fc_now.empty else b"",
                                file_name=f"forecast_{dias_fc}d.xlsx",
                                use_container_width=True)
 
         # Historial de precios
         st.markdown("---")
-        st.write("### 📈 Historial de Precios")
+        st.write("### ðŸ“ˆ Historial de Precios")
         conn = conectar_db()
         df_ph = _rsql("""
                 SELECT ph.fecha "Fecha", p.nombre "Producto",
@@ -4098,43 +4098,43 @@ with tab7:
                 ORDER BY ph.id_precio DESC LIMIT 200""", conn)
         conn.close()
         if not df_ph.empty:
-            prod_hist = st.selectbox("Producto para ver evolución",
+            prod_hist = st.selectbox("Producto para ver evoluciÃ³n",
                                      ["Todos"]+sorted(df_ph["Producto"].unique().tolist()),
                                      key="prod_hist")
             df_ph_f = df_ph if prod_hist=="Todos" else df_ph[df_ph["Producto"]==prod_hist]
             st.dataframe(df_ph_f, use_container_width=True, hide_index=True)
             if prod_hist != "Todos" and len(df_ph_f) > 1:
                 fig_ph = px.line(df_ph_f.sort_values("Fecha"), x="Fecha", y="Precio",
-                                 title=f"Evolución Precio — {prod_hist}")
+                                 title=f"EvoluciÃ³n Precio â€” {prod_hist}")
                 st.plotly_chart(fig_ph, use_container_width=True)
         else:
-            st.caption("Sin historial de precios todavía.")
+            st.caption("Sin historial de precios todavÃ­a.")
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# TAB 8 — REPORTES
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# TAB 8 â€” REPORTES
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 with tab8:
-    st.subheader("📈 Reportes y Análisis")
+    st.subheader("ðŸ“ˆ Reportes y AnÃ¡lisis")
     r_tab1, r_tab2, r_tab3, r_tab4, r_tab5, r_tab6, r_tab7, r_tab8, r_tab9, r_tab10, r_tab11, r_tab12, r_tab13 = st.tabs([
-        "👥 Dashboard Vendedores",
-        "🔄 Rotación de Stock",
-        "⏰ Vencimientos",
-        "📄 Reporte Mensual",
-        "📊 Resumen Ejecutivo",
-        "⏸️ Stock Inmovilizado",
-        "⚡ Eficiencia Entregas",
-        "🏆 Ranking Clientes",
-        "📉 Proyección de Quiebre",
-        "😴 Clientes Sin Actividad",
-        "🔮 Predicción de Demanda",
-        "💰 Clientes más Rentables",
-        "🗺️ Producto por Zona",
+        "ðŸ‘¥ Dashboard Vendedores",
+        "ðŸ”„ RotaciÃ³n de Stock",
+        "â° Vencimientos",
+        "ðŸ“„ Reporte Mensual",
+        "ðŸ“Š Resumen Ejecutivo",
+        "â¸ï¸ Stock Inmovilizado",
+        "âš¡ Eficiencia Entregas",
+        "ðŸ† Ranking Clientes",
+        "ðŸ“‰ ProyecciÃ³n de Quiebre",
+        "ðŸ˜´ Clientes Sin Actividad",
+        "ðŸ”® PredicciÃ³n de Demanda",
+        "ðŸ’° Clientes mÃ¡s Rentables",
+        "ðŸ—ºï¸ Producto por Zona",
     ])
 
-    # ── Vendedores ────────────────────────────────────────────────────────────
+    # â”€â”€ Vendedores â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     with r_tab1:
-        st.write("### 👥 Performance por Vendedor")
+        st.write("### ðŸ‘¥ Performance por Vendedor")
         ent_all = obtener_entregas()
         if ent_all.empty:
             st.info("Sin datos de entregas.")
@@ -4170,64 +4170,64 @@ with tab8:
             fig_vend.update_layout(height=350, margin=dict(l=0,r=0,t=40,b=0))
             st.plotly_chart(fig_vend, use_container_width=True)
 
-            # Pivot producto × vendedor
-            st.write("#### Pendiente por Producto × Vendedor")
+            # Pivot producto Ã— vendedor
+            st.write("#### Pendiente por Producto Ã— Vendedor")
             pv2 = df_v[df_v["pendiente"] > 0].pivot_table(
                 index="producto", columns="vendedor", values="pendiente",
                 aggfunc="sum", fill_value=0
             ).reset_index()
             st.dataframe(pv2, use_container_width=True, hide_index=True)
 
-    # ── Rotación ─────────────────────────────────────────────────────────────
+    # â”€â”€ RotaciÃ³n â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     with r_tab2:
-        st.write("### 🔄 Rotación de Stock")
-        st.caption("Días de cobertura = Stock actual ÷ Salidas promedio diarias (90 días).")
-        dias_h = st.slider("Ventana histórica (días)", 30, 180, 90, key="dias_rot")
+        st.write("### ðŸ”„ RotaciÃ³n de Stock")
+        st.caption("DÃ­as de cobertura = Stock actual Ã· Salidas promedio diarias (90 dÃ­as).")
+        dias_h = st.slider("Ventana histÃ³rica (dÃ­as)", 30, 180, 90, key="dias_rot")
         df_rot = calcular_rotacion_stock(dias_h)
         if df_rot.empty:
-            st.info("Sin movimientos suficientes para calcular rotación.")
+            st.info("Sin movimientos suficientes para calcular rotaciÃ³n.")
         else:
             cr1, cr2, cr3 = st.columns(3)
             with cr1:
-                sin_mov = len(df_rot[df_rot["Días_Cobertura"].isna()])
+                sin_mov = len(df_rot[df_rot["DÃ­as_Cobertura"].isna()])
                 st.metric("Sin movimiento", sin_mov)
             with cr2:
-                crit_rot = len(df_rot[df_rot["Días_Cobertura"].notna() & (df_rot["Días_Cobertura"] < 30)])
-                st.metric("Cobertura < 30d 🚨", crit_rot)
+                crit_rot = len(df_rot[df_rot["DÃ­as_Cobertura"].notna() & (df_rot["DÃ­as_Cobertura"] < 30)])
+                st.metric("Cobertura < 30d ðŸš¨", crit_rot)
             with cr3:
-                ok_rot = len(df_rot[df_rot["Días_Cobertura"].notna() & (df_rot["Días_Cobertura"] >= 30)])
-                st.metric("Cobertura OK ✅", ok_rot)
+                ok_rot = len(df_rot[df_rot["DÃ­as_Cobertura"].notna() & (df_rot["DÃ­as_Cobertura"] >= 30)])
+                st.metric("Cobertura OK âœ…", ok_rot)
 
             st.dataframe(
                 df_rot.rename(columns={
-                    "Total_Salidas":"Salidas 90d","Sal_Diarias":"Sal/Día",
-                    "Días_Cobertura":"Días Cobertura","Rotación_Anual":"Rotación Anual"
+                    "Total_Salidas":"Salidas 90d","Sal_Diarias":"Sal/DÃ­a",
+                    "DÃ­as_Cobertura":"DÃ­as Cobertura","RotaciÃ³n_Anual":"RotaciÃ³n Anual"
                 }),
                 use_container_width=True, hide_index=True
             )
 
-            df_rot_graf = df_rot[df_rot["Días_Cobertura"].notna()].sort_values("Días_Cobertura").head(20)
+            df_rot_graf = df_rot[df_rot["DÃ­as_Cobertura"].notna()].sort_values("DÃ­as_Cobertura").head(20)
             if not df_rot_graf.empty:
-                fig_rot = px.bar(df_rot_graf, x="Días_Cobertura", y="Producto",
-                                 orientation="h", title="Días de Cobertura (Top 20 más críticos)",
-                                 color="Días_Cobertura", color_continuous_scale="RdYlGn")
+                fig_rot = px.bar(df_rot_graf, x="DÃ­as_Cobertura", y="Producto",
+                                 orientation="h", title="DÃ­as de Cobertura (Top 20 mÃ¡s crÃ­ticos)",
+                                 color="DÃ­as_Cobertura", color_continuous_scale="RdYlGn")
                 fig_rot.update_layout(height=500, margin=dict(l=0,r=0,t=40,b=0))
                 st.plotly_chart(fig_rot, use_container_width=True)
 
-            st.download_button("📥 Exportar Rotación",
+            st.download_button("ðŸ“¥ Exportar RotaciÃ³n",
                                data=to_excel_bytes(df_rot, "Rotacion"),
                                file_name="rotacion_stock.xlsx")
 
-    # ── Vencimientos por Lote ─────────────────────────────────────────────────
+    # â”€â”€ Vencimientos por Lote â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     with r_tab3:
-        st.write("### ⏰ Control de Vencimientos por Lote")
+        st.write("### â° Control de Vencimientos por Lote")
 
         df_lotes = obtener_lotes_vencimiento()
 
         if df_lotes.empty:
-            st.info("Sin datos de lotes. Importá el archivo de lotes desde **⚙️ Configuración → Importación**.")
+            st.info("Sin datos de lotes. ImportÃ¡ el archivo de lotes desde **âš™ï¸ ConfiguraciÃ³n â†’ ImportaciÃ³n**.")
         else:
-            # Calcular días restantes
+            # Calcular dÃ­as restantes
             def _dias_v(fv):
                 if not fv: return None
                 try:
@@ -4238,44 +4238,44 @@ with tab8:
             df_lotes["dias"] = df_lotes["fecha_vencimiento"].apply(_dias_v)
 
             def _sem_v(d):
-                if d is None:   return "⚪ Sin fecha"
-                if d < 0:       return "🔴 Vencido"
-                if d < 30:      return "🟠 Crítico"
-                if d < 90:      return "🟡 Próximo"
-                return "🟢 OK"
+                if d is None:   return "âšª Sin fecha"
+                if d < 0:       return "ðŸ”´ Vencido"
+                if d < 30:      return "ðŸŸ  CrÃ­tico"
+                if d < 90:      return "ðŸŸ¡ PrÃ³ximo"
+                return "ðŸŸ¢ OK"
 
             df_lotes["Estado"] = df_lotes["dias"].apply(_sem_v)
 
-            # ── KPIs globales ─────────────────────────────────────────────────
+            # â”€â”€ KPIs globales â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             _con_fecha = df_lotes[df_lotes["dias"].notna()]
             _lv1, _lv2, _lv3, _lv4, _lv5 = st.columns(5)
             _lv1.metric("Lotes totales",      len(df_lotes))
-            _lv2.metric("🔴 Vencidos",        int((_con_fecha["dias"] < 0).sum()))
-            _lv3.metric("🟠 Críticos (<30d)", int(((_con_fecha["dias"] >= 0) & (_con_fecha["dias"] < 30)).sum()))
-            _lv4.metric("🟡 Próximos (30-90d)",int(((_con_fecha["dias"] >= 30) & (_con_fecha["dias"] < 90)).sum()))
-            _lv5.metric("🟢 OK",              int((_con_fecha["dias"] >= 90).sum()))
+            _lv2.metric("ðŸ”´ Vencidos",        int((_con_fecha["dias"] < 0).sum()))
+            _lv3.metric("ðŸŸ  CrÃ­ticos (<30d)", int(((_con_fecha["dias"] >= 0) & (_con_fecha["dias"] < 30)).sum()))
+            _lv4.metric("ðŸŸ¡ PrÃ³ximos (30-90d)",int(((_con_fecha["dias"] >= 30) & (_con_fecha["dias"] < 90)).sum()))
+            _lv5.metric("ðŸŸ¢ OK",              int((_con_fecha["dias"] >= 90).sum()))
 
             # Alerta inmediata si hay vencidos con stock positivo
             _venc_con_stock = df_lotes[(df_lotes["dias"].notna()) &
                                        (df_lotes["dias"] < 0) &
                                        (df_lotes["stock"] > 0)]
             if not _venc_con_stock.empty:
-                st.error(f"🚨 **{len(_venc_con_stock)} lotes VENCIDOS con stock positivo** — "
-                         f"requieren revisión urgente. Stock total involucrado: "
+                st.error(f"ðŸš¨ **{len(_venc_con_stock)} lotes VENCIDOS con stock positivo** â€” "
+                         f"requieren revisiÃ³n urgente. Stock total involucrado: "
                          f"{_venc_con_stock['stock'].sum():,.1f}")
 
             st.markdown("---")
 
-            # ── Filtros ───────────────────────────────────────────────────────
+            # â”€â”€ Filtros â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             _fl1, _fl2, _fl3 = st.columns([2, 2, 2])
             with _fl1:
-                _est_opts = ["Todos", "🔴 Vencido", "🟠 Crítico", "🟡 Próximo", "🟢 OK", "⚪ Sin fecha"]
+                _est_opts = ["Todos", "ðŸ”´ Vencido", "ðŸŸ  CrÃ­tico", "ðŸŸ¡ PrÃ³ximo", "ðŸŸ¢ OK", "âšª Sin fecha"]
                 _est_fil  = st.selectbox("Estado", _est_opts, key="venc_est_fil")
             with _fl2:
                 _prods_v  = ["Todos"] + sorted(df_lotes["producto"].dropna().unique().tolist())
                 _prod_fil = st.selectbox("Producto", _prods_v, key="venc_prod_fil")
             with _fl3:
-                _dias_max = st.number_input("Mostrar vencimientos en próximos N días (0 = todos)",
+                _dias_max = st.number_input("Mostrar vencimientos en prÃ³ximos N dÃ­as (0 = todos)",
                                             min_value=0, value=365, step=30, key="venc_dias_max")
 
             df_v = df_lotes.copy()
@@ -4290,7 +4290,7 @@ with tab8:
 
             st.caption(f"Mostrando {len(df_v):,} lotes")
 
-            # ── Vista agrupada por Producto ───────────────────────────────────
+            # â”€â”€ Vista agrupada por Producto â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             _vista = st.radio("Vista", ["Por Lote (detalle)", "Por Producto (resumen)"],
                               horizontal=True, key="venc_vista")
 
@@ -4307,62 +4307,62 @@ with tab8:
                         .reset_index()
                         .rename(columns={
                             "producto": "Producto", "unidad": "Unidad",
-                            "Stock_Total": "Stock Total", "Venc_Minima": "Días al próximo venc."
+                            "Stock_Total": "Stock Total", "Venc_Minima": "DÃ­as al prÃ³ximo venc."
                         }))
 
                 def _sem_row(row):
-                    if row["Vencido"] > 0:   return "🔴 Tiene vencidos"
-                    if row["Critico"] > 0:   return "🟠 Crítico"
-                    if row["Proximo"] > 0:   return "🟡 Próximo"
-                    return "🟢 OK"
+                    if row["Vencido"] > 0:   return "ðŸ”´ Tiene vencidos"
+                    if row["Critico"] > 0:   return "ðŸŸ  CrÃ­tico"
+                    if row["Proximo"] > 0:   return "ðŸŸ¡ PrÃ³ximo"
+                    return "ðŸŸ¢ OK"
 
                 _grp["Estado General"] = _grp.apply(_sem_row, axis=1)
-                _grp = _grp.sort_values("Días al próximo venc.", na_position="last")
+                _grp = _grp.sort_values("DÃ­as al prÃ³ximo venc.", na_position="last")
 
                 st.dataframe(
                     _grp[["Producto","Unidad","Lotes","Stock Total",
-                           "Vencido","Critico","Proximo","Días al próximo venc.","Estado General"]],
+                           "Vencido","Critico","Proximo","DÃ­as al prÃ³ximo venc.","Estado General"]],
                     use_container_width=True, hide_index=True,
                     column_config={
                         "Stock Total":              st.column_config.NumberColumn(format="%.1f"),
-                        "Días al próximo venc.":    st.column_config.NumberColumn(format="%d"),
+                        "DÃ­as al prÃ³ximo venc.":    st.column_config.NumberColumn(format="%d"),
                     }
                 )
-                st.download_button("📥 Exportar resumen (.xlsx)",
+                st.download_button("ðŸ“¥ Exportar resumen (.xlsx)",
                                    data=to_excel_bytes(_grp, "Resumen_Vencimientos"),
                                    file_name=f"venc_resumen_{datetime.now().strftime('%Y%m%d')}.xlsx")
 
             else:  # Detalle por lote
                 _show = df_v[["producto","unidad","deposito","lote","stock",
                                "fecha_vencimiento","fecha_fabricacion","dias","Estado"]].rename(columns={
-                    "producto":"Producto","unidad":"Unidad","deposito":"Depósito",
+                    "producto":"Producto","unidad":"Unidad","deposito":"DepÃ³sito",
                     "lote":"Lote","stock":"Stock","fecha_vencimiento":"Vence",
-                    "fecha_fabricacion":"Fabricación","dias":"Días restantes","Estado":"Estado"
+                    "fecha_fabricacion":"FabricaciÃ³n","dias":"DÃ­as restantes","Estado":"Estado"
                 })
                 st.dataframe(
                     _show,
                     use_container_width=True, hide_index=True,
                     column_config={
                         "Stock":           st.column_config.NumberColumn(format="%.2f"),
-                        "Días restantes":  st.column_config.NumberColumn(format="%d"),
+                        "DÃ­as restantes":  st.column_config.NumberColumn(format="%d"),
                     }
                 )
-                st.download_button("📥 Exportar detalle (.xlsx)",
+                st.download_button("ðŸ“¥ Exportar detalle (.xlsx)",
                                    data=to_excel_bytes(_show, "Detalle_Lotes"),
                                    file_name=f"venc_detalle_{datetime.now().strftime('%Y%m%d')}.xlsx")
 
-            # ── Exportar lotes vencidos para baja ────────────────────────────
-            _lv_para_baja = df_v[df_v["Estado"] == "🔴 Vencido"].copy()
+            # â”€â”€ Exportar lotes vencidos para baja â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            _lv_para_baja = df_v[df_v["Estado"] == "ðŸ”´ Vencido"].copy()
             if not _lv_para_baja.empty:
                 st.markdown("---")
                 st.warning(f"**{len(_lv_para_baja)} lotes vencidos** con stock total "
                            f"{_lv_para_baja['stock'].sum():,.1f} unidades.")
-                st.download_button("📋 Exportar lotes vencidos para gestión de baja",
+                st.download_button("ðŸ“‹ Exportar lotes vencidos para gestiÃ³n de baja",
                                    data=generar_venc_excel_baja(_lv_para_baja),
                                    file_name=f"lotes_vencidos_{datetime.now().strftime('%Y%m%d')}.xlsx")
 
-            # ── QR por lote ───────────────────────────────────────────────────
-            with st.expander("🏷️ Generar QR de lote", expanded=False):
+            # â”€â”€ QR por lote â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            with st.expander("ðŸ·ï¸ Generar QR de lote", expanded=False):
                 _qr_cols = st.columns(4)
                 with _qr_cols[0]:
                     _qr_prod = st.selectbox("Producto", sorted(df_lotes["producto"].dropna().unique()),
@@ -4372,21 +4372,21 @@ with tab8:
                     _qr_lote = st.selectbox("Lote", _lotes_del_prod["lote"].fillna("S/L").unique(),
                                             key="qr_lote")
                 with _qr_cols[2]:
-                    _qr_dep  = st.text_input("Depósito", key="qr_dep")
+                    _qr_dep  = st.text_input("DepÃ³sito", key="qr_dep")
                 with _qr_cols[3]:
                     _qr_row  = _lotes_del_prod[_lotes_del_prod["lote"] == _qr_lote]
                     _qr_venc = _qr_row["fecha_vencimiento"].iloc[0] if not _qr_row.empty else ""
                     st.text_input("Vencimiento", value=str(_qr_venc), disabled=True, key="qr_venc_disp")
-                if st.button("📲 Generar QR", key="btn_qr_lote"):
+                if st.button("ðŸ“² Generar QR", key="btn_qr_lote"):
                     _qr_bytes = generar_qr_lote(_qr_prod, _qr_lote, str(_qr_venc), _qr_dep)
                     if _qr_bytes:
-                        st.image(_qr_bytes, width=200, caption=f"{_qr_prod} · {_qr_lote}")
-                        st.download_button("⬇️ Descargar QR (.png)", data=_qr_bytes,
+                        st.image(_qr_bytes, width=200, caption=f"{_qr_prod} Â· {_qr_lote}")
+                        st.download_button("â¬‡ï¸ Descargar QR (.png)", data=_qr_bytes,
                                            file_name=f"qr_{_qr_lote}.png", mime="image/png")
 
-            # ── Timeline de vencimientos ──────────────────────────────────────
+            # â”€â”€ Timeline de vencimientos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             st.markdown("---")
-            st.write("#### 📅 Timeline: Stock que vence por mes")
+            st.write("#### ðŸ“… Timeline: Stock que vence por mes")
             _tl = generar_vencimientos_timeline()
             if not _tl.empty:
                 _hoy_mes = datetime.now().strftime("%Y-%m")
@@ -4394,7 +4394,7 @@ with tab8:
                 _tl_grp  = _tl_fut.groupby("Mes")["Stock"].sum().reset_index()
                 if not _tl_grp.empty:
                     _fig_tl = px.bar(_tl_grp, x="Mes", y="Stock",
-                                     title="Unidades que vencen por mes (próximos meses)",
+                                     title="Unidades que vencen por mes (prÃ³ximos meses)",
                                      color="Stock",
                                      color_continuous_scale=["#28a745","#ffc107","#dc3545"],
                                      labels={"Stock":"Unidades","Mes":"Mes"})
@@ -4402,32 +4402,32 @@ with tab8:
                                           showlegend=False)
                     st.plotly_chart(_fig_tl, use_container_width=True)
 
-                    # Top productos que más vencen en próximos 90d
+                    # Top productos que mÃ¡s vencen en prÃ³ximos 90d
                     _90d = datetime.now()
                     _tl_90 = _tl_fut[_tl_fut["Mes"] <= (_90d.replace(month=min(_90d.month+3,12)
                                                          ).strftime("%Y-%m"))]
                     if not _tl_90.empty:
                         _top_venc = (_tl_90.groupby("Producto")["Stock"].sum()
                                      .reset_index().sort_values("Stock", ascending=False).head(10))
-                        st.caption("**Top 10 productos con más stock venciendo en 90 días:**")
+                        st.caption("**Top 10 productos con mÃ¡s stock venciendo en 90 dÃ­as:**")
                         st.dataframe(_top_venc, use_container_width=True, hide_index=True)
 
-            # ── Conciliación Sistema vs Lotes ─────────────────────────────────
+            # â”€â”€ ConciliaciÃ³n Sistema vs Lotes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             st.markdown("---")
-            with st.expander("⚖️ Conciliación: Stock Sistema vs Lotes Importados", expanded=False):
+            with st.expander("âš–ï¸ ConciliaciÃ³n: Stock Sistema vs Lotes Importados", expanded=False):
                 st.caption("Compara el stock calculado por movimientos contra la suma de lotes de MacroGest.")
                 _conc = conciliar_stock_vs_lotes()
                 if _conc.empty:
-                    st.info("Necesitás tener stock y lotes importados para ver la conciliación.")
+                    st.info("NecesitÃ¡s tener stock y lotes importados para ver la conciliaciÃ³n.")
                 else:
                     _cc1, _cc2, _cc3 = st.columns(3)
-                    _cc1.metric("Productos coinciden", int((_conc["Estado"] == "✅ Coincide").sum()))
-                    _cc2.metric("Sobrante en sistema", int((_conc["Estado"] == "📈 Sobrante en sistema").sum()))
-                    _cc3.metric("Faltante en sistema", int((_conc["Estado"] == "📉 Faltante en sistema").sum()))
+                    _cc1.metric("Productos coinciden", int((_conc["Estado"] == "âœ… Coincide").sum()))
+                    _cc2.metric("Sobrante en sistema", int((_conc["Estado"] == "ðŸ“ˆ Sobrante en sistema").sum()))
+                    _cc3.metric("Faltante en sistema", int((_conc["Estado"] == "ðŸ“‰ Faltante en sistema").sum()))
                     _conc_fil = st.radio("Filtrar", ["Todos","Solo diferencias"],
                                          horizontal=True, key="conc_fil")
                     _df_conc_show = (_conc if _conc_fil == "Todos"
-                                     else _conc[_conc["Estado"] != "✅ Coincide"])
+                                     else _conc[_conc["Estado"] != "âœ… Coincide"])
                     st.dataframe(
                         _df_conc_show.rename(columns={
                             "Stock Sistema":"Sistema","Stock Lotes":"Lotes"
@@ -4439,14 +4439,14 @@ with tab8:
                             "Diferencia": st.column_config.NumberColumn(format="%.2f"),
                         }
                     )
-                    st.download_button("📥 Exportar conciliación (.xlsx)",
+                    st.download_button("ðŸ“¥ Exportar conciliaciÃ³n (.xlsx)",
                                        data=to_excel_bytes(_conc, "Conciliacion"),
                                        file_name=f"conciliacion_{datetime.now().strftime('%Y%m%d')}.xlsx")
 
-    # ── Resumen Ejecutivo ─────────────────────────────────────────────────────
+    # â”€â”€ Resumen Ejecutivo â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     with r_tab5:
-        st.write("### 📊 Resumen Ejecutivo")
-        st.caption(f"Generado el {datetime.now().strftime('%d/%m/%Y %H:%M')} · La Clementina S.A.")
+        st.write("### ðŸ“Š Resumen Ejecutivo")
+        st.caption(f"Generado el {datetime.now().strftime('%d/%m/%Y %H:%M')} Â· La Clementina S.A.")
         _re_stock = obtener_stock_con_compromisos()
         _re_ent   = obtener_entregas()
         _re_mg    = obtener_entregas("MACROGEST")
@@ -4454,25 +4454,25 @@ with tab8:
 
         if not _re_stock.empty:
             # KPIs principales
-            st.markdown("#### 📦 Stock")
+            st.markdown("#### ðŸ“¦ Stock")
             _ek1,_ek2,_ek3,_ek4,_ek5,_ek6 = st.columns(6)
             with _ek1: st.metric("Productos",     _re_stock["Producto"].nunique())
-            with _ek2: st.metric("Depósitos",     _re_stock["Deposito"].nunique())
+            with _ek2: st.metric("DepÃ³sitos",     _re_stock["Deposito"].nunique())
             with _ek3: st.metric("Vol. Total",    f"{_re_stock['Stock Actual'].sum():,.0f}")
-            with _ek4: st.metric("Bajo umbral 🟡", int((_re_stock["Stock Actual"].between(0, _re_U, inclusive="left")).sum()))
-            with _ek5: st.metric("Negativo 🔴",   int((_re_stock["Stock Actual"] < 0).sum()))
-            with _ek6: st.metric("Comprometido 🟠", int((_re_stock["Disponible Neto"] < 0).sum()))
+            with _ek4: st.metric("Bajo umbral ðŸŸ¡", int((_re_stock["Stock Actual"].between(0, _re_U, inclusive="left")).sum()))
+            with _ek5: st.metric("Negativo ðŸ”´",   int((_re_stock["Stock Actual"] < 0).sum()))
+            with _ek6: st.metric("Comprometido ðŸŸ ", int((_re_stock["Disponible Neto"] < 0).sum()))
 
-            # Stock crítico
+            # Stock crÃ­tico
             _crit = _re_stock[_re_stock["Stock Actual"] < _re_U].sort_values("Stock Actual").head(10)
             if not _crit.empty:
-                st.markdown("**🚨 Productos críticos (bajo umbral o negativos)**")
+                st.markdown("**ðŸš¨ Productos crÃ­ticos (bajo umbral o negativos)**")
                 st.dataframe(_crit[["Producto","Deposito","Stock Actual","Comprometido","Disponible Neto"]],
                              use_container_width=True, hide_index=True)
 
         if not _re_ent.empty:
             st.markdown("---")
-            st.markdown("#### 📋 Entregas")
+            st.markdown("#### ðŸ“‹ Entregas")
             _ee_pend = _re_ent[_re_ent["pendiente"] > 0]
             _ee_dias = (_ee_pend["dia_recibido"].apply(dias_desde)
                         if "dia_recibido" in _ee_pend.columns
@@ -4481,11 +4481,11 @@ with tab8:
             with _ee1: st.metric("Registros pendientes", len(_ee_pend))
             with _ee2: st.metric("Clientes",             _ee_pend["cliente"].nunique())
             with _ee3: st.metric("Vol. pendiente",       f"{_ee_pend['pendiente'].sum():,.0f}")
-            with _ee4: st.metric("+30 días ⏳",           int((_ee_dias > 30).sum()))
+            with _ee4: st.metric("+30 dÃ­as â³",           int((_ee_dias > 30).sum()))
 
         if not _re_mg.empty:
             st.markdown("---")
-            st.markdown("#### 🔄 Sin Entregar MacroGest")
+            st.markdown("#### ðŸ”„ Sin Entregar MacroGest")
             _em_pend = _re_mg[_re_mg["pendiente"] > 0]
             _em1,_em2,_em3 = st.columns(3)
             with _em1: st.metric("Pedidos pendientes", len(_em_pend))
@@ -4496,7 +4496,7 @@ with tab8:
         st.markdown("---")
         _dej1, _dej2 = st.columns(2)
         with _dej1:
-            if st.button("📥 Excel Ejecutivo (.xlsx)", type="primary"):
+            if st.button("ðŸ“¥ Excel Ejecutivo (.xlsx)", type="primary"):
                 _out_ej = io.BytesIO()
                 with pd.ExcelWriter(_out_ej, engine="openpyxl") as _w:
                     if not _re_stock.empty:
@@ -4509,7 +4509,7 @@ with tab8:
                     if not _re_mg.empty:
                         _re_mg[_re_mg["pendiente"] > 0].to_excel(_w, index=False, sheet_name="SinEntregar_MG")
                     _kpi_ej = pd.DataFrame({
-                        "Indicador": ["Fecha","Productos","Depósitos","Stock Negativo","Bajo Umbral",
+                        "Indicador": ["Fecha","Productos","DepÃ³sitos","Stock Negativo","Bajo Umbral",
                                       "Pendientes Entregas","Pendientes MG"],
                         "Valor": [
                             datetime.now().strftime("%d/%m/%Y %H:%M"),
@@ -4522,36 +4522,36 @@ with tab8:
                         ]
                     })
                     _kpi_ej.to_excel(_w, index=False, sheet_name="KPIs")
-                st.download_button("⬇️ Descargar Excel",
+                st.download_button("â¬‡ï¸ Descargar Excel",
                                    data=_out_ej.getvalue(),
                                    file_name=f"ejecutivo_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         with _dej2:
             if PDF_AVAILABLE:
-                if st.button("📄 PDF Ejecutivo con Logo LC"):
+                if st.button("ðŸ“„ PDF Ejecutivo con Logo LC"):
                     _pdf_ej = generar_ejecutivo_pdf()
                     if _pdf_ej:
-                        st.download_button("⬇️ Descargar PDF",
+                        st.download_button("â¬‡ï¸ Descargar PDF",
                                            data=_pdf_ej,
                                            file_name=f"ejecutivo_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
                                            mime="application/pdf")
             else:
                 st.caption("PDF: `pip install reportlab`")
 
-    # ── Reporte Mensual ───────────────────────────────────────────────────────
+    # â”€â”€ Reporte Mensual â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     with r_tab4:
-        st.write("### 📄 Reporte Mensual Consolidado")
+        st.write("### ðŸ“„ Reporte Mensual Consolidado")
         rm1, rm2 = st.columns(2)
         with rm1:
             reporte_excel = generar_reporte_excel()
-            st.download_button("📥 Descargar Reporte Excel (.xlsx)",
+            st.download_button("ðŸ“¥ Descargar Reporte Excel (.xlsx)",
                                data=reporte_excel,
                                file_name=f"reporte_{datetime.now().strftime('%Y%m')}.xlsx")
         with rm2:
             if PDF_AVAILABLE:
                 pdf_bytes = generar_reporte_pdf()
                 if pdf_bytes:
-                    st.download_button("📥 Descargar Reporte PDF",
+                    st.download_button("ðŸ“¥ Descargar Reporte PDF",
                                        data=pdf_bytes,
                                        file_name=f"reporte_{datetime.now().strftime('%Y%m')}.pdf",
                                        mime="application/pdf")
@@ -4560,7 +4560,7 @@ with tab8:
 
         # Email
         st.markdown("---")
-        st.write("### 📧 Enviar Alerta por Email")
+        st.write("### ðŸ“§ Enviar Alerta por Email")
         email_dest_show = obtener_metadata("email_dest") or "(no configurado)"
         st.caption(f"Destinatario configurado: **{email_dest_show}**")
         stk_bajo = obtener_stock_full()
@@ -4572,20 +4572,20 @@ with tab8:
             if not ent_em.empty:
                 ent_em["dp"] = ent_em["dia_recibido"].apply(dias_desde)
                 pend_30 = len(ent_em[(ent_em["pendiente"] > 0) & (ent_em["dp"] > 30)])
-        if st.button("📧 Enviar Email de Alerta"):
+        if st.button("ðŸ“§ Enviar Email de Alerta"):
             ok_em, msg_em = enviar_email_alerta(stk_bajo, pend_30)
             st.success(msg_em) if ok_em else st.error(msg_em)
 
-    # ── Stock Inmovilizado ────────────────────────────────────────────────────
+    # â”€â”€ Stock Inmovilizado â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     with r_tab6:
-        st.write("### ⏸️ Stock Inmovilizado")
-        st.caption("Productos sin ningún movimiento de salida en los últimos N días. Stock que no rota y ocupa espacio o genera costo financiero.")
-        _dias_inm = st.slider("Días sin movimiento", min_value=30, max_value=365, value=90, step=15,
-                               help="Período de análisis: si un producto no tuvo salidas en estos días, se considera inmovilizado.")
+        st.write("### â¸ï¸ Stock Inmovilizado")
+        st.caption("Productos sin ningÃºn movimiento de salida en los Ãºltimos N dÃ­as. Stock que no rota y ocupa espacio o genera costo financiero.")
+        _dias_inm = st.slider("DÃ­as sin movimiento", min_value=30, max_value=365, value=90, step=15,
+                               help="PerÃ­odo de anÃ¡lisis: si un producto no tuvo salidas en estos dÃ­as, se considera inmovilizado.")
         _hist_inm = obtener_historial_movimientos()
         _stk_inm  = obtener_stock_full()
         if _hist_inm.empty or _stk_inm.empty:
-            st.info("Sin datos suficientes para el análisis.")
+            st.info("Sin datos suficientes para el anÃ¡lisis.")
         else:
             def _parse_dt_inm(s):
                 try: return datetime.strptime(str(s)[:10], "%d/%m/%Y")
@@ -4601,20 +4601,20 @@ with tab8:
             _stk_inm_f = _stk_inm[_stk_inm["Producto"].isin(_inmovilizados)].copy()
             _stk_inm_f = _stk_inm_f.groupby(["Producto","Unidad"])["Stock Actual"].sum().reset_index()
 
-            # Última salida por producto
+            # Ãšltima salida por producto
             _ult_sal = (
                 _hist_sal.groupby("Producto")["_dt"].max().reset_index()
-                .rename(columns={"_dt":"Última Salida"})
+                .rename(columns={"_dt":"Ãšltima Salida"})
             )
-            _ult_sal["Última Salida"] = _ult_sal["Última Salida"].apply(
+            _ult_sal["Ãšltima Salida"] = _ult_sal["Ãšltima Salida"].apply(
                 lambda d: d.strftime("%d/%m/%Y") if d else "Sin salidas"
             )
             _stk_inm_f = _stk_inm_f.merge(_ult_sal, on="Producto", how="left")
-            _stk_inm_f["Última Salida"] = _stk_inm_f["Última Salida"].fillna("Sin salidas")
+            _stk_inm_f["Ãšltima Salida"] = _stk_inm_f["Ãšltima Salida"].fillna("Sin salidas")
 
             _in1, _in2, _in3 = st.columns(3)
             _in1.metric("Productos inmovilizados", len(_stk_inm_f))
-            _in2.metric("% del catálogo",
+            _in2.metric("% del catÃ¡logo",
                         f"{len(_stk_inm_f)/max(1,len(_todos_prods))*100:.1f}%")
             _in3.metric("Stock total inmovilizado",
                         f"{_stk_inm_f['Stock Actual'].sum():,.0f}")
@@ -4623,7 +4623,7 @@ with tab8:
                 fig_inm = px.bar(
                     _stk_inm_f.sort_values("Stock Actual", ascending=False).head(20),
                     x="Producto", y="Stock Actual",
-                    title=f"Top 20 — Productos sin salidas en {_dias_inm} días",
+                    title=f"Top 20 â€” Productos sin salidas en {_dias_inm} dÃ­as",
                     color="Stock Actual",
                     color_continuous_scale=["#28a745","#ffc107","#dc3545"],
                     labels={"Stock Actual":"Stock"}
@@ -4636,16 +4636,16 @@ with tab8:
                     .rename(columns={"Stock Actual":"Stock"}),
                     use_container_width=True, hide_index=True
                 )
-                st.download_button("📥 Exportar Inmovilizado (.xlsx)",
+                st.download_button("ðŸ“¥ Exportar Inmovilizado (.xlsx)",
                                    data=to_excel_bytes(_stk_inm_f, "Inmovilizado"),
                                    file_name=f"inmovilizado_{datetime.now().strftime('%Y%m%d')}.xlsx")
             else:
-                st.success(f"✅ Todos los productos tuvieron movimientos en los últimos {_dias_inm} días.")
+                st.success(f"âœ… Todos los productos tuvieron movimientos en los Ãºltimos {_dias_inm} dÃ­as.")
 
-    # ── Eficiencia de Entregas ────────────────────────────────────────────────
+    # â”€â”€ Eficiencia de Entregas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     with r_tab7:
-        st.write("### ⚡ Eficiencia de Entregas")
-        st.caption("Tiempo promedio entre la fecha de recepción del pedido y la confirmación de entrega, por vendedor y producto.")
+        st.write("### âš¡ Eficiencia de Entregas")
+        st.caption("Tiempo promedio entre la fecha de recepciÃ³n del pedido y la confirmaciÃ³n de entrega, por vendedor y producto.")
         _ent_ef = obtener_entregas()
         if _ent_ef.empty:
             st.info("Sin datos de entregas.")
@@ -4659,9 +4659,9 @@ with tab8:
             _prom_dias_g = _ent_ef["dia_recibido"].apply(dias_desde).mean() if "dia_recibido" in _ent_ef.columns else 0
             _ef1.metric("Registros activos", len(_ent_ef))
             _ef2.metric("Pendientes de entrega", _total_pend)
-            _ef3.metric("Días prom. en espera", f"{_prom_dias_g:.1f}")
+            _ef3.metric("DÃ­as prom. en espera", f"{_prom_dias_g:.1f}")
             _ef4.metric("Confirmadas",
-                        len(_ent_conf) if not _ent_conf.empty else "—")
+                        len(_ent_conf) if not _ent_conf.empty else "â€”")
 
             st.markdown("---")
             # Tiempo en cola por vendedor
@@ -4680,13 +4680,13 @@ with tab8:
                         _by_vend, x="vendedor", y="DiasPromedio",
                         color="DiasPromedio",
                         color_continuous_scale=["#28a745","#ffc107","#dc3545"],
-                        labels={"DiasPromedio":"Días promedio","vendedor":"Vendedor"},
-                        title="Días promedio en cola por vendedor"
+                        labels={"DiasPromedio":"DÃ­as promedio","vendedor":"Vendedor"},
+                        title="DÃ­as promedio en cola por vendedor"
                     )
                     fig_vend_ef.update_layout(height=320, margin=dict(l=0,r=0,t=40,b=0), showlegend=False)
                     st.plotly_chart(fig_vend_ef, use_container_width=True)
                     st.dataframe(
-                        _by_vend.rename(columns={"vendedor":"Vendedor","DiasPromedio":"Días Prom."}),
+                        _by_vend.rename(columns={"vendedor":"Vendedor","DiasPromedio":"DÃ­as Prom."}),
                         use_container_width=True, hide_index=True
                     )
 
@@ -4701,16 +4701,16 @@ with tab8:
                 if not _by_prod_ef.empty:
                     st.write("#### Por Producto (top 15 por volumen pendiente)")
                     st.dataframe(
-                        _by_prod_ef.rename(columns={"producto":"Producto","DiasPromedio":"Días Prom."}),
+                        _by_prod_ef.rename(columns={"producto":"Producto","DiasPromedio":"DÃ­as Prom."}),
                         use_container_width=True, hide_index=True
                     )
-                    st.download_button("📥 Exportar eficiencia (.xlsx)",
+                    st.download_button("ðŸ“¥ Exportar eficiencia (.xlsx)",
                                        data=to_excel_bytes(_by_prod_ef, "Eficiencia"),
                                        file_name=f"eficiencia_{datetime.now().strftime('%Y%m%d')}.xlsx")
 
-    # ── Ranking de Clientes ───────────────────────────────────────────────────
+    # â”€â”€ Ranking de Clientes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     with r_tab8:
-        st.write("### 🏆 Ranking de Clientes")
+        st.write("### ðŸ† Ranking de Clientes")
         st.caption("Clientes ordenados por volumen total pedido, cantidad de remitos y balance pendiente.")
         _ent_rk = obtener_entregas()
         if _ent_rk.empty:
@@ -4750,18 +4750,18 @@ with tab8:
             fig_rk.update_layout(height=380, margin=dict(l=0,r=0,t=40,b=0), xaxis_tickangle=-40)
             st.plotly_chart(fig_rk, use_container_width=True)
             st.dataframe(_rk.head(_n_rk), use_container_width=True)
-            st.download_button("📥 Exportar ranking (.xlsx)",
+            st.download_button("ðŸ“¥ Exportar ranking (.xlsx)",
                                data=to_excel_bytes(_rk, "Ranking_Clientes"),
                                file_name=f"ranking_{datetime.now().strftime('%Y%m%d')}.xlsx")
 
-    # ── Proyección de Quiebre de Stock ────────────────────────────────────────
+    # â”€â”€ ProyecciÃ³n de Quiebre de Stock â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     with r_tab9:
-        st.write("### 📉 Proyección de Quiebre de Stock")
-        st.caption("Estima cuántos días quedan de stock por producto según el ritmo de salidas de los últimos 30 días.")
+        st.write("### ðŸ“‰ ProyecciÃ³n de Quiebre de Stock")
+        st.caption("Estima cuÃ¡ntos dÃ­as quedan de stock por producto segÃºn el ritmo de salidas de los Ãºltimos 30 dÃ­as.")
         _hist_qb = obtener_historial_movimientos()
         _stk_qb  = obtener_stock_full()
         if _hist_qb.empty or _stk_qb.empty:
-            st.info("Sin datos suficientes para calcular proyección.")
+            st.info("Sin datos suficientes para calcular proyecciÃ³n.")
         else:
             _hoy_qb = datetime.now()
             def _parse_fecha_qb(s):
@@ -4784,41 +4784,41 @@ with tab8:
 
             _stk_tot = _stk_qb.groupby(["Producto","Unidad"])["Stock Actual"].sum().reset_index()
             _df_qb = _stk_tot.merge(_sal30, on="Producto", how="left").fillna(0)
-            _df_qb["Días_Quiebre"] = _df_qb.apply(
+            _df_qb["DÃ­as_Quiebre"] = _df_qb.apply(
                 lambda r: round(r["Stock Actual"] / r["Tasa_Diaria"]) if r["Tasa_Diaria"] > 0 else None, axis=1
             )
 
             def _sem_qb(d):
-                if d is None: return "⚪ Sin movimiento"
-                if d < 15:    return "🔴 Crítico (<15d)"
-                if d < 30:    return "🟡 Atención (15-30d)"
-                return "🟢 OK (>30d)"
+                if d is None: return "âšª Sin movimiento"
+                if d < 15:    return "ðŸ”´ CrÃ­tico (<15d)"
+                if d < 30:    return "ðŸŸ¡ AtenciÃ³n (15-30d)"
+                return "ðŸŸ¢ OK (>30d)"
 
-            _df_qb["Estado"] = _df_qb["Días_Quiebre"].apply(_sem_qb)
+            _df_qb["Estado"] = _df_qb["DÃ­as_Quiebre"].apply(_sem_qb)
             _df_qb = _df_qb[_df_qb["Salidas_30d"] > 0].sort_values(
-                "Días_Quiebre", ascending=True, na_position="last"
+                "DÃ­as_Quiebre", ascending=True, na_position="last"
             )
 
             _qb1, _qb2, _qb3 = st.columns(3)
-            _qb1.metric("🔴 Críticos (<15d)",    int((_df_qb["Estado"]=="🔴 Crítico (<15d)").sum()))
-            _qb2.metric("🟡 Atención (15-30d)",  int((_df_qb["Estado"]=="🟡 Atención (15-30d)").sum()))
-            _qb3.metric("🟢 OK",                 int((_df_qb["Estado"]=="🟢 OK (>30d)").sum()))
+            _qb1.metric("ðŸ”´ CrÃ­ticos (<15d)",    int((_df_qb["Estado"]=="ðŸ”´ CrÃ­tico (<15d)").sum()))
+            _qb2.metric("ðŸŸ¡ AtenciÃ³n (15-30d)",  int((_df_qb["Estado"]=="ðŸŸ¡ AtenciÃ³n (15-30d)").sum()))
+            _qb3.metric("ðŸŸ¢ OK",                 int((_df_qb["Estado"]=="ðŸŸ¢ OK (>30d)").sum()))
 
             st.dataframe(
-                _df_qb[["Estado","Producto","Unidad","Stock Actual","Tasa_Diaria","Días_Quiebre"]]
-                .rename(columns={"Stock Actual":"Stock","Tasa_Diaria":"Sal/día","Días_Quiebre":"Días al quiebre"}),
+                _df_qb[["Estado","Producto","Unidad","Stock Actual","Tasa_Diaria","DÃ­as_Quiebre"]]
+                .rename(columns={"Stock Actual":"Stock","Tasa_Diaria":"Sal/dÃ­a","DÃ­as_Quiebre":"DÃ­as al quiebre"}),
                 use_container_width=True, hide_index=True
             )
-            st.download_button("📥 Exportar proyección (.xlsx)",
+            st.download_button("ðŸ“¥ Exportar proyecciÃ³n (.xlsx)",
                                data=to_excel_bytes(_df_qb, "Proyeccion_Quiebre"),
                                file_name=f"proyeccion_quiebre_{datetime.now().strftime('%Y%m%d')}.xlsx")
 
-    # ── Clientes Sin Actividad ────────────────────────────────────────────────
+    # â”€â”€ Clientes Sin Actividad â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     with r_tab10:
-        st.write("### 😴 Clientes Sin Actividad")
+        st.write("### ðŸ˜´ Clientes Sin Actividad")
         st.caption(
             "Clientes con historial en La Clementina (LA CLEMENTINA S.A) "
-            "que NO tienen pedidos en la campaña actual (MACROGEST)."
+            "que NO tienen pedidos en la campaÃ±a actual (MACROGEST)."
         )
         _ent_all_cs = obtener_entregas()
         if _ent_all_cs.empty:
@@ -4833,7 +4833,7 @@ with tab8:
             _cli_sin  = _cli_hist - _cli_mg
 
             if not _cli_sin:
-                st.success("Todos los clientes históricos tienen al menos un pedido en MacroGest.")
+                st.success("Todos los clientes histÃ³ricos tienen al menos un pedido en MacroGest.")
             else:
                 _df_hist_lc = _ent_all_cs[
                     (_ent_all_cs["hoja"]=="LA CLEMENTINA S.A") &
@@ -4845,24 +4845,24 @@ with tab8:
                     Registros=("id_entrega", "count"),
                 ).reset_index().rename(columns={
                     "cliente":"Cliente",
-                    "Ultima_Compra":"Última Compra",
+                    "Ultima_Compra":"Ãšltima Compra",
                     "Total_Comprado":"Total Comprado",
-                }).sort_values("Última Compra", ascending=False)
+                }).sort_values("Ãšltima Compra", ascending=False)
 
-                st.metric("Clientes sin actividad en campaña actual", len(_agg_cs))
+                st.metric("Clientes sin actividad en campaÃ±a actual", len(_agg_cs))
                 st.dataframe(_agg_cs, use_container_width=True, hide_index=True)
                 st.download_button(
-                    "📥 Exportar clientes sin actividad (.xlsx)",
+                    "ðŸ“¥ Exportar clientes sin actividad (.xlsx)",
                     data=to_excel_bytes(_agg_cs, "Clientes_Sin_Actividad"),
                     file_name=f"clientes_sin_actividad_{datetime.now().strftime('%Y%m%d')}.xlsx"
                 )
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # R_TAB 11 — PREDICCIÓN DE DEMANDA
-    # ══════════════════════════════════════════════════════════════════════════
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    # R_TAB 11 â€” PREDICCIÃ“N DE DEMANDA
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     with r_tab11:
-        st.write("### 🔮 Predicción de Demanda")
-        st.caption("Estimación del volumen de ventas del próximo mes basada en el historial de movimientos.")
+        st.write("### ðŸ”® PredicciÃ³n de Demanda")
+        st.caption("EstimaciÃ³n del volumen de ventas del prÃ³ximo mes basada en el historial de movimientos.")
 
         _hist_pred = obtener_historial_movimientos()
         if _hist_pred.empty:
@@ -4886,20 +4886,20 @@ with tab8:
             if len(_sal_mes) < 2:
                 st.warning("Se necesitan al menos 2 meses de historial para predecir.")
             else:
-                # Promedio móvil 3 meses como predicción simple
+                # Promedio mÃ³vil 3 meses como predicciÃ³n simple
                 _sal_mes["Promedio 3M"] = _sal_mes["Salidas"].rolling(3, min_periods=1).mean().round(0)
                 _pred_val = _sal_mes["Promedio 3M"].iloc[-1]
                 _prev_val = _sal_mes["Salidas"].iloc[-1]
                 _var_pct  = (_pred_val - _prev_val) / _prev_val * 100 if _prev_val > 0 else 0
 
                 _pc1, _pc2, _pc3 = st.columns(3)
-                _pc1.metric("Último mes real",    f"{_prev_val:,.0f} uds")
-                _pc2.metric("Predicción próx. mes", f"{_pred_val:,.0f} uds",
+                _pc1.metric("Ãšltimo mes real",    f"{_prev_val:,.0f} uds")
+                _pc2.metric("PredicciÃ³n prÃ³x. mes", f"{_pred_val:,.0f} uds",
                             delta=f"{_var_pct:+.1f}%",
                             delta_color="normal")
-                _pc3.metric("Promedio histórico", f"{_sal_mes['Salidas'].mean():,.0f} uds")
+                _pc3.metric("Promedio histÃ³rico", f"{_sal_mes['Salidas'].mean():,.0f} uds")
 
-                # Gráfico con predicción
+                # GrÃ¡fico con predicciÃ³n
                 _fig_pred = go.Figure()
                 _fig_pred.add_trace(go.Bar(
                     x=_sal_mes["Mes"], y=_sal_mes["Salidas"],
@@ -4907,18 +4907,18 @@ with tab8:
                 ))
                 _fig_pred.add_trace(go.Scatter(
                     x=_sal_mes["Mes"], y=_sal_mes["Promedio 3M"],
-                    name="Promedio móvil 3M", mode="lines+markers",
+                    name="Promedio mÃ³vil 3M", mode="lines+markers",
                     line=dict(color=_LC_YELLOW, width=2, dash="dash")
                 ))
-                # Punto de predicción
+                # Punto de predicciÃ³n
                 _mes_pred = (pd.Period(_sal_mes["Mes"].iloc[-1], "M") + 1).strftime("%Y-%m")
                 _fig_pred.add_trace(go.Scatter(
                     x=[_mes_pred], y=[_pred_val],
-                    name="Predicción", mode="markers",
+                    name="PredicciÃ³n", mode="markers",
                     marker=dict(color="#68d391", size=14, symbol="star")
                 ))
                 _fig_pred.update_layout(
-                    title=f"Historial + Predicción — {'Todos' if _prod_pred=='Todos' else _prod_pred}",
+                    title=f"Historial + PredicciÃ³n â€” {'Todos' if _prod_pred=='Todos' else _prod_pred}",
                     height=380, margin=dict(l=10,r=10,t=40,b=10),
                     legend=dict(orientation="h", y=-0.2),
                     paper_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA",
@@ -4927,7 +4927,7 @@ with tab8:
                 st.plotly_chart(_fig_pred, use_container_width=True)
 
                 # Tabla de predicciones para todos los productos
-                st.markdown("#### 📋 Predicción por producto")
+                st.markdown("#### ðŸ“‹ PredicciÃ³n por producto")
                 _all_pred = []
                 for _pp in _hp[_hp["Tipo"]=="Salida"]["Producto"].dropna().unique():
                     _pp_mes = (_hp[(_hp["Tipo"]=="Salida") & (_hp["Producto"]==_pp)]
@@ -4938,32 +4938,32 @@ with tab8:
                         _pp_var   = round((_pp_pred - _pp_real) / _pp_real * 100, 1) if _pp_real > 0 else 0
                         _all_pred.append({
                             "Producto": _pp,
-                            "Último mes": int(_pp_real),
-                            "Predicción": int(_pp_pred),
-                            "Variación %": f"{_pp_var:+.1f}%",
-                            "Tendencia": "📈 Sube" if _pp_var > 5 else ("📉 Baja" if _pp_var < -5 else "➡️ Estable")
+                            "Ãšltimo mes": int(_pp_real),
+                            "PredicciÃ³n": int(_pp_pred),
+                            "VariaciÃ³n %": f"{_pp_var:+.1f}%",
+                            "Tendencia": "ðŸ“ˆ Sube" if _pp_var > 5 else ("ðŸ“‰ Baja" if _pp_var < -5 else "âž¡ï¸ Estable")
                         })
                 if _all_pred:
-                    _df_pred_tbl = pd.DataFrame(_all_pred).sort_values("Predicción", ascending=False)
+                    _df_pred_tbl = pd.DataFrame(_all_pred).sort_values("PredicciÃ³n", ascending=False)
                     st.dataframe(_df_pred_tbl, use_container_width=True, hide_index=True)
-                    st.download_button("📥 Exportar predicciones",
+                    st.download_button("ðŸ“¥ Exportar predicciones",
                                        data=to_excel_bytes(_df_pred_tbl, "Prediccion"),
                                        file_name=f"prediccion_demanda_{datetime.now().strftime('%Y%m%d')}.xlsx",
                                        key="dl_pred")
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # R_TAB 12 — CLIENTES MÁS RENTABLES
-    # ══════════════════════════════════════════════════════════════════════════
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    # R_TAB 12 â€” CLIENTES MÃS RENTABLES
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     with r_tab12:
-        st.write("### 💰 Clientes más Rentables")
-        st.caption("Ranking de clientes por importe total comprado en la campaña actual.")
+        st.write("### ðŸ’° Clientes mÃ¡s Rentables")
+        st.caption("Ranking de clientes por importe total comprado en la campaÃ±a actual.")
 
         _df_vd_rent = obtener_ventas_detalle()
         if _df_vd_rent.empty:
-            st.info("Sin datos de ventas. Importá desde Plan Comercial → Cartera de Clientes.")
+            st.info("Sin datos de ventas. ImportÃ¡ desde Plan Comercial â†’ Cartera de Clientes.")
         else:
             _camp_opts = sorted(_df_vd_rent["campana"].dropna().unique().tolist(), reverse=True)
-            _camp_sel  = st.selectbox("Campaña", _camp_opts, key="rent_camp")
+            _camp_sel  = st.selectbox("CampaÃ±a", _camp_opts, key="rent_camp")
             _df_rent   = _df_vd_rent[_df_vd_rent["campana"] == _camp_sel].copy()
 
             _rank_rent = (_df_rent.groupby("cliente").agg(
@@ -4985,18 +4985,18 @@ with tab8:
             # KPIs top
             _rk1, _rk2, _rk3, _rk4 = st.columns(4)
             _rk1.metric("Total clientes",   len(_rank_rent))
-            _rk2.metric("Facturación total", f"USD {_rank_rent['Importe_Total'].sum():,.0f}")
+            _rk2.metric("FacturaciÃ³n total", f"USD {_rank_rent['Importe_Total'].sum():,.0f}")
             _rk3.metric("Top cliente",       _rank_rent["Cliente"].iloc[0] if not _rank_rent.empty else "-")
             _rk4.metric("Ticket promedio",   f"USD {_rank_rent['Importe_Total'].mean():,.0f}")
 
-            # Gráfico top 15
+            # GrÃ¡fico top 15
             _fig_rent = px.bar(
                 _rank_rent.head(15),
                 x="Importe_Total", y="Cliente", orientation="h",
                 color="Importe_Total",
                 color_continuous_scale=[_LC_NAVY, _LC_YELLOW],
                 text="Importe USD",
-                title=f"Top 15 Clientes por Importe — Campaña {_camp_sel}"
+                title=f"Top 15 Clientes por Importe â€” CampaÃ±a {_camp_sel}"
             )
             _fig_rent.update_traces(textposition="outside")
             _fig_rent.update_layout(
@@ -5008,40 +5008,40 @@ with tab8:
             )
             st.plotly_chart(_fig_rent, use_container_width=True)
 
-            # Pareto — cuántos clientes concentran el 80% de la facturación
+            # Pareto â€” cuÃ¡ntos clientes concentran el 80% de la facturaciÃ³n
             _rank_rent["Acum %"] = (_rank_rent["Importe_Total"].cumsum() /
                                      _rank_rent["Importe_Total"].sum() * 100).round(1)
             _pareto80 = len(_rank_rent[_rank_rent["Acum %"] <= 80])
-            st.info(f"📊 **Ley de Pareto:** {_pareto80} clientes concentran el 80% de la facturación ({_pareto80}/{len(_rank_rent)} = {_pareto80/len(_rank_rent)*100:.0f}% de la cartera)")
+            st.info(f"ðŸ“Š **Ley de Pareto:** {_pareto80} clientes concentran el 80% de la facturaciÃ³n ({_pareto80}/{len(_rank_rent)} = {_pareto80/len(_rank_rent)*100:.0f}% de la cartera)")
 
             st.dataframe(
                 _rank_rent[["#","Cliente","Importe USD","Cantidad_Total","Productos","% Entregado","Acum %"]],
                 use_container_width=True, hide_index=True
             )
-            st.download_button("📥 Exportar ranking",
+            st.download_button("ðŸ“¥ Exportar ranking",
                                data=to_excel_bytes(_rank_rent, "Ranking_Clientes"),
                                file_name=f"ranking_clientes_{_camp_sel}_{datetime.now().strftime('%Y%m%d')}.xlsx",
                                key="dl_rank_rent")
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # R_TAB 13 — PRODUCTO POR ZONA
-    # ══════════════════════════════════════════════════════════════════════════
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    # R_TAB 13 â€” PRODUCTO POR ZONA
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     with r_tab13:
-        st.write("### 🗺️ Producto más vendido por Zona")
-        st.caption("Cruce entre localidad del cliente y productos comprados. Identifica qué se vende más en cada zona.")
+        st.write("### ðŸ—ºï¸ Producto mÃ¡s vendido por Zona")
+        st.caption("Cruce entre localidad del cliente y productos comprados. Identifica quÃ© se vende mÃ¡s en cada zona.")
 
         _df_vd_zona = obtener_ventas_detalle()
         if _df_vd_zona.empty:
-            st.info("Sin datos de ventas. Importá desde Plan Comercial → Cartera de Clientes.")
+            st.info("Sin datos de ventas. ImportÃ¡ desde Plan Comercial â†’ Cartera de Clientes.")
         else:
-            _camp_zona = st.selectbox("Campaña", sorted(_df_vd_zona["campana"].dropna().unique(), reverse=True),
+            _camp_zona = st.selectbox("CampaÃ±a", sorted(_df_vd_zona["campana"].dropna().unique(), reverse=True),
                                       key="zona_camp")
             _df_zona = _df_vd_zona[(_df_vd_zona["campana"] == _camp_zona) &
                                     (_df_vd_zona["localidad"].notna()) &
                                     (_df_vd_zona["localidad"] != "")].copy()
 
             if _df_zona.empty:
-                st.warning("Sin datos de localidad en esta campaña. Verificá que el campo Localidad esté cargado al importar.")
+                st.warning("Sin datos de localidad en esta campaÃ±a. VerificÃ¡ que el campo Localidad estÃ© cargado al importar.")
             else:
                 _zc1, _zc2 = st.columns(2)
                 with _zc1:
@@ -5053,7 +5053,7 @@ with tab8:
 
                 _df_zona_f = _df_zona if _zona_sel == "Todas" else _df_zona[_df_zona["localidad"] == _zona_sel]
 
-                # Heatmap zona × producto
+                # Heatmap zona Ã— producto
                 _pivot = (_df_zona_f.groupby(["localidad","descripcion"])["cantidad"]
                           .sum().reset_index())
                 _top_prods_zona = (_pivot.groupby("descripcion")["cantidad"].sum()
@@ -5066,7 +5066,7 @@ with tab8:
                     _fig_heat = px.imshow(
                         _heat_df,
                         color_continuous_scale=["#0E1117", _LC_NAVY, _LC_YELLOW],
-                        title=f"Volumen por Zona × Producto — Top {_top_n_zona}",
+                        title=f"Volumen por Zona Ã— Producto â€” Top {_top_n_zona}",
                         aspect="auto",
                         text_auto=".0f"
                     )
@@ -5079,17 +5079,17 @@ with tab8:
                     st.plotly_chart(_fig_heat, use_container_width=True)
 
                 # Ranking por localidad
-                st.markdown("#### 🏆 Producto líder por localidad")
+                st.markdown("#### ðŸ† Producto lÃ­der por localidad")
                 _lider_zona = (_df_zona_f.groupby(["localidad","descripcion"])["cantidad"]
                                .sum().reset_index()
                                .sort_values("cantidad", ascending=False)
                                .groupby("localidad").first()
                                .reset_index()
-                               .rename(columns={"descripcion":"Producto líder","cantidad":"Unidades"})
+                               .rename(columns={"descripcion":"Producto lÃ­der","cantidad":"Unidades"})
                                .sort_values("Unidades", ascending=False))
                 st.dataframe(_lider_zona, use_container_width=True, hide_index=True)
 
-                # Gráfico barras apiladas top zonas
+                # GrÃ¡fico barras apiladas top zonas
                 _top_zonas = (_df_zona_f.groupby("localidad")["cantidad"].sum()
                               .nlargest(12).index.tolist())
                 _df_stack = (_df_zona_f[_df_zona_f["localidad"].isin(_top_zonas) &
@@ -5098,7 +5098,7 @@ with tab8:
                 if not _df_stack.empty:
                     _fig_stack = px.bar(
                         _df_stack, x="localidad", y="cantidad", color="descripcion",
-                        title="Top 12 Zonas — Composición por Producto",
+                        title="Top 12 Zonas â€” ComposiciÃ³n por Producto",
                         labels={"cantidad":"Unidades","localidad":"Localidad","descripcion":"Producto"},
                         barmode="stack"
                     )
@@ -5110,33 +5110,33 @@ with tab8:
                     )
                     st.plotly_chart(_fig_stack, use_container_width=True)
 
-                st.download_button("📥 Exportar datos por zona",
+                st.download_button("ðŸ“¥ Exportar datos por zona",
                                    data=to_excel_bytes(_pivot_top, "Producto_Zona"),
                                    file_name=f"producto_zona_{_camp_zona}_{datetime.now().strftime('%Y%m%d')}.xlsx",
                                    key="dl_zona")
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# TAB 9 — CONFIGURACIÓN
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# TAB 9 â€” CONFIGURACIÃ“N
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 with tab9:
-    st.subheader("⚙️ Configuración")
+    st.subheader("âš™ï¸ ConfiguraciÃ³n")
     cfg1, cfg2, cfg3, cfg4 = st.tabs([
-        "📥 Importación / Exportación", "🔧 Parámetros & Sistema",
-        "⚙️ Config JSON", "📋 Changelog"
+        "ðŸ“¥ ImportaciÃ³n / ExportaciÃ³n", "ðŸ”§ ParÃ¡metros & Sistema",
+        "âš™ï¸ Config JSON", "ðŸ“‹ Changelog"
     ])
 
-    # ── Importación / Exportación ─────────────────────────────────────────────
+    # â”€â”€ ImportaciÃ³n / ExportaciÃ³n â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     with cfg1:
-        # Importación completa
-        with st.expander("📥 Importar Stock desde MacroGest (reemplaza todo)", expanded=True):
+        # ImportaciÃ³n completa
+        with st.expander("ðŸ“¥ Importar Stock desde MacroGest (reemplaza todo)", expanded=True):
             st.info("CSV/Excel con columnas: `codigo`, `descripcion_1`, `unidad_medida`, `deposito`, `lote`, `stock_actual`")
             arch_s = st.file_uploader("Archivo de stock", type=["csv","xlsx","xls"], key="up_stock")
             if arch_s:
-                # ── Preview de columnas ───────────────────────────────────────
+                # â”€â”€ Preview de columnas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 try:
                     _df_prev = pd.read_csv(arch_s) if arch_s.name.endswith(".csv") else pd.read_excel(arch_s)
                     arch_s.seek(0)
-                    st.caption(f"📋 Columnas detectadas: `{'`, `'.join(str(c) for c in _df_prev.columns)}`  |  {len(_df_prev)} filas")
+                    st.caption(f"ðŸ“‹ Columnas detectadas: `{'`, `'.join(str(c) for c in _df_prev.columns)}`  |  {len(_df_prev)} filas")
                 except Exception:
                     pass
             if arch_s:
@@ -5145,15 +5145,15 @@ with tab9:
                 _file_hash  = hashlib.sha1(_file_bytes).hexdigest()[:12]
                 _hash_prev  = obtener_metadata("ultimo_hash_stock")
                 if _hash_prev == _file_hash:
-                    st.warning(f"⚠️ Este archivo ya fue importado anteriormente (hash: `{_file_hash}`). "
-                               "Podés igualmente importarlo de nuevo si querés actualizar.")
-            if arch_s and st.button("🚀 IMPORTAR STOCK COMPLETO", type="primary", key="btn_imp_stock"):
+                    st.warning(f"âš ï¸ Este archivo ya fue importado anteriormente (hash: `{_file_hash}`). "
+                               "PodÃ©s igualmente importarlo de nuevo si querÃ©s actualizar.")
+            if arch_s and st.button("ðŸš€ IMPORTAR STOCK COMPLETO", type="primary", key="btn_imp_stock"):
                 import traceback as _tb
                 _prog = st.progress(0, "Leyendo archivo...")
                 try:
                     arch_s.seek(0)
                     df_s = pd.read_csv(arch_s) if arch_s.name.endswith(".csv") else pd.read_excel(arch_s)
-                    _prog.progress(15, f"Archivo leído: {len(df_s)} filas")
+                    _prog.progress(15, f"Archivo leÃ­do: {len(df_s)} filas")
                     # Normalizar columnas
                     df_s.columns = [str(c).strip().lower().replace(" ","_").replace(".","") for c in df_s.columns]
                     _COL_MAP = {
@@ -5175,12 +5175,12 @@ with tab9:
                     df_s.rename(columns={k: v for k, v in _COL_MAP.items() if k in df_s.columns}, inplace=True)
                     if "descripcion_1" not in df_s.columns:
                         raise ValueError(f"Columna de producto no encontrada. Disponibles: {list(df_s.columns)}")
-                    # Filtrar filas válidas
+                    # Filtrar filas vÃ¡lidas
                     df_s["_nom"] = df_s["descripcion_1"].apply(safe_str)
                     df_validas = df_s[df_s["_nom"] != ""].copy()
-                    _prog.progress(25, f"{len(df_validas)} filas válidas de {len(df_s)}")
+                    _prog.progress(25, f"{len(df_validas)} filas vÃ¡lidas de {len(df_s)}")
                     if df_validas.empty:
-                        raise ValueError("No hay filas con producto válido en el archivo.")
+                        raise ValueError("No hay filas con producto vÃ¡lido en el archivo.")
                     _prog.progress(30, "Limpiando datos anteriores...")
                     borrar_solo_importacion()
                     conn = conectar_db()
@@ -5188,7 +5188,7 @@ with tab9:
                     _ts = datetime.now().strftime("%d/%m/%Y %H:%M")
                     _usu = usuario_actual()
 
-                    # ── Paso 1: preparar filas ─────────────────────────────────
+                    # â”€â”€ Paso 1: preparar filas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     _prog.progress(35, f"Preparando {_total} filas...")
                     filas_raw = []
                     for _, row in df_validas.iterrows():
@@ -5201,7 +5201,7 @@ with tab9:
                             "stk": safe_float(row.get("stock_actual", 0.0)),
                         })
 
-                    # ── Paso 2: insertar productos únicos en batch ─────────────────────────────
+                    # â”€â”€ Paso 2: insertar productos Ãºnicos en batch â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     _prog.progress(45, "Insertando productos (batch)...")
                     productos_uniq = {r["nom"]: r for r in filas_raw}
                     prod_batch = [(p["nom"], p["uni"], p["cod"]) for p in productos_uniq.values()]
@@ -5219,7 +5219,7 @@ with tab9:
                     conn.commit()
                     pa = len(prod_batch)
 
-                    # ── Paso 3: cargar mapa nombre → id_producto ───────────────────────────────
+                    # â”€â”€ Paso 3: cargar mapa nombre â†’ id_producto â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     _prog.progress(60, "Mapeando IDs de productos...")
                     noms_sql = ",".join(["?" if not IS_POSTGRES else "%s"] * len(productos_uniq))
                     id_map_rows = conn.execute(
@@ -5228,7 +5228,7 @@ with tab9:
                     ).fetchall()
                     id_map = {r[1]: r[0] for r in id_map_rows}
 
-                    # ── Paso 4: insertar movimientos en batch ──────────────────────────────────
+                    # â”€â”€ Paso 4: insertar movimientos en batch â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     _prog.progress(70, "Insertando movimientos (batch)...")
                     mov_batch = []
                     for r in filas_raw:
@@ -5260,26 +5260,26 @@ with tab9:
                     conn.commit()
                     mo = len(mov_batch)
                     conn.close()
-                    _prog.progress(100, "¡Listo!")
+                    _prog.progress(100, "Â¡Listo!")
                     guardar_metadata("ultima_importacion", datetime.now().strftime("%d/%m/%Y %H:%M"))
                     guardar_metadata("ultimo_hash_stock", _file_hash)
                     registrar_importacion_log("Stock Completo", arch_s.name, mo, _file_hash)
                     limpiar_cache()
                     st.session_state["stock_imp_ok"] = (
-                        f"✅ Stock importado: {pa} productos nuevos, {mo} líneas "
-                        f"(de {_total} filas válidas)."
+                        f"âœ… Stock importado: {pa} productos nuevos, {mo} lÃ­neas "
+                        f"(de {_total} filas vÃ¡lidas)."
                     )
                     st.rerun()
                 except Exception as ex:
                     _prog.empty()
-                    st.error(f"❌ Error durante la importación: {ex}")
+                    st.error(f"âŒ Error durante la importaciÃ³n: {ex}")
                     st.code(_tb.format_exc(), language="python")
             # Mensaje persistente post-rerun
             if st.session_state.get("stock_imp_ok"):
                 st.success(st.session_state.pop("stock_imp_ok"))
-            # ── Diagnóstico rápido DB ──────────────────────────────────────────
-            with st.expander("🔍 Diagnóstico base de datos", expanded=False):
-                if st.button("🔄 Verificar estado DB", key="btn_diag"):
+            # â”€â”€ DiagnÃ³stico rÃ¡pido DB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            with st.expander("ðŸ” DiagnÃ³stico base de datos", expanded=False):
+                if st.button("ðŸ”„ Verificar estado DB", key="btn_diag"):
                     try:
                         conn_d = conectar_db()
                         n_prod = conn_d.execute("SELECT COUNT(*) FROM productos").fetchone()[0]
@@ -5296,18 +5296,18 @@ with tab9:
                     except Exception as ex:
                         st.error(f"Error al consultar DB: {ex}")
 
-        # ── Importación Lotes + Vencimientos ──────────────────────────────────
-        with st.expander("📦 Importar Lotes y Vencimientos (MacroGest)", expanded=False):
+        # â”€â”€ ImportaciÃ³n Lotes + Vencimientos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        with st.expander("ðŸ“¦ Importar Lotes y Vencimientos (MacroGest)", expanded=False):
             st.info(
-                "Subí el archivo de MacroGest con columnas: `codigo`, `descripcion_1`, "
+                "SubÃ­ el archivo de MacroGest con columnas: `codigo`, `descripcion_1`, "
                 "`unidad_medida`, `deposito`, `serie` (lote), `antidad` (stock), "
                 "`lote_vencimiento`, `lote_fabricacion`. "
                 "**Reemplaza todos los lotes activos anteriores.**"
             )
             _df_lv_prev = obtener_lotes_vencimiento()
             if not _df_lv_prev.empty:
-                st.caption(f"Actualmente: {len(_df_lv_prev):,} lotes cargados · "
-                           f"última importación: {_df_lv_prev['fecha_importacion'].iloc[0] if 'fecha_importacion' in _df_lv_prev.columns else '—'}")
+                st.caption(f"Actualmente: {len(_df_lv_prev):,} lotes cargados Â· "
+                           f"Ãºltima importaciÃ³n: {_df_lv_prev['fecha_importacion'].iloc[0] if 'fecha_importacion' in _df_lv_prev.columns else 'â€”'}")
 
             arch_lv = st.file_uploader("Archivo de lotes (.xlsx / .xls / .csv)",
                                        type=["xlsx","xls","csv"], key="up_lotes_venc")
@@ -5319,9 +5319,9 @@ with tab9:
                     _lv_col_venc = next((c for c in _df_lv.columns
                                         if "vencimiento" in str(c).lower() and "muestra" not in str(c).lower()), None)
                     _lv_con_v = int(_df_lv[_lv_col_venc].notna().sum()) if _lv_col_venc else 0
-                    st.caption(f"📋 {len(_df_lv):,} filas · {_df_lv['descripcion_1'].nunique() if 'descripcion_1' in _df_lv.columns else '?'} productos · "
+                    st.caption(f"ðŸ“‹ {len(_df_lv):,} filas Â· {_df_lv['descripcion_1'].nunique() if 'descripcion_1' in _df_lv.columns else '?'} productos Â· "
                                f"{_lv_con_v:,} lotes con fecha de vencimiento")
-                    if st.button("🚀 IMPORTAR LOTES", type="primary", key="btn_imp_lotes"):
+                    if st.button("ðŸš€ IMPORTAR LOTES", type="primary", key="btn_imp_lotes"):
                         _prog_lv = st.progress(0, "Procesando...")
                         try:
                             arch_lv.seek(0)
@@ -5329,10 +5329,10 @@ with tab9:
                                        else pd.read_csv(arch_lv))
                             _prog_lv.progress(30, "Importando lotes...")
                             _tot, _cv = importar_lotes_vencimiento(_df_lv2)
-                            _prog_lv.progress(100, "¡Listo!")
+                            _prog_lv.progress(100, "Â¡Listo!")
                             registrar_importacion_log("Lotes/Vencimientos", arch_lv.name, _tot)
                             limpiar_cache()
-                            st.success(f"✅ {_tot:,} lotes importados · {_cv:,} con fecha de vencimiento.")
+                            st.success(f"âœ… {_tot:,} lotes importados Â· {_cv:,} con fecha de vencimiento.")
                             st.rerun()
                         except Exception as _ex_lv:
                             _prog_lv.empty()
@@ -5340,14 +5340,14 @@ with tab9:
                 except Exception as _ex_prev:
                     st.error(f"No se pudo leer el archivo: {_ex_prev}")
 
-        # Importación incremental
-        with st.expander("🔄 Importación Incremental (solo diferencias)"):
+        # ImportaciÃ³n incremental
+        with st.expander("ðŸ”„ ImportaciÃ³n Incremental (solo diferencias)"):
             st.info(
                 "Calcula la diferencia entre el archivo nuevo y el stock actual, "
                 "e inserta **solo los ajustes**. Preserva movimientos manuales."
             )
             arch_inc = st.file_uploader("Archivo MacroGest nuevo", type=["csv","xlsx","xls"], key="up_incr")
-            if arch_inc and st.button("🔄 IMPORTAR INCREMENTAL", type="primary"):
+            if arch_inc and st.button("ðŸ”„ IMPORTAR INCREMENTAL", type="primary"):
                 try:
                     df_inc = pd.read_csv(arch_inc) if arch_inc.name.endswith(".csv") else pd.read_excel(arch_inc)
                     df_inc.columns = [str(c).strip().lower().replace(" ","_").replace(".","") for c in df_inc.columns]
@@ -5413,33 +5413,33 @@ with tab9:
                     conn.commit(); conn.close()
                     guardar_metadata("ultima_importacion", datetime.now().strftime("%d/%m/%Y %H:%M"))
                     limpiar_cache()
-                    st.success(f"✅ {ajustes} ajustes incrementales aplicados.")
+                    st.success(f"âœ… {ajustes} ajustes incrementales aplicados.")
                     st.rerun()
                 except Exception as ex:
                     st.error(f"Error: {ex}")
 
-        # Exportación MacroGest
-        with st.expander("📤 Exportar para reimportar en MacroGest"):
+        # ExportaciÃ³n MacroGest
+        with st.expander("ðŸ“¤ Exportar para reimportar en MacroGest"):
             stk_exp = obtener_stock_full()
             if not stk_exp.empty:
                 exp_mg = exportar_macrogest_format(stk_exp)
-                st.download_button("📥 Exportar formato MacroGest (.xlsx)",
+                st.download_button("ðŸ“¥ Exportar formato MacroGest (.xlsx)",
                                    data=exp_mg, file_name="exportacion_macrogest.xlsx")
             else:
                 st.info("Sin datos de stock.")
 
-    # ── Parámetros & Sistema ──────────────────────────────────────────────────
+    # â”€â”€ ParÃ¡metros & Sistema â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     with cfg2:
-        st.write("### 🚨 Parámetros Operativos")
+        st.write("### ðŸš¨ ParÃ¡metros Operativos")
         new_umbral = st.number_input("Umbral de Stock Bajo (global)", min_value=1,
                                      value=int(st.session_state.umbral_alerta),
                                      help="Nivel de stock a partir del cual se dispara la alerta amarilla (global).")
         new_wa     = st.text_input("WhatsApp (5493XXXXXXXXX)", value=st.session_state.wa_numero)
-        cod_sup_cfg = st.text_input("Código de supervisor (para transferencias)",
+        cod_sup_cfg = st.text_input("CÃ³digo de supervisor (para transferencias)",
             value=obtener_metadata("codigo_supervisor") or "1234",
             type="password", key="cod_sup_cfg",
-            help="Código que deben ingresar los operadores para autorizar transferencias entre depósitos")
-        if st.button("💾 Guardar Parámetros"):
+            help="CÃ³digo que deben ingresar los operadores para autorizar transferencias entre depÃ³sitos")
+        if st.button("ðŸ’¾ Guardar ParÃ¡metros"):
             st.session_state.umbral_alerta = new_umbral
             st.session_state.wa_numero     = new_wa
             guardar_metadata("umbral_alerta", str(new_umbral))
@@ -5448,41 +5448,41 @@ with tab9:
             st.success("Guardado.")
 
         st.markdown("---")
-        st.write("### 📊 Stock Mínimo por Producto")
-        st.caption("Definí el stock mínimo individual de cada producto. Si es 0, se usa el umbral global.")
+        st.write("### ðŸ“Š Stock MÃ­nimo por Producto")
+        st.caption("DefinÃ­ el stock mÃ­nimo individual de cada producto. Si es 0, se usa el umbral global.")
         _prod_cfg = obtener_productos_completo()
         if _prod_cfg.empty:
             st.info("Sin productos cargados.")
         else:
             _cols_sm = ["nombre","stock_minimo"] if "stock_minimo" in _prod_cfg.columns else ["nombre"]
-            _df_sm = _prod_cfg[_cols_sm].copy().rename(columns={"nombre":"Producto","stock_minimo":"Stock Mínimo"})
-            if "Stock Mínimo" not in _df_sm.columns:
-                _df_sm["Stock Mínimo"] = 0.0
+            _df_sm = _prod_cfg[_cols_sm].copy().rename(columns={"nombre":"Producto","stock_minimo":"Stock MÃ­nimo"})
+            if "Stock MÃ­nimo" not in _df_sm.columns:
+                _df_sm["Stock MÃ­nimo"] = 0.0
             _edited_sm = st.data_editor(
                 _df_sm,
                 column_config={
                     "Producto":      st.column_config.TextColumn("Producto", disabled=True),
-                    "Stock Mínimo":  st.column_config.NumberColumn("Stock Mínimo", min_value=0.0, format="%.0f",
+                    "Stock MÃ­nimo":  st.column_config.NumberColumn("Stock MÃ­nimo", min_value=0.0, format="%.0f",
                                      help="0 = usar umbral global"),
                 },
                 hide_index=True, use_container_width=True, key="editor_stock_min"
             )
-            if st.button("💾 Guardar Stocks Mínimos", type="primary", key="save_stock_min"):
+            if st.button("ðŸ’¾ Guardar Stocks MÃ­nimos", type="primary", key="save_stock_min"):
                 _conn_sm = conectar_db()
                 for _, _r in _edited_sm.iterrows():
                     try:
                         _conn_sm.execute(
                             "UPDATE productos SET stock_minimo=? WHERE nombre=?",
-                            (float(_r["Stock Mínimo"]), _r["Producto"])
+                            (float(_r["Stock MÃ­nimo"]), _r["Producto"])
                         )
                     except: pass
                 _conn_sm.commit(); _conn_sm.close()
                 limpiar_cache()
-                st.success("✅ Stocks mínimos guardados.")
+                st.success("âœ… Stocks mÃ­nimos guardados.")
                 st.rerun()
 
         st.markdown("---")
-        st.write("### 📧 Configuración de Email")
+        st.write("### ðŸ“§ ConfiguraciÃ³n de Email")
         with st.expander("Configurar SMTP"):
             ep1, ep2 = st.columns(2)
             with ep1:
@@ -5495,8 +5495,8 @@ with tab9:
             with ep2:
                 smtp_p_val = int(obtener_metadata("smtp_port") or 587)
                 smtp_port  = st.number_input("Puerto", min_value=1, value=smtp_p_val, key="smtp_port")
-                smtp_pw    = st.text_input("Contraseña SMTP", type="password", key="smtp_pw")
-            if st.button("💾 Guardar Config Email"):
+                smtp_pw    = st.text_input("ContraseÃ±a SMTP", type="password", key="smtp_pw")
+            if st.button("ðŸ’¾ Guardar Config Email"):
                 guardar_metadata("smtp_server", smtp_s)
                 guardar_metadata("smtp_port",   str(smtp_port))
                 guardar_metadata("smtp_user",   smtp_u)
@@ -5507,7 +5507,7 @@ with tab9:
 
         st.markdown("---")
         if es_admin():
-            st.write("### 👥 Gestión de Usuarios")
+            st.write("### ðŸ‘¥ GestiÃ³n de Usuarios")
             conn = conectar_db()
             try:
                 df_u = _rsql("SELECT username, nombre, rol, sede FROM usuarios", conn)
@@ -5515,16 +5515,16 @@ with tab9:
             conn.close()
             st.dataframe(df_u, use_container_width=True, hide_index=True)
 
-            with st.expander("➕ Agregar / Actualizar Usuario"):
+            with st.expander("âž• Agregar / Actualizar Usuario"):
                 nu1, nu2 = st.columns(2)
                 with nu1:
                     n_usr  = st.text_input("Username", key="n_usr")
-                    n_pwd  = st.text_input("Contraseña", type="password", key="n_pwd")
+                    n_pwd  = st.text_input("ContraseÃ±a", type="password", key="n_pwd")
                     n_nom  = st.text_input("Nombre completo", key="n_nom")
                 with nu2:
                     n_rol  = st.selectbox("Rol", ["operador","supervisor","admin"], key="n_rol")
                     n_sede = st.selectbox("Sede", ["San Jorge","Las Varillas","San Francisco"], key="n_sede")
-                if st.button("💾 Guardar Usuario", type="primary"):
+                if st.button("ðŸ’¾ Guardar Usuario", type="primary"):
                     if n_usr and n_pwd:
                         conn = conectar_db()
                         conn.execute("""INSERT OR REPLACE INTO usuarios
@@ -5534,29 +5534,29 @@ with tab9:
                         st.success(f"Usuario '{n_usr}' guardado.")
                         st.rerun()
                     else:
-                        st.error("Username y contraseña son obligatorios.")
+                        st.error("Username y contraseÃ±a son obligatorios.")
 
-            auth_on = st.toggle("🔐 Activar autenticación",
+            auth_on = st.toggle("ðŸ” Activar autenticaciÃ³n",
                                 value=(obtener_metadata("auth_enabled")=="1"),
                                 key="auth_toggle")
-            if st.button("💾 Guardar config auth"):
+            if st.button("ðŸ’¾ Guardar config auth"):
                 guardar_metadata("auth_enabled", "1" if auth_on else "0")
-                st.success("Config auth guardada. Recargá la página.")
+                st.success("Config auth guardada. RecargÃ¡ la pÃ¡gina.")
             if auth_on:
-                st.warning("⚠️ Recordá cambiar la contraseña del usuario **admin** antes de activar.")
+                st.warning("âš ï¸ RecordÃ¡ cambiar la contraseÃ±a del usuario **admin** antes de activar.")
 
         st.markdown("---")
-        st.write("### ⚠️ Mantenimiento de Datos")
+        st.write("### âš ï¸ Mantenimiento de Datos")
         col_b1, col_b2, col_b3 = st.columns(3)
         with col_b1:
-            if st.button("🗑️ Borrar solo datos importados"):
+            if st.button("ðŸ—‘ï¸ Borrar solo datos importados"):
                 borrar_solo_importacion()
-                st.success("Datos de importación eliminados.")
+                st.success("Datos de importaciÃ³n eliminados.")
                 st.rerun()
         with col_b2:
-            conf_borrado = st.text_input("Escribí **CONFIRMAR** para habilitar borrado total",
+            conf_borrado = st.text_input("EscribÃ­ **CONFIRMAR** para habilitar borrado total",
                                          placeholder="CONFIRMAR", key="conf_borrado")
-            if st.button("🔥 BORRAR BASE COMPLETA", type="primary",
+            if st.button("ðŸ”¥ BORRAR BASE COMPLETA", type="primary",
                          disabled=(conf_borrado.strip() != "CONFIRMAR")):
                 borrar_datos_totales()
                 st.success("Base vaciada.")
@@ -5564,7 +5564,7 @@ with tab9:
         with col_b3:
             _bk = backup_db_bytes()
             if _bk:
-                st.download_button("💾 Backup DB (.sqlite)",
+                st.download_button("ðŸ’¾ Backup DB (.sqlite)",
                                    data=_bk,
                                    file_name=f"backup_lc_{datetime.now().strftime('%Y%m%d_%H%M')}.sqlite",
                                    help="Descarga una copia completa de la base de datos local",
@@ -5572,45 +5572,45 @@ with tab9:
             else:
                 st.caption("Backup disponible solo en modo local (SQLite).")
 
-        # ── Historial de Importaciones ────────────────────────────────────────
+        # â”€â”€ Historial de Importaciones â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         st.markdown("---")
-        st.write("### 📋 Historial de Importaciones")
-        st.caption("Registro automático de cada importación realizada en la app.")
+        st.write("### ðŸ“‹ Historial de Importaciones")
+        st.caption("Registro automÃ¡tico de cada importaciÃ³n realizada en la app.")
         conn_log = conectar_db()
         df_log = _rsql("""SELECT fecha_hora "Fecha", tipo "Tipo", archivo "Archivo",
                                   filas "Filas", usuario "Usuario", resultado "Resultado"
                            FROM importaciones_log ORDER BY id_log DESC LIMIT 100""", conn_log)
         conn_log.close()
         if df_log.empty:
-            st.info("Sin importaciones registradas aún.")
+            st.info("Sin importaciones registradas aÃºn.")
         else:
             st.dataframe(df_log, use_container_width=True, hide_index=True)
-            st.download_button("📥 Exportar log (.xlsx)",
+            st.download_button("ðŸ“¥ Exportar log (.xlsx)",
                                data=to_excel_bytes(df_log, "Log_Importaciones"),
                                file_name="log_importaciones.xlsx")
 
-        # ── Historial de Remitos ───────────────────────────────────────────────
+        # â”€â”€ Historial de Remitos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         st.markdown("---")
-        st.write("### 🖨️ Historial de Remitos")
+        st.write("### ðŸ–¨ï¸ Historial de Remitos")
         conn_rem = conectar_db()
         df_rem_log = _rsql("""SELECT numero "Nro", fecha_hora "Fecha", tipo "Tipo",
-                                      cliente "Cliente", deposito "Depósito",
+                                      cliente "Cliente", deposito "DepÃ³sito",
                                       usuario "Usuario", observaciones "Observaciones"
                                FROM remitos ORDER BY id_remito DESC LIMIT 200""", conn_rem)
         conn_rem.close()
         if df_rem_log.empty:
-            st.info("Sin remitos emitidos aún.")
+            st.info("Sin remitos emitidos aÃºn.")
         else:
             st.metric("Total remitos emitidos", len(df_rem_log))
             st.dataframe(df_rem_log, use_container_width=True, hide_index=True)
-            st.download_button("📥 Exportar remitos (.xlsx)",
+            st.download_button("ðŸ“¥ Exportar remitos (.xlsx)",
                                data=to_excel_bytes(df_rem_log, "Remitos"),
                                file_name=f"remitos_{datetime.now().strftime('%Y%m%d')}.xlsx")
 
-    # ── Config JSON ───────────────────────────────────────────────────────────
+    # â”€â”€ Config JSON â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     with cfg3:
-        st.write("### ⚙️ Exportar / Importar Configuración JSON")
-        st.caption("Hacé backup de todos los parámetros de la app en un archivo JSON. Útil para restaurar configuración en otro equipo o luego de un reset.")
+        st.write("### âš™ï¸ Exportar / Importar ConfiguraciÃ³n JSON")
+        st.caption("HacÃ© backup de todos los parÃ¡metros de la app en un archivo JSON. Ãštil para restaurar configuraciÃ³n en otro equipo o luego de un reset.")
 
         # Exportar
         _cfg_keys = [
@@ -5622,7 +5622,7 @@ with tab9:
         for _k in _cfg_keys:
             _v = obtener_metadata(_k)
             if _v: _cfg_exp[_k] = _v
-        # También metas
+        # TambiÃ©n metas
         _conn_cfg = conectar_db()
         _metas_cfg = _rsql("SELECT campana, vendedor, producto, meta_cantidad, meta_valor FROM metas_campana", _conn_cfg)
         _conn_cfg.close()
@@ -5630,7 +5630,7 @@ with tab9:
             _cfg_exp["metas_campana"] = _metas_cfg.to_dict(orient="records")
         _json_bytes = json.dumps(_cfg_exp, ensure_ascii=False, indent=2).encode("utf-8")
         st.download_button(
-            "📥 Exportar configuración (.json)",
+            "ðŸ“¥ Exportar configuraciÃ³n (.json)",
             data=_json_bytes,
             file_name=f"config_lc_{datetime.now().strftime('%Y%m%d')}.json",
             mime="application/json",
@@ -5638,113 +5638,113 @@ with tab9:
         )
         st.markdown("---")
         # Importar
-        st.write("#### Importar configuración desde JSON")
+        st.write("#### Importar configuraciÃ³n desde JSON")
         _arch_cfg = st.file_uploader("Archivo config (.json)", type=["json"], key="up_cfg_json")
         if _arch_cfg:
             try:
                 _cfg_imp = json.loads(_arch_cfg.read().decode("utf-8"))
                 st.json(_cfg_imp)
-                if st.button("✅ Aplicar configuración", type="primary", key="btn_apply_cfg"):
+                if st.button("âœ… Aplicar configuraciÃ³n", type="primary", key="btn_apply_cfg"):
                     for _k, _v in _cfg_imp.items():
                         if _k == "metas_campana":
-                            continue  # no sobrescribir metas automáticamente
+                            continue  # no sobrescribir metas automÃ¡ticamente
                         guardar_metadata(_k, str(_v))
                     # Refrescar session state
                     if "umbral_alerta" in _cfg_imp:
                         st.session_state.umbral_alerta = int(_cfg_imp["umbral_alerta"])
                     if "wa_numero" in _cfg_imp:
                         st.session_state.wa_numero = _cfg_imp["wa_numero"]
-                    st.success("✅ Configuración importada correctamente.")
+                    st.success("âœ… ConfiguraciÃ³n importada correctamente.")
                     st.rerun()
             except Exception as _ex:
                 st.error(f"Error leyendo JSON: {_ex}")
 
-    # ── Changelog ─────────────────────────────────────────────────────────────
+    # â”€â”€ Changelog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     with cfg4:
-        st.write("### 📋 Changelog — Historial de Versiones")
+        st.write("### ðŸ“‹ Changelog â€” Historial de Versiones")
         st.markdown("""
-| Versión | Fecha | Cambios |
+| VersiÃ³n | Fecha | Cambios |
 |---------|-------|---------|
-| **v4.0 PRO** | Jul 2026 | Inventario físico masivo, devoluciones, eficiencia entregas, ranking clientes, reporte ejecutivo PDF con logo, exportación config JSON, tabs de reportes ampliados |
-| **v3.5** | Jun 2026 | Reservas de stock, filtro global de depósito, comparativa campañas, WhatsApp share, changelog, importación múltiple |
-| **v3.0 PRO** | Jun 2026 | Remitos correlativos (R-00001...), log de importaciones, backup SQLite, orden de compra PDF, forecast de demanda, novedades del día, tendencias mensuales, tooltips KPIs, alerta stock negativo inmediata |
-| **v2.5** | May 2026 | Logo LC + colores corporativos, header profesional, remitos PDF, confirmación entregas MG con descuento stock, observaciones en movimientos, stock inmovilizado, validación duplicados |
-| **v2.0** | May 2026 | Índices DB, stock mínimo por producto, semáforos, proyección, trazabilidad lote, margen bruto, paginación historial, modo oscuro |
+| **v4.0 PRO** | Jul 2026 | Inventario fÃ­sico masivo, devoluciones, eficiencia entregas, ranking clientes, reporte ejecutivo PDF con logo, exportaciÃ³n config JSON, tabs de reportes ampliados |
+| **v3.5** | Jun 2026 | Reservas de stock, filtro global de depÃ³sito, comparativa campaÃ±as, WhatsApp share, changelog, importaciÃ³n mÃºltiple |
+| **v3.0 PRO** | Jun 2026 | Remitos correlativos (R-00001...), log de importaciones, backup SQLite, orden de compra PDF, forecast de demanda, novedades del dÃ­a, tendencias mensuales, tooltips KPIs, alerta stock negativo inmediata |
+| **v2.5** | May 2026 | Logo LC + colores corporativos, header profesional, remitos PDF, confirmaciÃ³n entregas MG con descuento stock, observaciones en movimientos, stock inmovilizado, validaciÃ³n duplicados |
+| **v2.0** | May 2026 | Ãndices DB, stock mÃ­nimo por producto, semÃ¡foros, proyecciÃ³n, trazabilidad lote, margen bruto, paginaciÃ³n historial, modo oscuro |
 | **v1.5** | Abr 2026 | Lista de precios separada, cache TTL 300s, LIMIT 2000 en historial, batch imports (executemany) |
-| **v1.0** | Mar 2026 | Versión inicial: control de stock multi-depósito, importación MacroGest, entregas, historial, valorización |
+| **v1.0** | Mar 2026 | VersiÃ³n inicial: control de stock multi-depÃ³sito, importaciÃ³n MacroGest, entregas, historial, valorizaciÃ³n |
 """)
         st.markdown("---")
-        st.write("#### 🔧 Estado del Sistema")
+        st.write("#### ðŸ”§ Estado del Sistema")
         _sys1, _sys2, _sys3, _sys4 = st.columns(4)
-        _sys1.metric("Versión", "v4.0 PRO")
-        _sys2.metric("PDF", "✅" if PDF_AVAILABLE else "❌")
+        _sys1.metric("VersiÃ³n", "v4.0 PRO")
+        _sys2.metric("PDF", "âœ…" if PDF_AVAILABLE else "âŒ")
         _sys3.metric("DB", "PostgreSQL" if IS_POSTGRES else "SQLite")
         _sys4.metric("Usuario", usuario_actual())
 
     st.markdown("---")
-    st.caption(f"La Clementina S.A. — v4.0 PRO — "
-               f"{'PDF ✅' if PDF_AVAILABLE else 'PDF ❌ (pip install reportlab)'}")
+    st.caption(f"La Clementina S.A. â€” v4.0 PRO â€” "
+               f"{'PDF âœ…' if PDF_AVAILABLE else 'PDF âŒ (pip install reportlab)'}")
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# TAB 10 — PLAN COMERCIAL 2026-2027
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# TAB 10 â€” PLAN COMERCIAL 2026-2027
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 with tab10:
     st.markdown("""
     <div style="background:linear-gradient(135deg,#1a5276,#2e86c1);
                 color:white;padding:24px 28px;border-radius:12px;margin-bottom:20px">
-        <h2 style="margin:0;font-size:1.5rem">📊 Plan Comercial — Campaña 2026-2027</h2>
-        <p style="margin:6px 0 0;opacity:.85">La Clementina S.A. · Dirección Comercial · San Jorge, Santa Fe</p>
+        <h2 style="margin:0;font-size:1.5rem">ðŸ“Š Plan Comercial â€” CampaÃ±a 2026-2027</h2>
+        <p style="margin:6px 0 0;opacity:.85">La Clementina S.A. Â· DirecciÃ³n Comercial Â· San Jorge, Santa Fe</p>
     </div>
     """, unsafe_allow_html=True)
 
     pc1, pc2, pc3, pc4, pc5 = st.tabs([
-        "📋 El Plan",
-        "🎯 Metas & Productos",
-        "📈 KPI Dashboard",
-        "👥 Cartera de Clientes",
-        "📝 Reportes Semanales",
+        "ðŸ“‹ El Plan",
+        "ðŸŽ¯ Metas & Productos",
+        "ðŸ“ˆ KPI Dashboard",
+        "ðŸ‘¥ Cartera de Clientes",
+        "ðŸ“ Reportes Semanales",
     ])
 
-    # ── SUBTAB 1: DOCUMENTO DEL PLAN ─────────────────────────────────────────
+    # â”€â”€ SUBTAB 1: DOCUMENTO DEL PLAN â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     with pc1:
         st.markdown("""
-## 1. PROPÓSITO DEL PLAN
+## 1. PROPÃ“SITO DEL PLAN
 
-El presente Plan Comercial establece los lineamientos estratégicos y operativos que orientarán la gestión de ventas durante la **Campaña 2026-2027**. Su propósito es proveer a cada integrante del equipo comercial un marco claro de objetivos, métricas de seguimiento y metodología de trabajo.
+El presente Plan Comercial establece los lineamientos estratÃ©gicos y operativos que orientarÃ¡n la gestiÃ³n de ventas durante la **CampaÃ±a 2026-2027**. Su propÃ³sito es proveer a cada integrante del equipo comercial un marco claro de objetivos, mÃ©tricas de seguimiento y metodologÃ­a de trabajo.
 
-Este documento es de **cumplimiento obligatorio**. Cada vendedor deberá presentar su propio plan de acción antes del **15 de julio de 2026**, el cual será evaluado semanalmente y reportado a Dirección de forma mensual.
+Este documento es de **cumplimiento obligatorio**. Cada vendedor deberÃ¡ presentar su propio plan de acciÃ³n antes del **15 de julio de 2026**, el cual serÃ¡ evaluado semanalmente y reportado a DirecciÃ³n de forma mensual.
 
 ---
 
 ## 2. OBJETIVOS GENERALES
 
-### 2.1 Crecimiento de Facturación
+### 2.1 Crecimiento de FacturaciÃ³n
 | Canal | Objetivo |
 |---|---|
-| La Clementina + Bayer | **+30 %** sobre la campaña anterior (en línea con ajuste de precios) |
-| Volumen físico estratégico | **+20 %** en Maíz, Round Up y Semillas Autógamas |
+| La Clementina + Bayer | **+30 %** sobre la campaÃ±a anterior (en lÃ­nea con ajuste de precios) |
+| Volumen fÃ­sico estratÃ©gico | **+20 %** en MaÃ­z, Round Up y Semillas AutÃ³gamas |
 
-> ⚠️ Toda desviación superior al **10 % negativo** sobre la meta mensual debe ser informada y fundamentada dentro de las **48 horas** al responsable comercial.
+> âš ï¸ Toda desviaciÃ³n superior al **10 % negativo** sobre la meta mensual debe ser informada y fundamentada dentro de las **48 horas** al responsable comercial.
 
-### 2.2 Distribución Objetivo de Facturación (La Clementina)
-| Rubro | Participación |
+### 2.2 DistribuciÃ³n Objetivo de FacturaciÃ³n (La Clementina)
+| Rubro | ParticipaciÃ³n |
 |---|---|
-| Semillas autógamas | **30 %** |
-| Agroquímicos | **30 %** |
+| Semillas autÃ³gamas | **30 %** |
+| AgroquÃ­micos | **30 %** |
 | Fertilizantes | **30 %** |
 | Otros / Servicios | **10 %** |
 
 ---
 
-## 3. SEGMENTACIÓN DE CARTERA
+## 3. SEGMENTACIÃ“N DE CARTERA
 
 ### 3.1 Clientes Premium (Regla 80/20)
-- El segmento Premium representa el **80 % de la facturación** en **no menos del 20 %** de los clientes activos.
-- Con una cartera de 50 clientes: mínimo 10 cuentas Premium.
-- Una concentración inferior es un **riesgo estratégico** → acción de captación inmediata.
+- El segmento Premium representa el **80 % de la facturaciÃ³n** en **no menos del 20 %** de los clientes activos.
+- Con una cartera de 50 clientes: mÃ­nimo 10 cuentas Premium.
+- Una concentraciÃ³n inferior es un **riesgo estratÃ©gico** â†’ acciÃ³n de captaciÃ³n inmediata.
 
-### 3.2 Fidelización y Reactivación
+### 3.2 FidelizaciÃ³n y ReactivaciÃ³n
 - **Clientes activos**: seguimiento, propuestas de valor, presencia en campo.
 - **Clientes inactivos**: propuesta de retorno focalizada en necesidades actuales.
 
@@ -5752,75 +5752,75 @@ Cada vendedor presenta mensualmente el **estado de su cartera** con clientes en 
 
 ---
 
-## 4. FIELD VIEW — CLIENTES OBJETIVOS
+## 4. FIELD VIEW â€” CLIENTES OBJETIVOS
 Cada vendedor debe:
-- Identificar **mínimo 5 clientes** para seguimiento productivo vía Field View.
+- Identificar **mÃ­nimo 5 clientes** para seguimiento productivo vÃ­a Field View.
 - Presentar el listado + cronograma antes del **31 de julio de 2026**.
 - Usar los datos de la plataforma como argumento comercial en visitas.
 
 ---
 
-## 5. KPIs Y METODOLOGÍA DE SEGUIMIENTO
+## 5. KPIs Y METODOLOGÃA DE SEGUIMIENTO
 
 | Indicador | Objetivo | Frecuencia |
 |---|---|---|
-| Facturación total (LC + Bayer) | Meta mensual / acumulado | Semanal y mensual |
-| Facturación por rubro | Mix 30/30/30 | Mensual |
-| Clientes Premium activos | ≥ 20 % del total | Mensual |
+| FacturaciÃ³n total (LC + Bayer) | Meta mensual / acumulado | Semanal y mensual |
+| FacturaciÃ³n por rubro | Mix 30/30/30 | Mensual |
+| Clientes Premium activos | â‰¥ 20 % del total | Mensual |
 | Nuevos clientes | Meta por zona | Mensual |
 | Volumen productos foco | Meta por producto / semestre | Mensual |
-| Clientes Field View activos | **Mínimo 5** por vendedor | Semestral |
+| Clientes Field View activos | **MÃ­nimo 5** por vendedor | Semestral |
 | Clientes reactivados | Sobre base inactivos previos | Mensual |
 
 ### Ciclo de Reporte
-- **Reunión semanal**: avances, obstáculos y oportunidades.
-- **Reporte mensual escrito** a Dirección: KPIs, desvíos y plan correctivo.
-- **Revisión semestral**: evaluación integral y ajuste de metas.
+- **ReuniÃ³n semanal**: avances, obstÃ¡culos y oportunidades.
+- **Reporte mensual escrito** a DirecciÃ³n: KPIs, desvÃ­os y plan correctivo.
+- **RevisiÃ³n semestral**: evaluaciÃ³n integral y ajuste de metas.
 
 ---
 
 ## 6. COMPROMISOS DEL EQUIPO
-- ✅ Plan de acción individual antes del **15 de julio de 2026**.
-- ✅ Registro semanal en **MacroGest**: visitas, oportunidades, cartera.
-- ✅ Asistencia a reuniones con información actualizada.
-- ✅ Comunicación proactiva de situaciones de riesgo.
+- âœ… Plan de acciÃ³n individual antes del **15 de julio de 2026**.
+- âœ… Registro semanal en **MacroGest**: visitas, oportunidades, cartera.
+- âœ… Asistencia a reuniones con informaciÃ³n actualizada.
+- âœ… ComunicaciÃ³n proactiva de situaciones de riesgo.
 
 ---
-> *"El éxito comercial no es consecuencia del azar. Es el resultado de planificar, ejecutar y mejorar de forma consistente."*
+> *"El Ã©xito comercial no es consecuencia del azar. Es el resultado de planificar, ejecutar y mejorar de forma consistente."*
         """)
 
-    # ── SUBTAB 2: METAS & PRODUCTOS FOCO ─────────────────────────────────────
+    # â”€â”€ SUBTAB 2: METAS & PRODUCTOS FOCO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     with pc2:
-        st.write("### 🎯 Productos Foco — Metas Generales de Campaña")
+        st.write("### ðŸŽ¯ Productos Foco â€” Metas Generales de CampaÃ±a")
 
         df_pf = obtener_productos_foco()
         if not df_pf.empty:
             pf_edit = st.data_editor(
                 df_pf[["producto","unidad","meta_total","prioridad"]].rename(columns={
                     "producto":"Producto","unidad":"Unidad",
-                    "meta_total":"Meta Total Campaña","prioridad":"Prioridad"
+                    "meta_total":"Meta Total CampaÃ±a","prioridad":"Prioridad"
                 }),
                 column_config={
-                    "Meta Total Campaña": st.column_config.NumberColumn(min_value=0, format="%.0f"),
+                    "Meta Total CampaÃ±a": st.column_config.NumberColumn(min_value=0, format="%.0f"),
                     "Prioridad":          st.column_config.NumberColumn(min_value=1, max_value=10),
                 },
                 hide_index=True, use_container_width=True, key="edit_pf"
             )
-            if st.button("💾 Guardar Productos Foco", key="save_pf"):
+            if st.button("ðŸ’¾ Guardar Productos Foco", key="save_pf"):
                 conn = conectar_db()
                 for i, r in pf_edit.iterrows():
                     conn.execute("""UPDATE productos_foco
                         SET meta_total=?, prioridad=?
                         WHERE campana=? AND producto=?""",
-                        (float(r["Meta Total Campaña"]), int(r["Prioridad"]),
+                        (float(r["Meta Total CampaÃ±a"]), int(r["Prioridad"]),
                          CAMPANA_ACTUAL, r["Producto"]))
                 conn.commit(); conn.close()
                 limpiar_cache()
-                st.success("✅ Metas actualizadas.")
+                st.success("âœ… Metas actualizadas.")
                 st.rerun()
 
         st.markdown("---")
-        st.write("### 👤 Metas Individuales por Vendedor")
+        st.write("### ðŸ‘¤ Metas Individuales por Vendedor")
 
         ent_vend = obtener_entregas()
         vendedores_lista = sorted(ent_vend["vendedor"].dropna().replace("","S/V").unique().tolist()) \
@@ -5841,13 +5841,13 @@ Cada vendedor debe:
                 df_base = df_base.merge(
                     df_metas_v[["producto","meta_volumen","meta_facturacion","moneda_meta"]]
                     .rename(columns={"producto":"Producto","meta_volumen":"Meta Volumen",
-                                     "meta_facturacion":"Meta Facturación","moneda_meta":"Moneda"}),
+                                     "meta_facturacion":"Meta FacturaciÃ³n","moneda_meta":"Moneda"}),
                     on="Producto", how="left"
                 )
             if "Meta Volumen" not in df_base.columns:
                 df_base["Meta Volumen"]      = 0.0
-            if "Meta Facturación" not in df_base.columns:
-                df_base["Meta Facturación"]  = 0.0
+            if "Meta FacturaciÃ³n" not in df_base.columns:
+                df_base["Meta FacturaciÃ³n"]  = 0.0
             if "Moneda" not in df_base.columns:
                 df_base["Moneda"]            = "ARS"
             df_base = df_base.fillna(0)
@@ -5856,44 +5856,44 @@ Cada vendedor debe:
                 df_base,
                 column_config={
                     "Meta Volumen":      st.column_config.NumberColumn(min_value=0, format="%.1f"),
-                    "Meta Facturación":  st.column_config.NumberColumn(min_value=0, format="%.0f"),
+                    "Meta FacturaciÃ³n":  st.column_config.NumberColumn(min_value=0, format="%.0f"),
                     "Moneda":            st.column_config.SelectboxColumn(options=["ARS","USD"]),
                 },
                 hide_index=True, use_container_width=True, key="edit_metas_v"
             )
-            if st.button(f"💾 Guardar metas de {vend_sel_m}", type="primary", key="save_metas_v"):
+            if st.button(f"ðŸ’¾ Guardar metas de {vend_sel_m}", type="primary", key="save_metas_v"):
                 conn = conectar_db()
                 for _, r in edited_m.iterrows():
                     conn.execute("""INSERT OR REPLACE INTO metas_campana
                         (campana,vendedor,producto,unidad,meta_volumen,meta_facturacion,moneda_meta)
                         VALUES (?,?,?,?,?,?,?)""",
                         (CAMPANA_ACTUAL, vend_sel_m, r["Producto"], r["Unidad"],
-                         float(r["Meta Volumen"]), float(r["Meta Facturación"]), r["Moneda"]))
+                         float(r["Meta Volumen"]), float(r["Meta FacturaciÃ³n"]), r["Moneda"]))
                 conn.commit(); conn.close()
                 limpiar_cache()
-                st.success(f"✅ Metas de {vend_sel_m} guardadas.")
+                st.success(f"âœ… Metas de {vend_sel_m} guardadas.")
                 st.rerun()
 
-    # ── SUBTAB 3: KPI DASHBOARD ───────────────────────────────────────────────
+    # â”€â”€ SUBTAB 3: KPI DASHBOARD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     with pc3:
-        st.write("### 📈 KPI Dashboard — Campaña 2026-2027")
+        st.write("### ðŸ“ˆ KPI Dashboard â€” CampaÃ±a 2026-2027")
 
         # Estado de datos disponibles
         n_ventas_est = len(obtener_ventas_detalle())
         n_mg_est = len(obtener_entregas("MACROGEST"))
         est1, est2 = st.columns(2)
         with est1:
-            st.metric("📋 Líneas de venta cargadas", n_ventas_est,
-                      delta="Con datos ✓" if n_ventas_est > 0 else "Sin datos",
+            st.metric("ðŸ“‹ LÃ­neas de venta cargadas", n_ventas_est,
+                      delta="Con datos âœ“" if n_ventas_est > 0 else "Sin datos",
                       delta_color="normal" if n_ventas_est > 0 else "inverse")
         with est2:
-            st.metric("🔄 Pedidos sin entregar", n_mg_est,
-                      delta="Con datos ✓" if n_mg_est > 0 else "Sin datos",
+            st.metric("ðŸ”„ Pedidos sin entregar", n_mg_est,
+                      delta="Con datos âœ“" if n_mg_est > 0 else "Sin datos",
                       delta_color="normal" if n_mg_est > 0 else "inverse")
         if n_ventas_est == 0:
-            st.info("💡 Para ver el dashboard completo: importá ventas desde "
-                    "**Plan Comercial → Cartera de Clientes → Importar desde MacroGest** "
-                    "y pedidos desde el tab **🔄 Sin Entregar MG**.")
+            st.info("ðŸ’¡ Para ver el dashboard completo: importÃ¡ ventas desde "
+                    "**Plan Comercial â†’ Cartera de Clientes â†’ Importar desde MacroGest** "
+                    "y pedidos desde el tab **ðŸ”„ Sin Entregar MG**.")
         st.markdown("---")
         ventas_r = ventas_reales_por_vendedor()
         df_metas_all = obtener_metas_campana()
@@ -5911,21 +5911,21 @@ Cada vendedor debe:
         nuevos_n      = int(df_cart[df_cart["tipo"]=="prospecto"]["cliente"].nunique()) if not df_cart.empty else 0
 
         kp1, kp2, kp3, kp4, kp5 = st.columns(5)
-        with kp1: st.metric("📦 Entregado Total",    f"{total_entregado:,.0f}")
-        with kp2: st.metric("⭐ Clientes Premium",   total_clientes)
+        with kp1: st.metric("ðŸ“¦ Entregado Total",    f"{total_entregado:,.0f}")
+        with kp2: st.metric("â­ Clientes Premium",   total_clientes)
         with kp3: st.metric("% Premium / Total",     f"{total_premium_pct:.1f}%",
-                             delta="OK" if total_premium_pct >= 20 else "< 20% ⚠️",
+                             delta="OK" if total_premium_pct >= 20 else "< 20% âš ï¸",
                              delta_color="normal" if total_premium_pct >= 20 else "inverse")
-        with kp4: st.metric("🌐 Field View activos", field_view_n,
+        with kp4: st.metric("ðŸŒ Field View activos", field_view_n,
                              delta="OK" if field_view_n >= 5 else f"< 5 objetivo",
                              delta_color="normal" if field_view_n >= 5 else "inverse")
-        with kp5: st.metric("🆕 Prospectos",         nuevos_n)
+        with kp5: st.metric("ðŸ†• Prospectos",         nuevos_n)
 
         st.markdown("---")
 
-        # Gauges por vendedor (facturación real vs meta)
+        # Gauges por vendedor (facturaciÃ³n real vs meta)
         if not ventas_r.empty and not df_metas_all.empty:
-            st.write("#### Facturación Real vs Meta por Vendedor")
+            st.write("#### FacturaciÃ³n Real vs Meta por Vendedor")
             metas_vend = (df_metas_all.groupby("vendedor")["meta_facturacion"].sum().reset_index()
                           .rename(columns={"meta_facturacion":"Meta"}))
             merged_g = ventas_r.merge(metas_vend, left_on="vendedor", right_on="vendedor", how="outer").fillna(0)
@@ -5964,7 +5964,7 @@ Cada vendedor debe:
         df_mg_all = obtener_ventas_detalle()
         if not df_mg_all.empty:
             st.markdown("---")
-            st.write("#### 🔍 Análisis de Ventas MacroGest")
+            st.write("#### ðŸ” AnÃ¡lisis de Ventas MacroGest")
             vend_kpi = st.selectbox("Vendedor",
                                     ["Todos"] + sorted(df_mg_all["vendedor"].unique().tolist()),
                                     key="vend_kpi_mg")
@@ -5974,7 +5974,7 @@ Cada vendedor debe:
             with mk1: st.metric("Importe Total",    f"${df_mg_f['importe_total'].sum():,.0f}")
             with mk2: st.metric("Clientes",          df_mg_f["cliente"].nunique())
             with mk3: st.metric("Productos",         df_mg_f["descripcion"].nunique())
-            with mk4: st.metric("Líneas de pedido",  len(df_mg_f))
+            with mk4: st.metric("LÃ­neas de pedido",  len(df_mg_f))
 
             # Top clientes
             mc1, mc2 = st.columns(2)
@@ -5996,7 +5996,7 @@ Cada vendedor debe:
                 st.plotly_chart(fig_pr2, use_container_width=True)
 
             # Tabla detalle filtrable
-            with st.expander("📋 Ver detalle de ventas"):
+            with st.expander("ðŸ“‹ Ver detalle de ventas"):
                 f_cli_k = st.text_input("Buscar cliente", key="bus_cli_k")
                 f_prod_k = st.text_input("Buscar producto", key="bus_prod_k")
                 df_det = df_mg_f.copy()
@@ -6014,13 +6014,13 @@ Cada vendedor debe:
                     }),
                     use_container_width=True, hide_index=True
                 )
-                st.download_button("📥 Exportar ventas",
+                st.download_button("ðŸ“¥ Exportar ventas",
                                    data=to_excel_bytes(df_det, "Ventas"),
                                    file_name=f"ventas_{vend_kpi}.xlsx")
 
         st.markdown("---")
-        st.write("#### Distribución de Facturación por Rubro (objetivo: 30/30/30/10)")
-        st.info("Cargá los montos reales por rubro para comparar contra la distribución objetivo.")
+        st.write("#### DistribuciÃ³n de FacturaciÃ³n por Rubro (objetivo: 30/30/30/10)")
+        st.info("CargÃ¡ los montos reales por rubro para comparar contra la distribuciÃ³n objetivo.")
         rubros = list(DISTRIBUCION_OBJETIVO.keys())
         vals_reales = []
         col_r = st.columns(4)
@@ -6042,22 +6042,22 @@ Cada vendedor debe:
             fig_dist.update_layout(height=320, margin=dict(l=0,r=0,t=40,b=0))
             st.plotly_chart(fig_dist, use_container_width=True)
 
-        # Evolución semanal de reportes
+        # EvoluciÃ³n semanal de reportes
         if not df_reps.empty:
             st.markdown("---")
-            st.write("#### Evolución de Facturación Semanal Reportada")
+            st.write("#### EvoluciÃ³n de FacturaciÃ³n Semanal Reportada")
             df_evo = (df_reps.groupby("fecha_semana")["facturacion"].sum()
                       .reset_index().sort_values("fecha_semana"))
             df_evo["Acumulado"] = df_evo["facturacion"].cumsum()
             fig_evo = px.area(df_evo, x="fecha_semana", y="Acumulado",
-                              title="Facturación Acumulada (según reportes)",
+                              title="FacturaciÃ³n Acumulada (segÃºn reportes)",
                               color_discrete_sequence=["#007bff"])
             fig_evo.update_layout(height=300, margin=dict(l=0,r=0,t=40,b=0))
             st.plotly_chart(fig_evo, use_container_width=True)
 
-    # ── SUBTAB 4: CARTERA DE CLIENTES ─────────────────────────────────────────
+    # â”€â”€ SUBTAB 4: CARTERA DE CLIENTES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     with pc4:
-        st.write("### 👥 Gestión de Cartera de Clientes")
+        st.write("### ðŸ‘¥ GestiÃ³n de Cartera de Clientes")
 
         ent_v2 = obtener_entregas()
         vendedores_c = sorted(ent_v2["vendedor"].dropna().replace("","S/V").unique().tolist()) \
@@ -6077,21 +6077,21 @@ Cada vendedor debe:
             pct_pr  = round(n_prem/n_tot*100,1) if n_tot>0 else 0
 
             kc1,kc2,kc3,kc4,kc5,kc6 = st.columns(6)
-            with kc1: st.metric("⭐ Premium",     n_prem)
-            with kc2: st.metric("✅ Activos",     n_act)
-            with kc3: st.metric("😴 Inactivos",   n_inact)
-            with kc4: st.metric("🆕 Prospectos",  n_prosp)
-            with kc5: st.metric("🌐 Field View",  n_fv)
+            with kc1: st.metric("â­ Premium",     n_prem)
+            with kc2: st.metric("âœ… Activos",     n_act)
+            with kc3: st.metric("ðŸ˜´ Inactivos",   n_inact)
+            with kc4: st.metric("ðŸ†• Prospectos",  n_prosp)
+            with kc5: st.metric("ðŸŒ Field View",  n_fv)
             with kc6: st.metric("% Premium",      f"{pct_pr}%",
-                                 delta="OK ✅" if pct_pr>=20 else "< 20% ⚠️",
+                                 delta="OK âœ…" if pct_pr>=20 else "< 20% âš ï¸",
                                  delta_color="normal" if pct_pr>=20 else "inverse")
 
-            # Gráfico torta tipos
+            # GrÃ¡fico torta tipos
             cc1, cc2 = st.columns(2)
             with cc1:
                 tipo_g = df_c.groupby("tipo").size().reset_index(name="N")
                 fig_tp = px.pie(tipo_g, names="tipo", values="N",
-                                title="Distribución por Tipo",
+                                title="DistribuciÃ³n por Tipo",
                                 color="tipo",
                                 color_discrete_map={"premium":"#ffd700","activo":"#28a745",
                                                     "inactivo":"#6c757d","prospecto":"#007bff"},
@@ -6113,12 +6113,12 @@ Cada vendedor debe:
                 .rename(columns={"vendedor":"Vendedor","cliente":"Cliente","tipo":"Tipo",
                                   "superficie_ha":"Ha","potencial_facturacion":"Potencial $",
                                   "field_view":"FV","estado":"Estado",
-                                  "ultima_compra":"Últ. Compra","observaciones":"Obs."}),
+                                  "ultima_compra":"Ãšlt. Compra","observaciones":"Obs."}),
                 use_container_width=True, hide_index=True
             )
 
         st.markdown("---")
-        st.write("#### ➕ Agregar / Actualizar Cliente")
+        st.write("#### âž• Agregar / Actualizar Cliente")
         if vend_c == "Todos":
             vend_nuevo = st.selectbox("Vendedor", vendedores_c, key="vend_nc")
         else:
@@ -6130,13 +6130,13 @@ Cada vendedor debe:
             cli_tipo = st.selectbox("Tipo", ["activo","premium","inactivo","prospecto"], key="nc_tipo")
         with nc2:
             cli_ha   = st.number_input("Superficie (ha)", min_value=0.0, step=10.0, key="nc_ha")
-            cli_pot  = st.number_input("Potencial facturación $", min_value=0.0, step=1000.0, key="nc_pot")
+            cli_pot  = st.number_input("Potencial facturaciÃ³n $", min_value=0.0, step=1000.0, key="nc_pot")
         with nc3:
             cli_fv   = st.toggle("Field View activo", value=False, key="nc_fv")
-            cli_uc   = st.text_input("Última compra (dd/mm/aaaa)", key="nc_uc")
+            cli_uc   = st.text_input("Ãšltima compra (dd/mm/aaaa)", key="nc_uc")
         cli_obs = st.text_input("Observaciones", key="nc_obs")
 
-        if st.button("💾 Guardar Cliente", type="primary", key="save_nc"):
+        if st.button("ðŸ’¾ Guardar Cliente", type="primary", key="save_nc"):
             if cli_nom:
                 conn = conectar_db()
                 conn.execute("""INSERT OR REPLACE INTO cartera_clientes
@@ -6147,19 +6147,19 @@ Cada vendedor debe:
                      1 if cli_fv else 0, cli_uc, "activo", cli_obs, CAMPANA_ACTUAL))
                 conn.commit(); conn.close()
                 limpiar_cache()
-                st.success(f"✅ Cliente '{cli_nom}' guardado.")
+                st.success(f"âœ… Cliente '{cli_nom}' guardado.")
                 st.rerun()
             else:
                 st.error("El nombre del cliente es obligatorio.")
 
-        # ── Importar desde MacroGest (formato nativo) ──────────────────────
+        # â”€â”€ Importar desde MacroGest (formato nativo) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         st.markdown("---")
-        with st.expander("🚀 Importar desde MacroGest (formato exportación ventas)", expanded=True):
+        with st.expander("ðŸš€ Importar desde MacroGest (formato exportaciÃ³n ventas)", expanded=True):
             st.info(
-                "Subí la exportación directa de MacroGest con columnas: "
+                "SubÃ­ la exportaciÃ³n directa de MacroGest con columnas: "
                 "`cuenta`, `deno_cuenta`, `cuit_cuenta`, `articulo`, `descripcion`, "
                 "`precio`, `cantidad`, `entregada`, `fecha`, `localidad`, `observaciones_gen`, `numero`. "
-                "La app clasifica automáticamente Premium / Activo por Pareto 80/20."
+                "La app clasifica automÃ¡ticamente Premium / Activo por Pareto 80/20."
             )
             img_col, frm_col = st.columns([1,2])
             with frm_col:
@@ -6170,23 +6170,23 @@ Cada vendedor debe:
             if arch_mg:
                 df_car_prev, df_ven_prev = parsear_macrogest_ventas(arch_mg, vend_mg)
                 if df_car_prev.empty:
-                    st.error("No se pudo leer el archivo. Verificá que tenga las columnas correctas.")
+                    st.error("No se pudo leer el archivo. VerificÃ¡ que tenga las columnas correctas.")
                 else:
                     # Preview
-                    st.write(f"**{len(df_car_prev)} clientes detectados** — distribución Pareto automática:")
+                    st.write(f"**{len(df_car_prev)} clientes detectados** â€” distribuciÃ³n Pareto automÃ¡tica:")
                     prev_cols = ["cliente","tipo","potencial_facturacion","ultima_compra","observaciones"]
                     st.dataframe(
                         df_car_prev[prev_cols].rename(columns={
                             "cliente":"Cliente","tipo":"Tipo",
                             "potencial_facturacion":"Importe Total $",
-                            "ultima_compra":"Últ. Compra","observaciones":"Localidad"
+                            "ultima_compra":"Ãšlt. Compra","observaciones":"Localidad"
                         }),
                         use_container_width=True, hide_index=True
                     )
                     n_prem = (df_car_prev["tipo"]=="premium").sum()
                     n_act  = (df_car_prev["tipo"]=="activo").sum()
-                    st.caption(f"⭐ {n_prem} Premium  |  ✅ {n_act} Activos  |  "
-                               f"📦 {len(df_ven_prev)} líneas de venta")
+                    st.caption(f"â­ {n_prem} Premium  |  âœ… {n_act} Activos  |  "
+                               f"ðŸ“¦ {len(df_ven_prev)} lÃ­neas de venta")
 
                     # Top productos por importe
                     if not df_ven_prev.empty:
@@ -6198,7 +6198,7 @@ Cada vendedor debe:
                         fig_tp2.update_layout(height=280, margin=dict(l=0,r=0,t=40,b=0))
                         st.plotly_chart(fig_tp2, use_container_width=True)
 
-                    if st.button(f"✅ Confirmar importación de {vend_mg}", type="primary", key="confirm_mg"):
+                    if st.button(f"âœ… Confirmar importaciÃ³n de {vend_mg}", type="primary", key="confirm_mg"):
                         conn = conectar_db()
                         if reemplazar:
                             conn.execute("DELETE FROM cartera_clientes WHERE vendedor=? AND campana=?",
@@ -6231,15 +6231,15 @@ Cada vendedor debe:
                             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", ven_batch)
                         conn.commit(); conn.close()
                         limpiar_cache()
-                        st.success(f"✅ {len(cart_batch)} clientes y {len(ven_batch)} líneas de venta importadas para {vend_mg}.")
+                        st.success(f"âœ… {len(cart_batch)} clientes y {len(ven_batch)} lÃ­neas de venta importadas para {vend_mg}.")
                         st.rerun()
 
-        # ── Importar cartera genérica ───────────────────────────────────────
+        # â”€â”€ Importar cartera genÃ©rica â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         st.markdown("---")
-        with st.expander("📥 Importar Cartera desde Excel (formato propio)"):
+        with st.expander("ðŸ“¥ Importar Cartera desde Excel (formato propio)"):
             st.caption("El archivo debe tener columnas: `vendedor`, `cliente`, `tipo`, `superficie_ha`, `potencial_facturacion`, `field_view` (0/1), `ultima_compra`, `observaciones`")
             arch_cart = st.file_uploader("Archivo cartera (.xlsx/.csv)", type=["xlsx","csv"], key="up_cart")
-            if arch_cart and st.button("🚀 Importar Cartera", key="imp_cart"):
+            if arch_cart and st.button("ðŸš€ Importar Cartera", key="imp_cart"):
                 try:
                     df_ci = pd.read_csv(arch_cart) if arch_cart.name.endswith(".csv") else pd.read_excel(arch_cart)
                     df_ci.columns = [c.strip().lower() for c in df_ci.columns]
@@ -6260,14 +6260,14 @@ Cada vendedor debe:
                         VALUES (?,?,?,?,?,?,?,?,?,?)""", ci_batch)
                     conn.commit(); conn.close()
                     limpiar_cache()
-                    st.success(f"✅ {len(ci_batch)} clientes importados.")
+                    st.success(f"âœ… {len(ci_batch)} clientes importados.")
                     st.rerun()
                 except Exception as ex:
                     st.error(f"Error: {ex}")
 
-    # ── SUBTAB 5: REPORTES SEMANALES ──────────────────────────────────────────
+    # â”€â”€ SUBTAB 5: REPORTES SEMANALES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     with pc5:
-        st.write("### 📝 Registro de Reportes Semanales")
+        st.write("### ðŸ“ Registro de Reportes Semanales")
 
         ent_v3 = obtener_entregas()
         vendedores_r = sorted(ent_v3["vendedor"].dropna().replace("","S/V").unique().tolist()) \
@@ -6280,22 +6280,22 @@ Cada vendedor debe:
             ver_todos = st.toggle("Ver todos los vendedores", value=False, key="rep_todos")
 
         # Formulario nuevo reporte
-        with st.expander("➕ Cargar Reporte Semanal", expanded=True):
+        with st.expander("âž• Cargar Reporte Semanal", expanded=True):
             rp1, rp2, rp3 = st.columns(3)
             with rp1:
                 fecha_rep = st.date_input("Semana del", value=datetime.now().date(), key="rep_fecha")
-                fact_rep  = st.number_input("Facturación de la semana $", min_value=0.0, step=1000.0, key="rep_fact")
+                fact_rep  = st.number_input("FacturaciÃ³n de la semana $", min_value=0.0, step=1000.0, key="rep_fact")
             with rp2:
                 nuev_rep   = st.number_input("Nuevos clientes", min_value=0, step=1, key="rep_nuev")
                 visit_rep  = st.number_input("Visitas realizadas", min_value=0, step=1, key="rep_visit")
             with rp3:
                 st.write("Campo libre")
-            av_rep  = st.text_area("✅ Avances / logros de la semana", height=80, key="rep_av")
-            ob_rep  = st.text_area("⚠️ Obstáculos / dificultades",     height=80, key="rep_ob")
-            op_rep  = st.text_area("💡 Oportunidades detectadas",       height=80, key="rep_op")
-            pa_rep  = st.text_area("📋 Plan de acción semana siguiente", height=80, key="rep_pa")
+            av_rep  = st.text_area("âœ… Avances / logros de la semana", height=80, key="rep_av")
+            ob_rep  = st.text_area("âš ï¸ ObstÃ¡culos / dificultades",     height=80, key="rep_ob")
+            op_rep  = st.text_area("ðŸ’¡ Oportunidades detectadas",       height=80, key="rep_op")
+            pa_rep  = st.text_area("ðŸ“‹ Plan de acciÃ³n semana siguiente", height=80, key="rep_pa")
 
-            if st.button("💾 Guardar Reporte", type="primary", key="save_rep"):
+            if st.button("ðŸ’¾ Guardar Reporte", type="primary", key="save_rep"):
                 try:
                     conn = conectar_db()
                     conn.execute("""INSERT INTO reportes_semanales
@@ -6307,10 +6307,10 @@ Cada vendedor debe:
                          av_rep, ob_rep, op_rep, pa_rep, CAMPANA_ACTUAL))
                     conn.commit(); conn.close()
                     limpiar_cache()
-                    st.session_state["rep_ok"] = f"✅ Reporte de {vend_r} ({fecha_rep.strftime('%d/%m/%Y')}) guardado correctamente."
+                    st.session_state["rep_ok"] = f"âœ… Reporte de {vend_r} ({fecha_rep.strftime('%d/%m/%Y')}) guardado correctamente."
                     st.rerun()
                 except Exception as e:
-                    st.error(f"❌ Error al guardar: {e}")
+                    st.error(f"âŒ Error al guardar: {e}")
 
             if st.session_state.get("rep_ok"):
                 st.success(st.session_state.pop("rep_ok"))
@@ -6319,13 +6319,13 @@ Cada vendedor debe:
         st.write("#### Historial de Reportes")
         df_rep_h = obtener_reportes(None if ver_todos else vend_r)
         if df_rep_h.empty:
-            st.info("Sin reportes cargados todavía.")
+            st.info("Sin reportes cargados todavÃ­a.")
         else:
             # KPIs del vendedor
             if not ver_todos:
                 kr1, kr2, kr3, kr4 = st.columns(4)
                 with kr1: st.metric("Reportes cargados",  len(df_rep_h))
-                with kr2: st.metric("Facturación total",  f"${df_rep_h['facturacion'].sum():,.0f}")
+                with kr2: st.metric("FacturaciÃ³n total",  f"${df_rep_h['facturacion'].sum():,.0f}")
                 with kr3: st.metric("Nuevos clientes",    int(df_rep_h['nuevos_clientes'].sum()))
                 with kr4: st.metric("Total visitas",      int(df_rep_h['visitas'].sum()))
 
@@ -6333,7 +6333,7 @@ Cada vendedor debe:
                     df_evo_r = df_rep_h.sort_values("fecha_semana")[["fecha_semana","facturacion"]].copy()
                     df_evo_r["Acumulado"] = df_evo_r["facturacion"].cumsum()
                     fig_er = px.bar(df_evo_r, x="fecha_semana", y="facturacion",
-                                    title=f"Facturación semanal — {vend_r}",
+                                    title=f"FacturaciÃ³n semanal â€” {vend_r}",
                                     color_discrete_sequence=["#007bff"])
                     fig_er.update_layout(height=280, margin=dict(l=0,r=0,t=40,b=0))
                     st.plotly_chart(fig_er, use_container_width=True)
@@ -6346,26 +6346,26 @@ Cada vendedor debe:
             cols_rep = [c for c in cols_rep if c in df_rep_h.columns]
             st.dataframe(
                 df_rep_h[cols_rep].rename(columns={
-                    "vendedor":"Vendedor","fecha_semana":"Semana","facturacion":"Facturación $",
+                    "vendedor":"Vendedor","fecha_semana":"Semana","facturacion":"FacturaciÃ³n $",
                     "nuevos_clientes":"Nuevos","visitas":"Visitas",
-                    "avances":"Avances","obstaculos":"Obstáculos",
-                    "oportunidades":"Oportunidades","plan_accion":"Plan Próx."
+                    "avances":"Avances","obstaculos":"ObstÃ¡culos",
+                    "oportunidades":"Oportunidades","plan_accion":"Plan PrÃ³x."
                 }),
                 use_container_width=True, hide_index=True
             )
-            st.download_button("📥 Exportar Reportes",
+            st.download_button("ðŸ“¥ Exportar Reportes",
                                data=to_excel_bytes(df_rep_h, "Reportes"),
                                file_name=f"reportes_{vend_r.replace(' ','_')}.xlsx")
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# TAB 11 — SIN ENTREGAR MACROGEST
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# TAB 11 â€” SIN ENTREGAR MACROGEST
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 @st.fragment
 def _render_tab11():
-    st.subheader("🔄 Pedidos Sin Entregar — MacroGest")
-    st.caption("Importá el reporte de MacroGest con los pedidos pendientes de entrega. Los datos quedan guardados y se actualizan con cada importación.")
+    st.subheader("ðŸ”„ Pedidos Sin Entregar â€” MacroGest")
+    st.caption("ImportÃ¡ el reporte de MacroGest con los pedidos pendientes de entrega. Los datos quedan guardados y se actualizan con cada importaciÃ³n.")
 
-    with st.expander("📂 Importar archivo Sin Entregar", expanded=False):
+    with st.expander("ðŸ“‚ Importar archivo Sin Entregar", expanded=False):
         mg_col1, mg_col2 = st.columns(2)
         with mg_col1:
             mg_vendedor = st.text_input(
@@ -6398,8 +6398,8 @@ def _render_tab11():
                 te_mg = df_prev_mg["cant_entregada"].sum()
                 tp_mg = df_prev_mg["pendiente"].sum()
                 st.markdown(
-                    f"**{len(df_prev_mg)} renglones** · "
-                    f"{df_prev_mg['cliente'].nunique()} clientes · "
+                    f"**{len(df_prev_mg)} renglones** Â· "
+                    f"{df_prev_mg['cliente'].nunique()} clientes Â· "
                     f"{df_prev_mg['producto'].nunique()} productos"
                 )
                 km1, km2, km3 = st.columns(3)
@@ -6412,8 +6412,8 @@ def _render_tab11():
                                 "dia_recibido","vendedor"]].head(20),
                     use_container_width=True, hide_index=True,
                 )
-                st.caption("Preview — primeros 20 registros.")
-                if st.button("✅ Confirmar importación", type="primary", key="confirm_mg_se"):
+                st.caption("Preview â€” primeros 20 registros.")
+                if st.button("âœ… Confirmar importaciÃ³n", type="primary", key="confirm_mg_se"):
                     conn = conectar_db()
                     if mg_reemplazar:
                         conn.execute("DELETE FROM entregas WHERE hoja='MACROGEST'")
@@ -6434,28 +6434,28 @@ def _render_tab11():
                                      datetime.now().strftime("%d/%m/%Y %H:%M"))
                     registrar_importacion_log("Sin Entregar MG", arch_mg_se.name, ok_mg)
                     limpiar_cache()
-                    st.success(f"✅ {ok_mg} registros importados.")
+                    st.success(f"âœ… {ok_mg} registros importados.")
                     st.rerun()
 
     st.markdown("---")
     ultima_mg = obtener_metadata("ultima_importacion_mg")
     if ultima_mg:
-        st.caption(f"Última importación MacroGest: **{ultima_mg}**")
+        st.caption(f"Ãšltima importaciÃ³n MacroGest: **{ultima_mg}**")
 
-    # ── Cache en session_state para velocidad máxima de filtrado ─────────────
+    # â”€â”€ Cache en session_state para velocidad mÃ¡xima de filtrado â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if "df_mg_cache" not in st.session_state or st.session_state.get("df_mg_cache") is None:
         st.session_state["df_mg_cache"] = obtener_entregas("MACROGEST")
     df_mg_stored = st.session_state["df_mg_cache"]
 
     _rc1, _rc2 = st.columns([8, 1])
     with _rc2:
-        if st.button("🔄", key="mg_refresh", help="Actualizar datos desde la base"):
+        if st.button("ðŸ”„", key="mg_refresh", help="Actualizar datos desde la base"):
             st.session_state["df_mg_cache"] = obtener_entregas("MACROGEST")
             df_mg_stored = st.session_state["df_mg_cache"]
             st.rerun()
 
     if df_mg_stored is None or df_mg_stored.empty:
-        st.info("Sin datos. Importá un archivo arriba.")
+        st.info("Sin datos. ImportÃ¡ un archivo arriba.")
     else:
         tc2 = df_mg_stored["cantidad_comprada"].sum()
         te2 = df_mg_stored["cant_entregada"].sum()
@@ -6472,7 +6472,7 @@ def _render_tab11():
         st.markdown("---")
         mf1, mf2, mf3, mf4, mf5 = st.columns(5)
         with mf1:
-            f_cli_mg = st.text_input("🔍 Cliente", key="mg_fcli")
+            f_cli_mg = st.text_input("ðŸ” Cliente", key="mg_fcli")
         with mf2:
             prods_mg = ["Todos"] + sorted(df_mg_stored["producto"].dropna().unique().tolist())
             f_prod_mg = st.selectbox("Producto", prods_mg, key="mg_fprod")
@@ -6483,13 +6483,13 @@ def _render_tab11():
             solo_pend_mg = st.toggle("Solo pendientes > 0", value=True, key="mg_fpend")
         with mf5:
             f_edad_mg = st.selectbox(
-                "Antigüedad",
-                ["Todos", "Reciente (≤30d)", "Demorado (30-60d)", "Crítico (>60d)"],
+                "AntigÃ¼edad",
+                ["Todos", "Reciente (â‰¤30d)", "Demorado (30-60d)", "CrÃ­tico (>60d)"],
                 key="mg_fedad",
-                help="Días desde la fecha de recibo del pedido"
+                help="DÃ­as desde la fecha de recibo del pedido"
             )
 
-        # Filtrado ultra-rápido: máscara booleana sobre columna pre-lowercase
+        # Filtrado ultra-rÃ¡pido: mÃ¡scara booleana sobre columna pre-lowercase
         if "df_mg_cli_lower" not in st.session_state or st.session_state.get("df_mg_cache_id") != id(df_mg_stored):
             st.session_state["df_mg_cli_lower"] = df_mg_stored["cliente"].fillna("").str.lower()
             st.session_state["df_mg_cache_id"]  = id(df_mg_stored)
@@ -6509,19 +6509,19 @@ def _render_tab11():
 
         if f_edad_mg != "Todos":
             df_f_mg["_dias"] = df_f_mg["dia_recibido"].apply(dias_desde)
-            if f_edad_mg == "Reciente (≤30d)":      df_f_mg = df_f_mg[df_f_mg["_dias"] <= 30]
+            if f_edad_mg == "Reciente (â‰¤30d)":      df_f_mg = df_f_mg[df_f_mg["_dias"] <= 30]
             elif f_edad_mg == "Demorado (30-60d)":  df_f_mg = df_f_mg[(df_f_mg["_dias"] > 30) & (df_f_mg["_dias"] <= 60)]
-            elif f_edad_mg == "Crítico (>60d)":     df_f_mg = df_f_mg[df_f_mg["_dias"] > 60]
+            elif f_edad_mg == "CrÃ­tico (>60d)":     df_f_mg = df_f_mg[df_f_mg["_dias"] > 60]
             df_f_mg = df_f_mg.drop(columns=["_dias"], errors="ignore")
 
         if not df_f_mg.empty:
-            # Si hay un único cliente filtrado → vista detallada de ese cliente
+            # Si hay un Ãºnico cliente filtrado â†’ vista detallada de ese cliente
             _clientes_filtrados = df_f_mg["cliente"].dropna().unique()
             _vista_cliente = len(_clientes_filtrados) == 1
 
             if _vista_cliente:
                 _nom_cli = _clientes_filtrados[0]
-                st.markdown(f"#### 👤 Pendientes de **{_nom_cli}**")
+                st.markdown(f"#### ðŸ‘¤ Pendientes de **{_nom_cli}**")
 
                 # Gauge de % entregado
                 _gc_tot = df_f_mg["cantidad_comprada"].sum()
@@ -6557,11 +6557,11 @@ def _render_tab11():
                 with _gcol3:
                     st.metric("Entregado", f"{_ge_tot:,.0f}")
                 with _gcol4:
-                    st.metric("Pendiente", f"{_gp_tot:,.0f}", delta=f"-{_gp_tot:,.0f}" if _gp_tot > 0 else "✓", delta_color="inverse")
+                    st.metric("Pendiente", f"{_gp_tot:,.0f}", delta=f"-{_gp_tot:,.0f}" if _gp_tot > 0 else "âœ“", delta_color="inverse")
                 resumen_mg = (
                     df_f_mg.groupby("producto")
                     .agg(
-                        Depósitos=("deposito",        lambda x: ", ".join(sorted(x.dropna().astype(str).unique()))),
+                        DepÃ³sitos=("deposito",        lambda x: ", ".join(sorted(x.dropna().astype(str).unique()))),
                         Comprado =("cantidad_comprada","sum"),
                         Entregado=("cant_entregada",   "sum"),
                         Pendiente=("pendiente",         "sum"),
@@ -6575,7 +6575,7 @@ def _render_tab11():
                     df_f_mg.groupby("producto")
                     .agg(
                         Clientes =("cliente",          "nunique"),
-                        Depósitos=("deposito",          lambda x: ", ".join(sorted(x.dropna().astype(str).unique()))),
+                        DepÃ³sitos=("deposito",          lambda x: ", ".join(sorted(x.dropna().astype(str).unique()))),
                         Comprado =("cantidad_comprada", "sum"),
                         Entregado=("cant_entregada",    "sum"),
                         Pendiente=("pendiente",          "sum"),
@@ -6598,13 +6598,13 @@ def _render_tab11():
                 resumen_mg["Precio Prom"] = resumen_mg["Precio Prom"].fillna(0)
                 resumen_mg["Importe Pend. $"] = (resumen_mg["Pendiente"] * resumen_mg["Precio Prom"]).round(0)
                 total_imp_mg = resumen_mg["Importe Pend. $"].sum()
-                st.metric("💰 Valor total pendiente de entrega (estimado)",
+                st.metric("ðŸ’° Valor total pendiente de entrega (estimado)",
                           f"USD {total_imp_mg:,.0f}",
                           help="Calculado usando precio promedio de ventas MacroGest importadas")
             else:
-                st.info("💡 Para ver el valor monetario pendiente, importá ventas desde "
-                        "**Plan Comercial → Cartera de Clientes → Importar desde MacroGest**.")
-            # ── Semáforo de antigüedad en el resumen ──────────────────────────
+                st.info("ðŸ’¡ Para ver el valor monetario pendiente, importÃ¡ ventas desde "
+                        "**Plan Comercial â†’ Cartera de Clientes â†’ Importar desde MacroGest**.")
+            # â”€â”€ SemÃ¡foro de antigÃ¼edad en el resumen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             _dias_por_prod = (
                 df_f_mg.groupby("producto")["dia_recibido"]
                 .apply(lambda x: max(((dias_desde(v) or 0) for v in x), default=0))
@@ -6614,23 +6614,23 @@ def _render_tab11():
             resumen_mg = resumen_mg.merge(_dias_por_prod, on="Producto", how="left")
             resumen_mg["_dias_max"] = resumen_mg["_dias_max"].fillna(0).astype(int)
             resumen_mg["Estado"] = resumen_mg["_dias_max"].apply(
-                lambda d: "🔴 Crítico" if d > 90 else ("🟡 Demorado" if d > 30 else "🟢 OK")
+                lambda d: "ðŸ”´ CrÃ­tico" if d > 90 else ("ðŸŸ¡ Demorado" if d > 30 else "ðŸŸ¢ OK")
             )
             _resumen_display = resumen_mg.drop(columns=["_dias_max"], errors="ignore").reset_index(drop=True)
             # Reordenar para que Estado quede primero
             _cols_ord = ["Estado"] + [c for c in _resumen_display.columns if c != "Estado"]
             st.dataframe(_resumen_display[_cols_ord], use_container_width=True, hide_index=True)
-            st.caption("🔴 Crítico >90 días · 🟡 Demorado >30 días · 🟢 OK ≤30 días")
+            st.caption("ðŸ”´ CrÃ­tico >90 dÃ­as Â· ðŸŸ¡ Demorado >30 dÃ­as Â· ðŸŸ¢ OK â‰¤30 dÃ­as")
 
-            # ── Ranking top 10 clientes con más pendiente ─────────────────────
-            with st.expander("🏆 Ranking — Clientes con más pendiente", expanded=False):
+            # â”€â”€ Ranking top 10 clientes con mÃ¡s pendiente â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            with st.expander("ðŸ† Ranking â€” Clientes con mÃ¡s pendiente", expanded=False):
                 _rank_df = (df_f_mg.groupby("cliente")["pendiente"].sum()
                             .reset_index().rename(columns={"cliente":"Cliente","pendiente":"Pendiente"})
                             .sort_values("Pendiente", ascending=False).head(10))
                 if not _rank_df.empty:
                     _fig_rank = px.bar(_rank_df, x="Pendiente", y="Cliente", orientation="h",
                                        color="Pendiente", color_continuous_scale=["#F5A800","#3D4E6B"],
-                                       title="Top 10 Clientes — Unidades Pendientes",
+                                       title="Top 10 Clientes â€” Unidades Pendientes",
                                        text="Pendiente")
                     _fig_rank.update_traces(texttemplate="%{text:,.0f}", textposition="outside")
                     _fig_rank.update_layout(yaxis={"categoryorder":"total ascending"},
@@ -6638,8 +6638,8 @@ def _render_tab11():
                                             coloraxis_showscale=False)
                     st.plotly_chart(_fig_rank, use_container_width=True)
 
-            # ── Gráficos: torta distribución + evolución mensual ──────────────
-            with st.expander("📊 Gráficos — Distribución y evolución", expanded=False):
+            # â”€â”€ GrÃ¡ficos: torta distribuciÃ³n + evoluciÃ³n mensual â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            with st.expander("ðŸ“Š GrÃ¡ficos â€” DistribuciÃ³n y evoluciÃ³n", expanded=False):
                 _gc1, _gc2 = st.columns(2)
                 with _gc1:
                     _dist_prod = (df_f_mg.groupby("producto")["pendiente"].sum()
@@ -6663,14 +6663,14 @@ def _render_tab11():
                     if not _evo_mes.empty and _evo_mes["Mes"].notna().any():
                         _evo_mes = _evo_mes[_evo_mes["Mes"] != "NaT"].sort_values("Mes")
                         _fig_evo = px.bar(_evo_mes, x="Mes", y=["Comprado","Entregado","Pendiente"],
-                                          barmode="group", title="Evolución Mensual",
+                                          barmode="group", title="EvoluciÃ³n Mensual",
                                           color_discrete_map={"Comprado":"#3D4E6B","Entregado":"#2E7D32","Pendiente":"#F5A800"})
                         _fig_evo.update_layout(height=350, margin=dict(l=10,r=10,t=40,b=10),
                                                legend=dict(orientation="h", y=-0.2))
                         st.plotly_chart(_fig_evo, use_container_width=True)
 
-            # ── Exportar Excel ────────────────────────────────────────────────
-            with st.expander("📥 Exportar datos filtrados", expanded=False):
+            # â”€â”€ Exportar Excel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            with st.expander("ðŸ“¥ Exportar datos filtrados", expanded=False):
                 _exc1, _exc2 = st.columns(2)
                 with _exc1:
                     _buf_xl = io.BytesIO()
@@ -6678,7 +6678,7 @@ def _render_tab11():
                     with pd.ExcelWriter(_buf_xl, engine="openpyxl") as _xw:
                         _df_export.to_excel(_xw, index=False, sheet_name="Sin Entregar MG")
                     st.download_button(
-                        "⬇️ Descargar Excel (.xlsx)",
+                        "â¬‡ï¸ Descargar Excel (.xlsx)",
                         data=_buf_xl.getvalue(),
                         file_name=f"sin_entregar_mg_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -6687,15 +6687,15 @@ def _render_tab11():
                 with _exc2:
                     _csv_data = _df_export.to_csv(index=False).encode("utf-8")
                     st.download_button(
-                        "⬇️ Descargar CSV",
+                        "â¬‡ï¸ Descargar CSV",
                         data=_csv_data,
                         file_name=f"sin_entregar_mg_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
                         mime="text/csv",
                         key="dl_mg_csv"
                     )
 
-            # ── Pedidos por vencer (próximos 30 días) ─────────────────────────
-            with st.expander("⏰ Pedidos por vencer — próximos 30 días", expanded=False):
+            # â”€â”€ Pedidos por vencer (prÃ³ximos 30 dÃ­as) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            with st.expander("â° Pedidos por vencer â€” prÃ³ximos 30 dÃ­as", expanded=False):
                 _venc_df = df_f_mg.copy()
                 _venc_df["_dias_ant"] = _venc_df["dia_recibido"].apply(dias_desde)
                 _venc_prox = _venc_df[
@@ -6704,41 +6704,41 @@ def _render_tab11():
                 ].copy()
                 _venc_crit = _venc_df[(_venc_df["_dias_ant"] > 60) & (_venc_df["pendiente"] > 0)].copy()
                 if not _venc_crit.empty:
-                    st.warning(f"🔴 {len(_venc_crit)} registros con más de 60 días sin entregar")
+                    st.warning(f"ðŸ”´ {len(_venc_crit)} registros con mÃ¡s de 60 dÃ­as sin entregar")
                     _cols_vc = [c for c in ["cliente","producto","deposito","pendiente","dia_recibido","_dias_ant"] if c in _venc_crit.columns]
-                    st.dataframe(_venc_crit[_cols_vc].rename(columns={"_dias_ant":"Días"}).sort_values("Días", ascending=False),
+                    st.dataframe(_venc_crit[_cols_vc].rename(columns={"_dias_ant":"DÃ­as"}).sort_values("DÃ­as", ascending=False),
                                  use_container_width=True, hide_index=True)
                 if not _venc_prox.empty:
-                    st.info(f"🟡 {len(_venc_prox)} registros con 25-45 días de antigüedad")
+                    st.info(f"ðŸŸ¡ {len(_venc_prox)} registros con 25-45 dÃ­as de antigÃ¼edad")
                     _cols_vp = [c for c in ["cliente","producto","deposito","pendiente","dia_recibido","_dias_ant"] if c in _venc_prox.columns]
-                    st.dataframe(_venc_prox[_cols_vp].rename(columns={"_dias_ant":"Días"}).sort_values("Días", ascending=False),
+                    st.dataframe(_venc_prox[_cols_vp].rename(columns={"_dias_ant":"DÃ­as"}).sort_values("DÃ­as", ascending=False),
                                  use_container_width=True, hide_index=True)
                 if _venc_crit.empty and _venc_prox.empty:
-                    st.success("No hay pedidos críticos pendientes.")
+                    st.success("No hay pedidos crÃ­ticos pendientes.")
 
-            # ── Clientes sin actividad reciente ───────────────────────────────
-            with st.expander("😴 Clientes sin actividad reciente (>60 días)", expanded=False):
+            # â”€â”€ Clientes sin actividad reciente â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            with st.expander("ðŸ˜´ Clientes sin actividad reciente (>60 dÃ­as)", expanded=False):
                 _act_df = df_mg_stored.copy()
                 _act_df["_dias_act"] = _act_df["dia_recibido"].apply(dias_desde)
                 _ultima_act = _act_df.groupby("cliente")["_dias_act"].min().reset_index()
-                _ultima_act.columns = ["Cliente", "Días desde último pedido"]
-                _sin_act = _ultima_act[_ultima_act["Días desde último pedido"] > 60].sort_values("Días desde último pedido", ascending=False)
+                _ultima_act.columns = ["Cliente", "DÃ­as desde Ãºltimo pedido"]
+                _sin_act = _ultima_act[_ultima_act["DÃ­as desde Ãºltimo pedido"] > 60].sort_values("DÃ­as desde Ãºltimo pedido", ascending=False)
                 if not _sin_act.empty:
                     st.dataframe(_sin_act, use_container_width=True, hide_index=True)
-                    st.caption(f"Total: {len(_sin_act)} clientes sin pedidos nuevos en más de 60 días.")
+                    st.caption(f"Total: {len(_sin_act)} clientes sin pedidos nuevos en mÃ¡s de 60 dÃ­as.")
                 else:
-                    st.success("Todos los clientes tuvieron actividad en los últimos 60 días.")
+                    st.success("Todos los clientes tuvieron actividad en los Ãºltimos 60 dÃ­as.")
 
-            # ── Entregas de otras hojas para el cliente filtrado ──────────────
+            # â”€â”€ Entregas de otras hojas para el cliente filtrado â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             if _vista_cliente and f_cli_mg:
                 st.markdown("---")
-                st.markdown(f"#### 📋 Entregas en otras hojas — **{_nom_cli}**")
+                st.markdown(f"#### ðŸ“‹ Entregas en otras hojas â€” **{_nom_cli}**")
                 st.caption("Pedidos del mismo cliente en LC/LCAGRO, Bayer DEP55 y Bayer Directa.")
 
                 _hojas_extra = [
-                    ("LA CLEMENTINA S.A", "📦 LC / LCAGRO"),
-                    ("BAYER DEP55",       "🌿 Bayer DEP55"),
-                    ("BAYER DIRECTA",     "🚚 Bayer Directa"),
+                    ("LA CLEMENTINA S.A", "ðŸ“¦ LC / LCAGRO"),
+                    ("BAYER DEP55",       "ðŸŒ¿ Bayer DEP55"),
+                    ("BAYER DIRECTA",     "ðŸšš Bayer Directa"),
                 ]
                 _hay_extra = False
                 for _hoja_key, _hoja_label in _hojas_extra:
@@ -6749,17 +6749,17 @@ def _render_tab11():
                         st.session_state[_cache_key] = _df_hoja
                     if _df_hoja is None or _df_hoja.empty:
                         continue
-                    # Filtrar por cliente (exacto + fonético)
+                    # Filtrar por cliente (exacto + fonÃ©tico)
                     _mask_h = _filtro_fonetico(_df_hoja["cliente"], f_cli_mg)
                     _df_cli_h = _df_hoja[_mask_h].copy()
                     if _df_cli_h.empty:
                         continue
                     _hay_extra = True
-                    with st.expander(f"{_hoja_label} — {len(_df_cli_h)} registros", expanded=True):
+                    with st.expander(f"{_hoja_label} â€” {len(_df_cli_h)} registros", expanded=True):
                         _res_h = (
                             _df_cli_h.groupby("producto")
                             .agg(
-                                Depósitos=("deposito",         lambda x: ", ".join(sorted(x.dropna().astype(str).unique()))),
+                                DepÃ³sitos=("deposito",         lambda x: ", ".join(sorted(x.dropna().astype(str).unique()))),
                                 Comprado =("cantidad_comprada","sum"),
                                 Entregado=("cant_entregada",   "sum"),
                                 Pendiente=("pendiente",         "sum"),
@@ -6777,48 +6777,48 @@ def _render_tab11():
                 if not _hay_extra:
                     st.info("No se encontraron registros para este cliente en las otras hojas.")
 
-            # ── Notas por cliente ─────────────────────────────────────────────
+            # â”€â”€ Notas por cliente â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             if _vista_cliente:
                 st.markdown("---")
-                st.markdown(f"#### 📝 Notas — **{_nom_cli}**")
+                st.markdown(f"#### ðŸ“ Notas â€” **{_nom_cli}**")
                 _notas_existentes = obtener_notas_cliente(_nom_cli)
                 if _notas_existentes:
                     for _nid, _ntxt, _nusr, _nfch, _ndest in _notas_existentes:
                         _ncols = st.columns([0.05, 0.85, 0.1])
                         with _ncols[0]:
-                            st.markdown("⭐" if _ndest else "•")
+                            st.markdown("â­" if _ndest else "â€¢")
                         with _ncols[1]:
                             st.markdown(f"**{_ntxt}**" if _ndest else _ntxt)
-                            st.caption(f"{_nusr} · {_nfch}")
+                            st.caption(f"{_nusr} Â· {_nfch}")
                         with _ncols[2]:
-                            if st.button("🗑️", key=f"del_nota_{_nid}", help="Eliminar nota"):
+                            if st.button("ðŸ—‘ï¸", key=f"del_nota_{_nid}", help="Eliminar nota"):
                                 eliminar_nota_cliente(_nid)
                                 st.rerun()
                 else:
                     st.caption("Sin notas para este cliente.")
 
-                with st.expander("➕ Agregar nota", expanded=False):
-                    _nota_txt = st.text_area("Nota", key="nueva_nota_txt", placeholder="Acuerdo comercial, condición especial, contacto...")
-                    _nota_dest = st.checkbox("⭐ Destacada", key="nueva_nota_dest")
-                    if st.button("💾 Guardar nota", key="btn_guardar_nota", type="primary"):
+                with st.expander("âž• Agregar nota", expanded=False):
+                    _nota_txt = st.text_area("Nota", key="nueva_nota_txt", placeholder="Acuerdo comercial, condiciÃ³n especial, contacto...")
+                    _nota_dest = st.checkbox("â­ Destacada", key="nueva_nota_dest")
+                    if st.button("ðŸ’¾ Guardar nota", key="btn_guardar_nota", type="primary"):
                         if _nota_txt.strip():
                             guardar_nota_cliente(_nom_cli, _nota_txt.strip(),
                                                   usuario_actual() or "Admin", _nota_dest)
                             st.success("Nota guardada.")
                             st.rerun()
                         else:
-                            st.warning("Escribí algo antes de guardar.")
+                            st.warning("EscribÃ­ algo antes de guardar.")
 
-            # ── Remito PDF por Cliente (completo) ────────────────────────────
+            # â”€â”€ Remito PDF por Cliente (completo) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             st.markdown("---")
-            st.markdown("#### 📄 Resumen Completo PDF por Cliente")
+            st.markdown("#### ðŸ“„ Resumen Completo PDF por Cliente")
             _clientes_pdf = sorted(df_f_mg["cliente"].dropna().unique().tolist()) if not df_f_mg.empty else []
             if _clientes_pdf:
                 _cli_pdf = st.selectbox("Cliente para remito", _clientes_pdf, key="mg_cli_pdf")
                 _generado_por = st.text_input("Generado por", value=usuario_actual() or "Ignacio", key="mg_pdf_autor")
-                if st.button("📄 Generar PDF Completo", key="mg_btn_pdf", type="primary"):
+                if st.button("ðŸ“„ Generar PDF Completo", key="mg_btn_pdf", type="primary"):
                     if not PDF_AVAILABLE:
-                        st.warning("reportlab no está instalado. Ejecutá: pip install reportlab")
+                        st.warning("reportlab no estÃ¡ instalado. EjecutÃ¡: pip install reportlab")
                     else:
                         _buf_r = io.BytesIO()
                         _doc_r = SimpleDocTemplate(_buf_r, pagesize=landscape(A4),
@@ -6827,7 +6827,7 @@ def _render_tab11():
                         _sty_r = getSampleStyleSheet()
                         _el_r  = []
 
-                        # ── Estilos personalizados ──
+                        # â”€â”€ Estilos personalizados â”€â”€
                         from reportlab.lib.styles import ParagraphStyle
                         from reportlab.lib.enums import TA_CENTER, TA_LEFT
                         _sty_titulo = ParagraphStyle("titulo_lc", parent=_sty_r["Title"],
@@ -6841,7 +6841,7 @@ def _render_tab11():
                                                      fontSize=11, spaceBefore=12, spaceAfter=4)
 
                         def _sec_header(label, bg_hex, fg_hex="#FFFFFF"):
-                            """Barra de sección con color diferenciado por origen."""
+                            """Barra de secciÃ³n con color diferenciado por origen."""
                             _t = Table([[Paragraph(f"<b>{label}</b>",
                                         ParagraphStyle("sh", parent=_sty_r["Normal"],
                                                        textColor=rl_colors.HexColor(fg_hex),
@@ -6878,7 +6878,7 @@ def _render_tab11():
                             ]))
                             return _t
 
-                        # ── Encabezado ──
+                        # â”€â”€ Encabezado â”€â”€
                         if _logo_b64:
                             from reportlab.platypus import Image as RLImage
                             import base64
@@ -6886,7 +6886,7 @@ def _render_tab11():
                             _logo_buf   = io.BytesIO(_logo_bytes)
                             _el_r.append(RLImage(_logo_buf, width=3*cm, height=1.2*cm))
                         _el_r.append(Paragraph("La Clementina S.A.", _sty_titulo))
-                        _el_r.append(Paragraph("Insumos Agropecuarios · Bayer CropScience / Monsanto-Bayer · San Jorge, Santa Fe", _sty_sub))
+                        _el_r.append(Paragraph("Insumos Agropecuarios Â· Bayer CropScience / Monsanto-Bayer Â· San Jorge, Santa Fe", _sty_sub))
                         _el_r.append(Spacer(1, 0.3*cm))
 
                         # Info cliente y fecha
@@ -6905,7 +6905,7 @@ def _render_tab11():
                         _el_r.append(_info_tbl)
                         _el_r.append(Spacer(1, 0.5*cm))
 
-                        # ── RESUMEN EJECUTIVO ──────────────────────────────────
+                        # â”€â”€ RESUMEN EJECUTIVO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                         _all_hojas_resumen = []
                         _df_mg_ej = df_mg_stored[df_mg_stored["cliente"] == _cli_pdf]
                         if not _df_mg_ej.empty:
@@ -6954,11 +6954,11 @@ def _render_tab11():
                             _el_r.append(_rej_tbl)
                             _el_r.append(Spacer(1, 0.4*cm))
 
-                        # ── SECCIÓN 1: MacroGest ──
+                        # â”€â”€ SECCIÃ“N 1: MacroGest â”€â”€
                         _df_mg_pdf = df_mg_stored[df_mg_stored["cliente"] == _cli_pdf].copy()
                         if not _df_mg_pdf.empty:
                             _el_r.append(Spacer(1, 0.3*cm))
-                            _el_r.append(_sec_header("📋  MacroGest — Pedidos Sin Entregar", "#3D4E6B"))
+                            _el_r.append(_sec_header("ðŸ“‹  MacroGest â€” Pedidos Sin Entregar", "#3D4E6B"))
                             # KPIs
                             _tc_p = _df_mg_pdf["cantidad_comprada"].sum()
                             _te_p = _df_mg_pdf["cant_entregada"].sum()
@@ -6980,7 +6980,7 @@ def _render_tab11():
                             _el_r.append(Spacer(1, 0.2*cm))
 
                             # Detalle completo fila por fila con TODOS los campos
-                            _hdr_mg = ["Producto", "Lote", "Depósito", "Vendedor",
+                            _hdr_mg = ["Producto", "Lote", "DepÃ³sito", "Vendedor",
                                        "Pedido", "Comprado", "Entregado", "Pendiente", "% Ent.", "Fecha Pedido"]
                             _rows_mg = []
                             for _, _rr in _df_mg_pdf.sort_values("pendiente", ascending=False).iterrows():
@@ -7000,11 +7000,11 @@ def _render_tab11():
                             _cw_mg = [5.5*cm, 1.8*cm, 2.5*cm, 2.5*cm, 1.8*cm, 2*cm, 2*cm, 2*cm, 1.2*cm, 2.5*cm]
                             _el_r.append(_tabla(_hdr_mg, _rows_mg, _cw_mg))
 
-                        # ── SECCIONES: otras hojas ──
+                        # â”€â”€ SECCIONES: otras hojas â”€â”€
                         _hojas_pdf = [
-                            ("LA CLEMENTINA S.A", "📦  LC / LCAGRO — Entregas",       "#1A6B3C"),
-                            ("BAYER DEP55",       "🌿  Bayer DEP55 — Entregas",        "#2E7D32"),
-                            ("BAYER DIRECTA",     "🚚  Bayer Directa — Entregas",      "#0277BD"),
+                            ("LA CLEMENTINA S.A", "ðŸ“¦  LC / LCAGRO â€” Entregas",       "#1A6B3C"),
+                            ("BAYER DEP55",       "ðŸŒ¿  Bayer DEP55 â€” Entregas",        "#2E7D32"),
+                            ("BAYER DIRECTA",     "ðŸšš  Bayer Directa â€” Entregas",      "#0277BD"),
                         ]
                         for _hk, _hl, _hcolor in _hojas_pdf:
                             _ck = f"df_ent_cache_{_hk}"
@@ -7018,7 +7018,7 @@ def _render_tab11():
                                 continue
                             _el_r.append(Spacer(1, 0.3*cm))
                             _el_r.append(_sec_header(_hl, _hcolor))
-                            _hdr_h = ["Producto", "Lote", "Depósito", "Vendedor",
+                            _hdr_h = ["Producto", "Lote", "DepÃ³sito", "Vendedor",
                                       "Estado", "Comprado", "Entregado", "Pendiente", "% Ent.", "Fecha"]
                             _rows_h = []
                             for _, _rh in _dfh_cli.sort_values("pendiente", ascending=False).iterrows():
@@ -7038,28 +7038,28 @@ def _render_tab11():
                             _cw_h = [5.5*cm, 1.8*cm, 2.5*cm, 2.5*cm, 1.8*cm, 2*cm, 2*cm, 2*cm, 1.2*cm, 2.5*cm]
                             _el_r.append(_tabla(_hdr_h, _rows_h, _cw_h))
 
-                        # ── Footer ──
+                        # â”€â”€ Footer â”€â”€
                         _el_r.append(Spacer(1, 0.8*cm))
                         _el_r.append(Paragraph(
-                            f"La Clementina S.A. · San Jorge, Santa Fe · "
-                            f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')} · "
-                            f"Sistema de Control de Depósito",
+                            f"La Clementina S.A. Â· San Jorge, Santa Fe Â· "
+                            f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')} Â· "
+                            f"Sistema de Control de DepÃ³sito",
                             _sty_small
                         ))
 
                         _doc_r.build(_el_r)
                         st.download_button(
-                            "⬇️ Descargar PDF Completo",
+                            "â¬‡ï¸ Descargar PDF Completo",
                             data=_buf_r.getvalue(),
                             file_name=f"resumen_{_cli_pdf.replace(' ','_')}_{datetime.now().strftime('%Y%m%d')}.pdf",
                             mime="application/pdf",
                             key="dl_rem_cli_pdf"
                         )
 
-            # ── Comparativa por Vendedor ──────────────────────────────────────
+            # â”€â”€ Comparativa por Vendedor â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             st.markdown("---")
-            st.markdown("#### 👤 Comparativa por Vendedor")
-            st.caption("Entregado vs pendiente para cada vendedor según los filtros activos.")
+            st.markdown("#### ðŸ‘¤ Comparativa por Vendedor")
+            st.caption("Entregado vs pendiente para cada vendedor segÃºn los filtros activos.")
             _vend_mg = df_f_mg.groupby("vendedor").agg(
                 Clientes=("cliente","nunique"),
                 Comprado=("cantidad_comprada","sum"),
@@ -7080,10 +7080,10 @@ def _render_tab11():
                     fig_vm.update_layout(height=280, margin=dict(l=0,r=0,t=40,b=0))
                     st.plotly_chart(fig_vm, use_container_width=True)
 
-            # ── Tabla cruzada Cliente × Producto ─────────────────────────────
+            # â”€â”€ Tabla cruzada Cliente Ã— Producto â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             st.markdown("---")
-            with st.expander("🗂️ Tabla cruzada: Cliente × Producto (pendiente)", expanded=False):
-                st.caption("Muestra cuánto le falta entregar a cada cliente por producto. Útil para planificar despachos.")
+            with st.expander("ðŸ—‚ï¸ Tabla cruzada: Cliente Ã— Producto (pendiente)", expanded=False):
+                st.caption("Muestra cuÃ¡nto le falta entregar a cada cliente por producto. Ãštil para planificar despachos.")
                 _cross = df_f_mg[df_f_mg["pendiente"] > 0].pivot_table(
                     index="cliente", columns="producto", values="pendiente",
                     aggfunc="sum", fill_value=0
@@ -7093,20 +7093,20 @@ def _render_tab11():
                 else:
                     _cross["TOTAL"] = _cross.sum(axis=1)
                     _cross = _cross.sort_values("TOTAL", ascending=False)
-                    # Semáforo de antigüedad por cliente
+                    # SemÃ¡foro de antigÃ¼edad por cliente
                     if "dia_recibido" in df_f_mg.columns:
                         _df_pend_sem = df_f_mg[df_f_mg["pendiente"] > 0].copy()
                         _df_pend_sem["_dias_sem"] = _df_pend_sem["dia_recibido"].apply(dias_desde)
                         _max_dias = _df_pend_sem.groupby("cliente")["_dias_sem"].max()
                         def _sem_cross(d):
-                            if d > 60:  return "🔴 >60d"
-                            if d > 30:  return "🟡 30-60d"
-                            return "🟢 ≤30d"
+                            if d > 60:  return "ðŸ”´ >60d"
+                            if d > 30:  return "ðŸŸ¡ 30-60d"
+                            return "ðŸŸ¢ â‰¤30d"
                         _cross["Estado"] = _cross.index.map(lambda c: _sem_cross(_max_dias.get(c, 0)))
                     st.dataframe(_cross.style.format("{:,.0f}", subset=[c for c in _cross.columns if c not in ("TOTAL","Estado")]).background_gradient(
                         cmap="Reds", subset=[c for c in _cross.columns if c not in ("TOTAL","Estado")]),
                         use_container_width=True)
-                    st.download_button("📥 Exportar tabla cruzada",
+                    st.download_button("ðŸ“¥ Exportar tabla cruzada",
                                        data=to_excel_bytes(_cross.reset_index(), "Cliente_x_Producto"),
                                        file_name=f"cruzada_{datetime.now().strftime('%Y%m%d')}.xlsx")
 
@@ -7115,11 +7115,11 @@ def _render_tab11():
                        "cant_entregada","pendiente","estado","vendedor","rto"]
             cols_mg = [c for c in cols_mg if c in df_f_mg.columns]
             df_show_mg = df_f_mg[cols_mg].rename(columns={
-                "dia_recibido":"Fecha","cliente":"Cliente","deposito":"Depósito",
+                "dia_recibido":"Fecha","cliente":"Cliente","deposito":"DepÃ³sito",
                 "producto":"Producto",
                 "cantidad_comprada":"Comprado","cant_entregada":"Entregado",
                 "pendiente":"Pendiente","estado":"Estado",
-                "vendedor":"Vendedor","rto":"N° Pedido",
+                "vendedor":"Vendedor","rto":"NÂ° Pedido",
             })
             st.dataframe(df_show_mg, use_container_width=True, hide_index=True)
             out_mg = io.BytesIO()
@@ -7127,21 +7127,21 @@ def _render_tab11():
                 resumen_mg.to_excel(w, index=False, sheet_name="Resumen_Producto")
                 df_show_mg.to_excel(w, index=False, sheet_name="Detalle")
             st.download_button(
-                "📥 Exportar Sin Entregar (.xlsx)",
+                "ðŸ“¥ Exportar Sin Entregar (.xlsx)",
                 data=out_mg.getvalue(),
                 file_name=f"sin_entregar_mg_{datetime.now().strftime('%Y%m%d')}.xlsx",
             )
             st.markdown("---")
-            with st.expander("✏️ Registrar entrega o marcar como completado", expanded=False):
-                st.caption("Actualizá el estado de un pedido directamente desde acá.")
+            with st.expander("âœï¸ Registrar entrega o marcar como completado", expanded=False):
+                st.caption("ActualizÃ¡ el estado de un pedido directamente desde acÃ¡.")
                 if df_f_mg.empty:
                     st.info("No hay registros con los filtros actuales.")
                 else:
                     pedidos_disp = df_f_mg[df_f_mg["rto"].replace("","").notna()]["rto"].unique().tolist()
                     pedidos_disp = [p for p in pedidos_disp if p and str(p).strip()]
                     if pedidos_disp:
-                        rto_sel = st.selectbox("N° Pedido a actualizar", pedidos_disp, key="mg_rto_sel",
-                                               help="Seleccioná el número de pedido a modificar")
+                        rto_sel = st.selectbox("NÂ° Pedido a actualizar", pedidos_disp, key="mg_rto_sel",
+                                               help="SeleccionÃ¡ el nÃºmero de pedido a modificar")
                         row_sel = df_f_mg[df_f_mg["rto"] == rto_sel]
                         if not row_sel.empty:
                             r0 = row_sel.iloc[0]
@@ -7153,9 +7153,9 @@ def _render_tab11():
                                     "Cantidad entregada ahora", min_value=0.0,
                                     max_value=float(r0["pendiente"]) if r0["pendiente"] > 0 else 9999.0,
                                     step=1.0, key="mg_nueva_ent",
-                                    help="Ingresá la cantidad que se acaba de entregar"
+                                    help="IngresÃ¡ la cantidad que se acaba de entregar"
                                 )
-                                if st.button("📦 Registrar entrega parcial", key="mg_btn_parcial",
+                                if st.button("ðŸ“¦ Registrar entrega parcial", key="mg_btn_parcial",
                                              help="Descuenta la cantidad del pendiente y genera movimiento en stock"):
                                     if nueva_entrega > 0:
                                         conn = conectar_db()
@@ -7207,19 +7207,19 @@ def _render_tab11():
                                             )
                                         conn.close()
                                         limpiar_cache()
-                                        st.toast(f"✅ {nueva_entrega:,.1f} unidades registradas y descontadas del stock.")
+                                        st.toast(f"âœ… {nueva_entrega:,.1f} unidades registradas y descontadas del stock.")
                                         if _rem_mg:
-                                            st.download_button("🖨️ Descargar Remito PDF",
+                                            st.download_button("ðŸ–¨ï¸ Descargar Remito PDF",
                                                                data=_rem_mg,
                                                                file_name=f"remito_mg_{rto_sel}.pdf",
                                                                mime="application/pdf",
                                                                key="dl_rem_mg")
                                         st.rerun()
                                     else:
-                                        st.warning("Ingresá una cantidad mayor a cero.")
+                                        st.warning("IngresÃ¡ una cantidad mayor a cero.")
                             with ua2:
                                 st.write("")  # spacer
-                                if st.button("✅ Marcar pedido como COMPLETADO", key="mg_btn_comp",
+                                if st.button("âœ… Marcar pedido como COMPLETADO", key="mg_btn_comp",
                                              type="primary",
                                              help="Cierra el pedido poniendo pendiente=0 y estado=ENTREGADO"):
                                     conn = conectar_db()
@@ -7247,25 +7247,25 @@ def _render_tab11():
                                                  f"Completar MG pedido {rto_sel}",
                                                  safe_str(r0.get("deposito","")) or "",
                                                  "entrega_mg", usuario_actual(),
-                                                 f"Completar entrega — Cliente: {r0['cliente']}"))
+                                                 f"Completar entrega â€” Cliente: {r0['cliente']}"))
                                     conn.commit(); conn.close()
                                     limpiar_cache()
-                                    st.toast(f"✅ Pedido {rto_sel} marcado como completado y stock descontado.")
+                                    st.toast(f"âœ… Pedido {rto_sel} marcado como completado y stock descontado.")
                                     st.rerun()
                     else:
-                        st.info("Los registros filtrados no tienen N° de pedido asignado. "
-                                "Podés usar 'cliente+producto' para identificarlos.")
+                        st.info("Los registros filtrados no tienen NÂ° de pedido asignado. "
+                                "PodÃ©s usar 'cliente+producto' para identificarlos.")
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# TAB 12 — LISTA DE PRECIOS
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# TAB 12 â€” LISTA DE PRECIOS
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 @st.fragment
 def _render_tab12():
-    st.subheader("🏷️ Lista de Precios 2026")
-    st.caption("Importá la lista de precios de MacroGest. Los precios quedan guardados y se pueden mapear automáticamente al stock para valorizar el inventario.")
+    st.subheader("ðŸ·ï¸ Lista de Precios 2026")
+    st.caption("ImportÃ¡ la lista de precios de MacroGest. Los precios quedan guardados y se pueden mapear automÃ¡ticamente al stock para valorizar el inventario.")
 
-    # ── Importar ──────────────────────────────────────────────────────────────
-    with st.expander("📂 Importar Lista de Precios (.xlsx)", expanded=False):
+    # â”€â”€ Importar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    with st.expander("ðŸ“‚ Importar Lista de Precios (.xlsx)", expanded=False):
         arch_lp = st.file_uploader("Archivo lista de precios", type=["xlsx","xls","csv"], key="up_lista_precios")
         if arch_lp:
             try:
@@ -7277,7 +7277,7 @@ def _render_tab12():
                     "UM":"um","Unidad":"um","U.M.":"um",
                     "Contado":"precio_contado","CONTADO":"precio_contado","Precio Contado":"precio_contado",
                     "P Vta":"precio_vta","Precio Vta":"precio_vta","P. VTA":"precio_vta","PVta":"precio_vta",
-                    "Financiación":"financiacion","Financiacion":"financiacion","FINANCIACION":"financiacion",
+                    "FinanciaciÃ³n":"financiacion","Financiacion":"financiacion","FINANCIACION":"financiacion",
                 }
                 _df_lp.rename(columns={k:v for k,v in _col_map_lp.items() if k in _df_lp.columns}, inplace=True)
                 for _req in ["producto","precio_contado"]:
@@ -7286,10 +7286,10 @@ def _render_tab12():
                         st.stop()
                 _df_lp = _df_lp[_df_lp["producto"].apply(lambda x: bool(safe_str(x)))]
                 _n_rub = _df_lp["rubro"].nunique() if "rubro" in _df_lp.columns else "?"
-                st.markdown(f"**{len(_df_lp)} productos** · {_n_rub} rubros detectados")
+                st.markdown(f"**{len(_df_lp)} productos** Â· {_n_rub} rubros detectados")
                 st.dataframe(_df_lp.head(15), use_container_width=True, hide_index=True)
-                st.caption("Preview — primeros 15 registros")
-                if st.button("✅ Confirmar importación", type="primary", key="conf_lp"):
+                st.caption("Preview â€” primeros 15 registros")
+                if st.button("âœ… Confirmar importaciÃ³n", type="primary", key="conf_lp"):
                     _ts_lp = datetime.now().strftime("%d/%m/%Y %H:%M")
                     lp_batch = [
                         (safe_str(r.get("rubro","")), safe_str(r.get("producto","")),
@@ -7308,26 +7308,26 @@ def _render_tab12():
                         if _item_lp[3] > 0:  # precio_contado
                             registrar_cambio_precio(_item_lp[1], _item_lp[3], "USD", usuario_actual())
                     limpiar_cache()
-                    st.success(f"✅ {len(lp_batch)} precios importados.")
+                    st.success(f"âœ… {len(lp_batch)} precios importados.")
                     st.rerun()
             except Exception as _ex_lp:
                 st.error(f"Error: {_ex_lp}")
 
-    # ── Datos cargados ────────────────────────────────────────────────────────
+    # â”€â”€ Datos cargados â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     df_lp = obtener_lista_precios()
 
     if df_lp.empty:
-        st.info("Sin datos. Importá un archivo arriba.")
+        st.info("Sin datos. ImportÃ¡ un archivo arriba.")
     else:
         _lp_ult = df_lp["fecha_carga"].iloc[0] if "fecha_carga" in df_lp.columns else ""
-        if _lp_ult: st.caption(f"🕐 Última carga: **{_lp_ult}**")
+        if _lp_ult: st.caption(f"ðŸ• Ãšltima carga: **{_lp_ult}**")
 
         # KPIs
         _lk1, _lk2, _lk3, _lk4 = st.columns(4)
         with _lk1: st.metric("Productos",       len(df_lp))
         with _lk2: st.metric("Rubros",          df_lp["rubro"].nunique())
-        with _lk3: st.metric("Precio mín. USD", f"{df_lp['precio_contado'].min():.2f}")
-        with _lk4: st.metric("Precio máx. USD", f"{df_lp['precio_contado'].max():.2f}")
+        with _lk3: st.metric("Precio mÃ­n. USD", f"{df_lp['precio_contado'].min():.2f}")
+        with _lk4: st.metric("Precio mÃ¡x. USD", f"{df_lp['precio_contado'].max():.2f}")
 
         st.markdown("---")
 
@@ -7337,7 +7337,7 @@ def _render_tab12():
             rubros_lp = ["Todos"] + sorted(df_lp["rubro"].dropna().unique().tolist())
             f_rubro_lp = st.selectbox("Rubro", rubros_lp, key="f_rubro_lp")
         with _lf2:
-            busq_lp = st.text_input("🔍 Buscar producto", key="busq_lp")
+            busq_lp = st.text_input("ðŸ” Buscar producto", key="busq_lp")
         with _lf3:
             orden_lp = st.selectbox("Ordenar por", ["Rubro / Producto","Mayor precio","Menor precio"], key="ord_lp")
 
@@ -7352,44 +7352,44 @@ def _render_tab12():
             df_lp_f[["rubro","producto","um","precio_contado","precio_vta","financiacion"]]
             .rename(columns={
                 "rubro":"Rubro","producto":"Producto","um":"UM",
-                "precio_contado":"Contado USD","precio_vta":"P.Vta USD","financiacion":"Financiación"
+                "precio_contado":"Contado USD","precio_vta":"P.Vta USD","financiacion":"FinanciaciÃ³n"
             }),
             use_container_width=True, hide_index=True
         )
         st.caption(f"Mostrando {len(df_lp_f)} de {len(df_lp)} productos")
 
-        # Gráfico por rubro
-        with st.expander("📊 Gráfico de precios por rubro", expanded=False):
+        # GrÃ¡fico por rubro
+        with st.expander("ðŸ“Š GrÃ¡fico de precios por rubro", expanded=False):
             _fig_rub = px.box(
                 df_lp[df_lp["precio_contado"] > 0],
                 x="rubro", y="precio_contado",
-                title="Distribución de precios por rubro (USD Contado)",
+                title="DistribuciÃ³n de precios por rubro (USD Contado)",
                 color="rubro", labels={"precio_contado":"Precio USD","rubro":"Rubro"}
             )
             _fig_rub.update_layout(height=380, showlegend=False, margin=dict(l=0,r=0,t=40,b=80))
             _fig_rub.update_xaxes(tickangle=30)
             st.plotly_chart(_fig_rub, use_container_width=True)
 
-        st.download_button("📥 Exportar lista filtrada (.xlsx)",
+        st.download_button("ðŸ“¥ Exportar lista filtrada (.xlsx)",
                            data=to_excel_bytes(
                                df_lp_f[["rubro","producto","um","precio_contado","precio_vta","financiacion"]]
                                .rename(columns={"rubro":"Rubro","producto":"Producto","um":"UM",
                                                 "precio_contado":"Contado USD","precio_vta":"P.Vta USD",
-                                                "financiacion":"Financiación"}),
+                                                "financiacion":"FinanciaciÃ³n"}),
                                "Lista_Precios"),
                            file_name=f"lista_precios_{datetime.now().strftime('%Y%m%d')}.xlsx")
 
-        # ── Mapeo automático al stock ─────────────────────────────────────────
+        # â”€â”€ Mapeo automÃ¡tico al stock â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         st.markdown("---")
-        st.write("### 🔗 Mapear precios al stock")
-        st.caption("Cruza los nombres de la lista de precios con los productos en stock y actualiza el precio unitario en Valorización.")
+        st.write("### ðŸ”— Mapear precios al stock")
+        st.caption("Cruza los nombres de la lista de precios con los productos en stock y actualiza el precio unitario en ValorizaciÃ³n.")
 
         _mc1, _mc2 = st.columns([2,1])
         with _mc1:
             st.info("El mapeo busca primero coincidencia **exacta** y luego **parcial** (primeros 15 caracteres). "
-                    "Después del mapeo, los precios aparecen automáticamente en **💲 Valorización**.")
+                    "DespuÃ©s del mapeo, los precios aparecen automÃ¡ticamente en **ðŸ’² ValorizaciÃ³n**.")
         with _mc2:
-            if st.button("🔗 Ejecutar mapeo automático", type="primary", key="btn_mapeo_lp"):
+            if st.button("ðŸ”— Ejecutar mapeo automÃ¡tico", type="primary", key="btn_mapeo_lp"):
                 prod_db = obtener_productos_completo()
                 if prod_db.empty:
                     st.warning("Sin productos en stock para mapear.")
@@ -7411,27 +7411,27 @@ def _render_tab12():
                             no_match_list.append(safe_str(lp_row["producto"]))
                     conn.commit(); conn.close()
                     limpiar_cache()
-                    st.success(f"✅ {mapeados} productos mapeados correctamente.")
+                    st.success(f"âœ… {mapeados} productos mapeados correctamente.")
                     if sin_match > 0:
-                        st.warning(f"⚠️ {sin_match} productos sin coincidencia en stock.")
+                        st.warning(f"âš ï¸ {sin_match} productos sin coincidencia en stock.")
                         with st.expander("Ver productos sin match"):
                             st.write(no_match_list)
                     st.rerun()
 
-        # ── Historial de Precios ──────────────────────────────────────────────
+        # â”€â”€ Historial de Precios â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         st.markdown("---")
-        with st.expander("📈 Historial de cambios de precio por producto", expanded=False):
+        with st.expander("ðŸ“ˆ Historial de cambios de precio por producto", expanded=False):
             _hp_prod = st.selectbox("Producto", ["Todos"] + sorted(df_lp["producto"].dropna().unique().tolist()),
                                     key="hp_prod_sel")
             _df_hp = obtener_historial_precios(_hp_prod if _hp_prod != "Todos" else "")
             if _df_hp.empty:
-                st.info("Sin historial aún. Los cambios se registran cada vez que se importa una lista.")
+                st.info("Sin historial aÃºn. Los cambios se registran cada vez que se importa una lista.")
             else:
                 _fig_hp = px.line(
                     _df_hp.sort_values("fecha_hora"),
                     x="fecha_hora", y="precio",
                     color="producto" if _hp_prod == "Todos" else None,
-                    markers=True, title="Evolución de precio",
+                    markers=True, title="EvoluciÃ³n de precio",
                     labels={"precio":"Precio","fecha_hora":"Fecha"}
                 )
                 _fig_hp.update_layout(height=280, margin=dict(l=0,r=0,t=40,b=0))
@@ -7441,10 +7441,10 @@ def _render_tab12():
                     "precio":"Precio","moneda":"Moneda","usuario":"Usuario"
                 }), use_container_width=True, hide_index=True)
 
-        # ── Presupuestador ────────────────────────────────────────────────────
+        # â”€â”€ Presupuestador â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         st.markdown("---")
-        st.write("### 💼 Presupuestador")
-        st.caption("Armá un presupuesto para un cliente con productos y precios de lista. Generá el PDF listo para enviar.")
+        st.write("### ðŸ’¼ Presupuestador")
+        st.caption("ArmÃ¡ un presupuesto para un cliente con productos y precios de lista. GenerÃ¡ el PDF listo para enviar.")
         _pres_lp = obtener_lista_precios()
         _pres_pf = obtener_productos_completo()
         _src_prods_p = sorted(_pres_lp["producto"].dropna().unique().tolist() if not _pres_lp.empty
@@ -7471,13 +7471,13 @@ def _render_tab12():
 
         _bc1, _bc2 = st.columns(2)
         with _bc1:
-            if st.button("➕ Agregar ítem", key="btn_pres_add"):
+            if st.button("âž• Agregar Ã­tem", key="btn_pres_add"):
                 st.session_state["pres_items"].append(
                     {"producto": _p_sel, "cantidad": _p_cant, "precio": _p_precio, "moneda": "USD"}
                 )
                 st.rerun()
         with _bc2:
-            if st.button("🗑️ Limpiar", key="btn_pres_clear"):
+            if st.button("ðŸ—‘ï¸ Limpiar", key="btn_pres_clear"):
                 st.session_state["pres_items"] = []
                 st.rerun()
 
@@ -7490,16 +7490,16 @@ def _render_tab12():
                          use_container_width=True, hide_index=True)
             st.metric("Total presupuesto (USD)", f"${_df_it['Subtotal'].sum():,.2f}")
             if PDF_AVAILABLE:
-                if st.button("📄 Generar PDF", type="primary", key="btn_pres_pdf"):
+                if st.button("ðŸ“„ Generar PDF", type="primary", key="btn_pres_pdf"):
                     _pbytes = generar_presupuesto_pdf(_pres_cliente, _items_now, usuario_actual(), _pres_obs)
                     if _pbytes:
-                        st.download_button("⬇️ Descargar Presupuesto PDF", data=_pbytes,
+                        st.download_button("â¬‡ï¸ Descargar Presupuesto PDF", data=_pbytes,
                                            file_name=f"presupuesto_{datetime.now().strftime('%Y%m%d')}.pdf",
                                            mime="application/pdf")
             else:
                 st.caption("PDF: `pip install reportlab`")
         else:
-            st.caption("Agregá productos para armar el presupuesto.")
+            st.caption("AgregÃ¡ productos para armar el presupuesto.")
 
 with tab11: _render_tab11()
 
@@ -7508,7 +7508,7 @@ with tab11: _render_tab11()
 
 with tab12: _render_tab12()
 
-# ── Función global cacheada para trazabilidad ─────────────────────────────────
+# â”€â”€ FunciÃ³n global cacheada para trazabilidad â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @st.cache_data(ttl=180, show_spinner=False)
 def obtener_trazabilidad_completa():
     conn = conectar_db()
@@ -7533,25 +7533,25 @@ def obtener_trazabilidad_completa():
     )
     return df
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # TAB TRAZABILIDAD
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 with tab_traz:
-    st.subheader("🔍 Trazabilidad de Lotes y Movimientos")
+    st.subheader("ðŸ” Trazabilidad de Lotes y Movimientos")
 
-    # ── Cargar datos base (cacheado globalmente) ───────────────────────────────
+    # â”€â”€ Cargar datos base (cacheado globalmente) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     df_traz = obtener_trazabilidad_completa()
 
     if df_traz.empty:
-        st.warning("Sin datos. Importá el stock primero.")
+        st.warning("Sin datos. ImportÃ¡ el stock primero.")
         st.stop()
 
     df_traz["neta"] = df_traz.apply(
         lambda r: r["cantidad"] if r["tipo_movimiento"] == "Entrada" else -r["cantidad"], axis=1
     )
 
-    # ── Filtros de búsqueda ────────────────────────────────────────────────────
-    st.markdown("### 🔎 Buscar")
+    # â”€â”€ Filtros de bÃºsqueda â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    st.markdown("### ðŸ”Ž Buscar")
     _tc1, _tc2, _tc3 = st.columns(3)
     with _tc1:
         _t_prod = st.selectbox("Producto", ["Todos"] + sorted(df_traz["producto"].unique().tolist()), key="traz_prod")
@@ -7571,11 +7571,11 @@ with tab_traz:
 
     _tc4, _tc5 = st.columns(2)
     with _tc4:
-        _t_dep = st.selectbox("Depósito", ["Todos"] + sorted(df_traz["deposito"].dropna().unique().tolist()), key="traz_dep")
+        _t_dep = st.selectbox("DepÃ³sito", ["Todos"] + sorted(df_traz["deposito"].dropna().unique().tolist()), key="traz_dep")
     with _tc5:
         _t_texto = st.text_input("Buscar texto libre (producto, lote, referencia)", key="traz_texto")
 
-    # ── Aplicar filtros ────────────────────────────────────────────────────────
+    # â”€â”€ Aplicar filtros â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     df_f = df_traz[df_traz["anulado"] == 0].copy()
     if _t_prod != "Todos":
         df_f = df_f[df_f["producto"] == _t_prod]
@@ -7606,9 +7606,9 @@ with tab_traz:
 
     st.markdown(f"**{len(df_f)} movimientos encontrados**")
 
-    # ── Resumen por producto+lote ──────────────────────────────────────────────
+    # â”€â”€ Resumen por producto+lote â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     st.markdown("---")
-    st.markdown("### 📦 Stock actual por Producto / Lote / Depósito")
+    st.markdown("### ðŸ“¦ Stock actual por Producto / Lote / DepÃ³sito")
     if not df_f.empty:
         _resumen = (df_f.groupby(["producto", "lote", "deposito"])["neta"]
                     .sum().reset_index()
@@ -7619,17 +7619,17 @@ with tab_traz:
         if not _resumen.empty:
             st.dataframe(_resumen, use_container_width=True, hide_index=True)
         else:
-            st.info("Stock neto cero para la selección.")
+            st.info("Stock neto cero para la selecciÃ³n.")
 
-    # ── Timeline de movimientos ────────────────────────────────────────────────
+    # â”€â”€ Timeline de movimientos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     st.markdown("---")
-    st.markdown("### 📋 Línea de vida — Movimientos detallados")
+    st.markdown("### ðŸ“‹ LÃ­nea de vida â€” Movimientos detallados")
     if not df_f.empty:
         _cols_show = ["fecha_hora", "tipo_movimiento", "producto", "lote",
                       "deposito", "cantidad", "referencia", "usuario"]
         _df_show = df_f[_cols_show].copy()
         _df_show.columns = ["Fecha", "Tipo", "Producto", "Lote",
-                             "Depósito", "Cantidad", "Referencia", "Usuario"]
+                             "DepÃ³sito", "Cantidad", "Referencia", "Usuario"]
         _df_show = _df_show.sort_values("Fecha", ascending=False)
 
         # Color por tipo
@@ -7647,10 +7647,10 @@ with tab_traz:
             height=400
         )
 
-    # ── Entregas por cliente (si hay filtro de producto o lote) ───────────────
+    # â”€â”€ Entregas por cliente (si hay filtro de producto o lote) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if _t_prod != "Todos" or _t_lote != "Todos":
         st.markdown("---")
-        st.markdown("### 🚚 Entregas registradas a clientes")
+        st.markdown("### ðŸšš Entregas registradas a clientes")
         try:
             _conn_ent = conectar_db()
             _ent_sql = "SELECT fecha_pedido, cliente, producto, lote, cant_entregada, deposito FROM entregas WHERE 1=1"
@@ -7671,9 +7671,9 @@ with tab_traz:
         except Exception as _e:
             st.info(f"No se pudieron cargar entregas: {_e}")
 
-    # ── Exportar ───────────────────────────────────────────────────────────────
+    # â”€â”€ Exportar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     st.markdown("---")
-    st.markdown("### 📥 Exportar trazabilidad")
+    st.markdown("### ðŸ“¥ Exportar trazabilidad")
     _ec1, _ec2 = st.columns(2)
     with _ec1:
         if not df_f.empty:
@@ -7682,11 +7682,11 @@ with tab_traz:
                 "deposito","cantidad","referencia","usuario"
             ]].rename(columns={
                 "fecha_hora":"Fecha","tipo_movimiento":"Tipo","producto":"Producto",
-                "codigo":"Código","lote":"Lote","deposito":"Depósito",
+                "codigo":"CÃ³digo","lote":"Lote","deposito":"DepÃ³sito",
                 "cantidad":"Cantidad","referencia":"Referencia","usuario":"Usuario"
             }), "Trazabilidad")
             st.download_button(
-                "📊 Descargar Excel",
+                "ðŸ“Š Descargar Excel",
                 data=_xlsx_traz,
                 file_name=f"trazabilidad_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -7702,13 +7702,13 @@ with tab_traz:
                 _styles = getSampleStyleSheet()
                 _elems = []
                 _elems.append(Paragraph(
-                    f"Trazabilidad — La Clementina S.A. — {datetime.now().strftime('%d/%m/%Y %H:%M')}",
+                    f"Trazabilidad â€” La Clementina S.A. â€” {datetime.now().strftime('%d/%m/%Y %H:%M')}",
                     _styles["Heading2"]
                 ))
                 _elems.append(Spacer(1, 0.3*cm))
                 _pdf_df = df_f[["fecha_hora","tipo_movimiento","producto","lote",
                                  "deposito","cantidad","referencia"]].head(500)
-                _pdf_df.columns = ["Fecha","Tipo","Producto","Lote","Depósito","Cantidad","Referencia"]
+                _pdf_df.columns = ["Fecha","Tipo","Producto","Lote","DepÃ³sito","Cantidad","Referencia"]
                 _data_pdf = [list(_pdf_df.columns)] + _pdf_df.values.tolist()
                 _tbl = Table(_data_pdf, repeatRows=1)
                 _tbl.setStyle(TableStyle([
@@ -7722,7 +7722,7 @@ with tab_traz:
                 _doc.build(_elems)
                 _buf_pdf.seek(0)
                 st.download_button(
-                    "📄 Descargar PDF",
+                    "ðŸ“„ Descargar PDF",
                     data=_buf_pdf,
                     file_name=f"trazabilidad_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
                     mime="application/pdf",
