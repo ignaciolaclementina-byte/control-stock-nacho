@@ -361,7 +361,10 @@ class _DB:
         return cur
 
     def commit(self): self._raw.commit()
-    def close(self):  self._raw.close()
+    def close(self):
+        # En PostgreSQL usamos conexión cacheada — no cerrar
+        if not self._pg:
+            self._raw.close()
 
     def __enter__(self): return self
     def __exit__(self, *_):
@@ -370,7 +373,21 @@ class _DB:
         self.close()
 
 
+@st.cache_resource
+def _get_cached_db() -> _DB:
+    """Conexión única reutilizable (PostgreSQL connection pooling)."""
+    return _DB()
+
 def conectar_db() -> _DB:
+    if IS_POSTGRES:
+        db = _get_cached_db()
+        # Reconectar si la conexión se cerró
+        try:
+            db._raw.cursor().execute("SELECT 1")
+        except Exception:
+            _get_cached_db.clear()
+            db = _get_cached_db()
+        return db
     return _DB()
 
 
