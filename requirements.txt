@@ -1,0 +1,10 @@
+streamlit
+pandas
+plotly
+numpy
+opencv-python-headless
+openpyxl
+matplotlib
+qrcode[pil]
+reportlab
+psycopg2-binary
