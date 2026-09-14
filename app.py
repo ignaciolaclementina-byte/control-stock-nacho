@@ -5168,29 +5168,35 @@ with tab9:
                             "stk": safe_float(row.get("stock_actual", 0.0)),
                         })
 
-                    # ── Paso 2: insertar productos únicos en batch ─────────────
-                    _prog.progress(45, "Insertando productos (batch)...")
+                    # ── Paso 2 y 3: insertar productos e id_map con sqlite3 directo ──
+                    _prog.progress(45, "Insertando productos...")
                     productos_uniq = {r["nom"]: r for r in filas_raw}
-                    prod_batch = [(p["nom"], p["uni"], p["cod"]) for p in productos_uniq.values()]
-                    _cur2 = conn._raw.cursor()
-                    _sql_ins_prod = "INSERT OR IGNORE INTO productos (nombre,unidad,codigo) VALUES (?,?,?)"
-                    if getattr(conn, "_pg", False):
-                        _sql_ins_prod = _adapt_pg(_sql_ins_prod)
-                    _cur2.executemany(_sql_ins_prod, prod_batch)
-                    conn._raw.commit()
-                    pa = len(prod_batch)
-
-                    # ── Paso 3: cerrar y reabrir conexión para ver los productos recién insertados ──
-                    _prog.progress(60, "Mapeando IDs de productos...")
+                    import sqlite3 as _sq3, os as _os
+                    _db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "stock_agroquimicos.db")
                     conn.close()
-                    conn = conectar_db()
-                    id_map_rows = conn._raw.execute(
-                        "SELECT id_producto, nombre FROM productos"
-                    ).fetchall()
-                    id_map = {r[1]: r[0] for r in id_map_rows}
+                    _raw = _sq3.connect(_db_path, check_same_thread=False)
+                    _raw.execute("PRAGMA journal_mode=WAL")
+                    # Insertar productos de a uno para recuperar IDs
+                    id_map = {}
+                    pa = 0
+                    for _nom, _p in productos_uniq.items():
+                        _raw.execute(
+                            "INSERT OR IGNORE INTO productos (nombre,unidad,codigo) VALUES (?,?,?)",
+                            (_nom, _p["uni"], _p["cod"])
+                        )
+                        pa += 1
+                    _raw.commit()
+                    # Leer IDs frescos
+                    _prog.progress(60, "Mapeando IDs...")
+                    for _row in _raw.execute("SELECT id_producto, nombre FROM productos").fetchall():
+                        id_map[_row[1]] = _row[0]
+                    st.caption(f"🔍 DEBUG: id_map tiene {len(id_map)} entradas, filas_raw tiene {len(filas_raw)}")
+                    if id_map and filas_raw:
+                        _sample_nom = filas_raw[0]["nom"]
+                        st.caption(f"🔍 DEBUG: primera filas_raw nom={repr(_sample_nom)!r}, está en id_map={_sample_nom in id_map}")
 
-                    # ── Paso 4: insertar movimientos en batch ──────────────────
-                    _prog.progress(70, f"Insertando movimientos (id_map={len(id_map)} productos)...")
+                    # ── Paso 4: insertar movimientos ────────────────────────────
+                    _prog.progress(70, f"Insertando movimientos...")
                     mov_batch = []
                     for r in filas_raw:
                         pid = id_map.get(r["nom"])
@@ -5201,17 +5207,16 @@ with tab9:
                             r["stk"], r["lot"], "Saldo Inicial",
                             r["dep"], "excel", _usu
                         ))
-                    _cur4 = conn._raw.cursor()
-                    _sql_ins_mov = """INSERT INTO movimientos
+                    _raw.executemany(
+                        """INSERT INTO movimientos
                            (fecha_hora,tipo_movimiento,id_producto,cantidad,lote,
                             referencia,deposito,origen,usuario)
-                           VALUES (?,?,?,?,?,?,?,?,?)"""
-                    if getattr(conn, "_pg", False):
-                        _sql_ins_mov = _adapt_pg(_sql_ins_mov)
-                    _cur4.executemany(_sql_ins_mov, mov_batch)
-                    conn._raw.commit()
+                           VALUES (?,?,?,?,?,?,?,?,?)""",
+                        mov_batch
+                    )
+                    _raw.commit()
                     mo = len(mov_batch)
-                    conn.close()
+                    _raw.close()
                     _prog.progress(100, "¡Listo!")
                     guardar_metadata("ultima_importacion", datetime.now().strftime("%d/%m/%Y %H:%M"))
                     guardar_metadata("ultimo_hash_stock", _file_hash)
