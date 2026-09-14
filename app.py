@@ -2938,16 +2938,19 @@ with tab1:
             pass
 
         # ── Selector múltiple de depósitos ────────────────────────────────────
-        with st.expander("🏭 Seleccionar depósitos adicionales", expanded=False):
-            st.caption("Marcá uno o más depósitos para combinar con el filtro principal.")
-            _dep_cols = st.columns(8)
+        with st.expander("🏭 Filtrar por depósitos", expanded=True):
+            st.caption("Marcá los depósitos que querés ver. Si no marcás ninguno, se muestran todos.")
+            _chk_cols = st.columns(min(len(lista_d), 10)) if lista_d else []
             _deps_extra = []
             for _di, _dn in enumerate(lista_d):
-                with _dep_cols[_di % 8]:
-                    if st.checkbox(str(_dn), key=f"dep_chk_{_dn}"):
+                with _chk_cols[_di % len(_chk_cols)]:
+                    _lbl = f"Dep. {_dn}"
+                    if st.checkbox(_lbl, key=f"dep_chk_{_dn}"):
                         _deps_extra.append(_dn)
             if _deps_extra:
-                st.caption(f"Depósitos seleccionados: {', '.join(str(d) for d in _deps_extra)}")
+                st.caption(f"✅ Mostrando: {', '.join(str(d) for d in _deps_extra)}")
+            else:
+                st.caption("Mostrando todos los depósitos")
 
         df_f = stock_df.copy()
         if search_q:
@@ -2956,11 +2959,10 @@ with tab1:
         if f_prod != "Todos" and not search_q:
             df_f = df_f[df_f["Producto"] == f_prod]
         agrupar_prod = False
-        # Aplicar filtro de depósito: primero el selector principal, luego los extras
-        _deps_filtro = set()
-        if f_dep != "Todos":
+        # Aplicar filtro de depósito: checkboxes tienen prioridad; si ninguno marcado, usar selector principal
+        _deps_filtro = set(_deps_extra)
+        if not _deps_filtro and f_dep != "Todos":
             _deps_filtro.add(f_dep)
-        _deps_filtro.update(_deps_extra)
         if _deps_filtro:
             df_f = df_f[df_f["Deposito"].isin(_deps_filtro)]
         if hide_neg:
