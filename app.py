@@ -396,20 +396,24 @@ def conectar_db() -> _DB:
 
 
 def _rsql(sql: str, conn, params=None) -> pd.DataFrame:
-    """pd.read_sql_query con adaptación automática de placeholders."""
+    """Ejecuta SQL y devuelve DataFrame. Usa cursor directo en PostgreSQL."""
     raw = conn._raw if isinstance(conn, _DB) else conn
-    if IS_POSTGRES and params:
+    pg  = (conn._pg if isinstance(conn, _DB) else False) or IS_POSTGRES
+    if pg and params:
         sql = sql.replace("?", "%s")
     try:
-        if params:
-            return pd.read_sql_query(sql, raw, params=list(params))
-        return pd.read_sql_query(sql, raw)
-    except Exception as _e:
-        # En PostgreSQL: rollback para recuperar la conexión del estado aborted
-        try:
-            raw.rollback()
-        except Exception:
-            pass
+        if pg:
+            # PostgreSQL: cursor directo (evita deprecation de pd.read_sql_query con psycopg2)
+            cur = raw.cursor()
+            cur.execute(sql, list(params) if params else None)
+            cols = [d[0] for d in cur.description] if cur.description else []
+            rows = cur.fetchall()
+            return pd.DataFrame(rows, columns=cols)
+        else:
+            if params:
+                return pd.read_sql_query(sql, raw, params=list(params))
+            return pd.read_sql_query(sql, raw)
+    except Exception:
         return pd.DataFrame()
 
 
