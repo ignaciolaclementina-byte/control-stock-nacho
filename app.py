@@ -935,6 +935,13 @@ def limpiar_cache():
         if _k.startswith("df_ent_cache_") or _k == "df_mg_cache":
             st.session_state[_k] = None
 
+def limpiar_cache_entregas():
+    """Invalida sólo el caché de entregas (más rápido que limpiar todo)."""
+    obtener_entregas.clear()
+    for _k in list(st.session_state.keys()):
+        if _k.startswith("df_ent_cache_") or _k == "df_mg_cache":
+            st.session_state[_k] = None
+
 def safe_float(val, default=0.0):
     try:
         if val is None: return default
@@ -2076,34 +2083,43 @@ def parsear_sin_entregar_macrogest(archivo, vendedor=""):
         except Exception:
             return pd.DataFrame()
     df.columns = [str(c).strip().lower().replace(" ","_") for c in df.columns]
-    def _n(v):
-        try:    return float(str(v).replace(",",".").replace(" ",""))
-        except: return 0.0
-    registros = []
-    for _, r in df.iterrows():
-        cliente = safe_str(r.get("deno_cuenta",""))
-        if not cliente: continue
-        cantidad  = _n(r.get("cantidad",  0))
-        entregada = _n(r.get("entregada", 0))
-        pendiente = max(round(cantidad - entregada, 4), 0)
-        fecha = ""
-        try:    fecha = pd.Timestamp(r["fecha"]).strftime("%d/%m/%Y")
-        except: pass
-        registros.append({
-            "hoja":              "MACROGEST",
-            "rto":               safe_str(r.get("numero","")),
-            "dia_recibido":      fecha,
-            "cliente":           cliente,
-            "deposito":          safe_str(r.get("deposito","")) or "MacroGest",
-            "cantidad_comprada": cantidad,
-            "producto":          safe_str(r.get("descripcion","")),
-            "lote":              safe_str(r.get("codigo_sinonimo","")) or "S/L",
-            "cant_entregada":    entregada,
-            "pendiente":         pendiente,
-            "estado":            safe_str(r.get("estado","")),
-            "vendedor":          vendedor,
-        })
-    return pd.DataFrame(registros) if registros else pd.DataFrame()
+
+    # Vectorizado: mucho más rápido que iterrows()
+    def _to_num(series):
+        return pd.to_numeric(
+            series.astype(str).str.replace(",", ".", regex=False).str.replace(" ", "", regex=False),
+            errors="coerce"
+        ).fillna(0.0)
+
+    df["cliente"]  = df.get("deno_cuenta", pd.Series("", index=df.index)).astype(str).str.strip()
+    df = df[df["cliente"].str.len() > 0].copy()
+    if df.empty:
+        return pd.DataFrame()
+
+    df["cantidad_comprada"] = _to_num(df.get("cantidad",  pd.Series(0, index=df.index)))
+    df["cant_entregada"]    = _to_num(df.get("entregada", pd.Series(0, index=df.index)))
+    df["pendiente"]         = (df["cantidad_comprada"] - df["cant_entregada"]).clip(lower=0).round(4)
+
+    def _fmt_fecha(s):
+        try:    return pd.to_datetime(s, errors="coerce").dt.strftime("%d/%m/%Y").fillna("")
+        except: return pd.Series("", index=s.index)
+    df["dia_recibido"] = _fmt_fecha(df.get("fecha", pd.Series("", index=df.index)))
+
+    out = pd.DataFrame({
+        "hoja":              "MACROGEST",
+        "rto":               df.get("numero",          pd.Series("", index=df.index)).astype(str).str.strip(),
+        "dia_recibido":      df["dia_recibido"],
+        "cliente":           df["cliente"],
+        "deposito":          df.get("deposito",         pd.Series("MacroGest", index=df.index)).astype(str).str.strip().replace("", "MacroGest"),
+        "cantidad_comprada": df["cantidad_comprada"],
+        "producto":          df.get("descripcion",      pd.Series("", index=df.index)).astype(str).str.strip(),
+        "lote":              df.get("codigo_sinonimo",  pd.Series("S/L", index=df.index)).astype(str).str.strip().replace("", "S/L"),
+        "cant_entregada":    df["cant_entregada"],
+        "pendiente":         df["pendiente"],
+        "estado":            df.get("estado",           pd.Series("", index=df.index)).astype(str).str.strip(),
+        "vendedor":          vendedor,
+    })
+    return out.reset_index(drop=True)
 
 def ventas_reales_por_vendedor(campana=CAMPANA_ACTUAL):
     """
@@ -6416,24 +6432,34 @@ def _render_tab11():
                 if st.button("✅ Confirmar importación", type="primary", key="confirm_mg_se"):
                     conn = conectar_db()
                     if mg_reemplazar:
-                        conn.execute("DELETE FROM entregas WHERE hoja='MACROGEST'")
+                        _del_sql = "DELETE FROM entregas WHERE hoja=%s" if IS_POSTGRES else "DELETE FROM entregas WHERE hoja=?"
+                        conn.execute(_del_sql, ("MACROGEST",))
+                    # Construir batch sin iterrows (vectorizado)
+                    _cols = ["rto","dia_recibido","cliente","deposito","cantidad_comprada",
+                             "producto","lote","cant_entregada","pendiente","estado","vendedor"]
                     mg_batch = [
-                        ("MACROGEST", r["rto"], r["dia_recibido"],
-                         r["cliente"], r["deposito"], r["cantidad_comprada"],
-                         r["producto"], r["lote"], r["cant_entregada"],
-                         r["pendiente"], r["estado"], r["vendedor"])
-                        for _, r in df_prev_mg.iterrows()
+                        ("MACROGEST", row[0], row[1], row[2], row[3],
+                         row[4], row[5], row[6], row[7], row[8], row[9], row[10])
+                        for row in df_prev_mg[_cols].itertuples(index=False, name=None)
                     ]
-                    conn.cursor().executemany("""INSERT INTO entregas
-                        (hoja,rto,dia_recibido,cliente,deposito,cantidad_comprada,
-                         producto,lote,cant_entregada,pendiente,estado,vendedor)
-                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""", mg_batch)
+                    if IS_POSTGRES:
+                        from psycopg2.extras import execute_values as _ev
+                        _rc_mg = conn._raw.cursor()
+                        _ev(_rc_mg, """INSERT INTO entregas
+                            (hoja,rto,dia_recibido,cliente,deposito,cantidad_comprada,
+                             producto,lote,cant_entregada,pendiente,estado,vendedor)
+                            VALUES %s""", mg_batch)
+                    else:
+                        conn.cursor().executemany("""INSERT INTO entregas
+                            (hoja,rto,dia_recibido,cliente,deposito,cantidad_comprada,
+                             producto,lote,cant_entregada,pendiente,estado,vendedor)
+                            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""", mg_batch)
                     ok_mg = len(mg_batch)
                     conn.commit(); conn.close()
                     guardar_metadata("ultima_importacion_mg",
                                      datetime.now().strftime("%d/%m/%Y %H:%M"))
                     registrar_importacion_log("Sin Entregar MG", arch_mg_se.name, ok_mg)
-                    limpiar_cache()
+                    limpiar_cache_entregas()  # sólo limpia caché de entregas, no todo
                     st.success(f"✅ {ok_mg} registros importados.")
                     st.rerun()
 
