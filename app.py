@@ -169,7 +169,7 @@ details, [data-testid="stExpander"] > div:first-child {{
     background:#2D3748;border-radius:99px;height:7px;margin:8px 0 4px;overflow:hidden;
 }}
 .stock-progress-bar {{
-    height:7px;border-radius:99px;transition:width .4s ease;
+    height:7px;border-radius:99px;
 }}
 
 /* Zebra en tablas nativas */
@@ -3043,85 +3043,91 @@ with tab1:
             prod_df_venc = obtener_productos_completo()
 
             items = df_f.to_dict("records")
-            cols_g = st.columns(4)
+            # Acumular HTML por columna y hacer UN solo st.markdown por columna
+            # (evita el error React "removeChild" que ocurre con multiples markdown consecutivos)
+            _NUM_COLS = 4
+            cols_g = st.columns(_NUM_COLS)
+            col_html = [""] * _NUM_COLS
             for i, item in enumerate(items):
-                with cols_g[i % 4]:
-                    stk   = item["Stock Actual"]
-                    comp  = item.get("Comprometido", 0)
-                    disp  = item.get("Disponible Neto", stk)
-                    clase = "card-warning" if stk <= 0 else ("card-low" if stk < U else "card-normal")
-                    b_neg  = '<span class="neg-badge">NEGATIVO</span>'     if stk  < 0    else ""
-                    b_comp = '<span class="comp-badge">COMPROMETIDO</span>'if comp > 0    else ""
+                stk   = item["Stock Actual"]
+                comp  = item.get("Comprometido", 0)
+                disp  = item.get("Disponible Neto", stk)
+                clase = "card-warning" if stk <= 0 else ("card-low" if stk < U else "card-normal")
+                b_neg  = '<span class="neg-badge">NEGATIVO</span>'      if stk  < 0 else ""
+                b_comp = '<span class="comp-badge">COMPROMETIDO</span>' if comp > 0 else ""
 
-                    # Vencimiento
-                    venc_info = ""
-                    if not prod_df_venc.empty:
-                        row_v = prod_df_venc[prod_df_venc["nombre"] == item["Producto"]]
-                        if not row_v.empty:
-                            fv = safe_str(row_v.iloc[0].get("fecha_vencimiento",""))
-                            if fv:
-                                dias_v = dias_hasta(fv)
-                                if dias_v <= 90:
-                                    color_v = "red" if dias_v <= 30 else "orange"
-                                    venc_info = f'<br><span style="color:{color_v};font-size:.75rem">⏰ Vence en {dias_v}d ({fv})</span>'
-                                    b_comp += '<span class="venc-badge">VENCE</span>'
+                # Vencimiento
+                venc_info = ""
+                if not prod_df_venc.empty:
+                    row_v = prod_df_venc[prod_df_venc["nombre"] == item["Producto"]]
+                    if not row_v.empty:
+                        fv = safe_str(row_v.iloc[0].get("fecha_vencimiento",""))
+                        if fv:
+                            dias_v = dias_hasta(fv)
+                            if dias_v <= 90:
+                                color_v = "red" if dias_v <= 30 else "orange"
+                                venc_info = f'<br><span style="color:{color_v};font-size:.75rem">⏰ Vence en {dias_v}d ({fv})</span>'
+                                b_comp += '<span class="venc-badge">VENCE</span>'
 
-                    comp_line = (f"<br><b>🔒 Comprometido:</b> {comp:,.1f} | "
-                                 f"<b>Disp.Neto:</b> {disp:,.1f}") if comp > 0 else ""
+                comp_line = (f"<br><b>🔒 Comprometido:</b> {comp:,.1f} | "
+                             f"<b>Disp.Neto:</b> {disp:,.1f}") if comp > 0 else ""
 
-                    # Clientes con entrega pendiente para este producto
-                    clientes_pend_line = ""
-                    if not ent_panel.empty and comp > 0:
-                        cli_pend = (ent_panel[
-                            (ent_panel["producto"].str.lower() == item["Producto"].lower()) &
-                            (ent_panel["pendiente"] > 0)
-                        ][["cliente","pendiente","deposito"]]
-                        .sort_values("pendiente", ascending=False)
-                        .head(5))
-                        if not cli_pend.empty:
-                            filas = "".join(
-                                "<tr>"
-                                "<td style='padding:1px 6px'>" + str(r["cliente"]) + "</td>"
-                                "<td style='padding:1px 6px;text-align:right'><b>" + f"{r['pendiente']:,.0f}" + "</b></td>"
-                                "<td style='padding:1px 6px;color:#aaa'>" + str(r["deposito"] or "-") + "</td>"
-                                "</tr>"
-                                for _, r in cli_pend.iterrows()
-                            )
-                            clientes_pend_line = (
-                                "<br><b>Clientes pendiente:</b>"
-                                "<table style='width:100%;font-size:.75rem;margin-top:4px'>"
-                                "<tr style='color:#aaa'><td>Cliente</td><td>Pend.</td><td>Dep.</td></tr>"
-                                + filas +
-                                "</table>"
-                            )
-
-                    # Barra de progreso comprometido/stock
-                    if stk > 0 and comp > 0:
-                        _pct_comp = min(100, round(comp / stk * 100))
-                        _bar_color = "#e53e3e" if _pct_comp >= 100 else (_LC_YELLOW if _pct_comp >= 60 else "#38a169")
-                        _progress_html = (
-                            f'<div class="stock-progress-wrap">'
-                            f'<div class="stock-progress-bar" style="width:{_pct_comp}%;background:{_bar_color}"></div>'
-                            f'</div>'
-                            f'<div style="font-size:.68rem;color:#A0AEC0;margin-bottom:4px">'
-                            f'Comprometido {_pct_comp}% del stock</div>'
+                # Clientes con entrega pendiente para este producto
+                clientes_pend_line = ""
+                if not ent_panel.empty and comp > 0:
+                    cli_pend = (ent_panel[
+                        (ent_panel["producto"].str.lower() == item["Producto"].lower()) &
+                        (ent_panel["pendiente"] > 0)
+                    ][["cliente","pendiente","deposito"]]
+                    .sort_values("pendiente", ascending=False)
+                    .head(5))
+                    if not cli_pend.empty:
+                        filas = "".join(
+                            "<tr>"
+                            "<td style='padding:1px 6px'>" + str(r["cliente"]) + "</td>"
+                            "<td style='padding:1px 6px;text-align:right'><b>" + f"{r['pendiente']:,.0f}" + "</b></td>"
+                            "<td style='padding:1px 6px;color:#aaa'>" + str(r["deposito"] or "-") + "</td>"
+                            "</tr>"
+                            for _, r in cli_pend.iterrows()
                         )
-                    else:
-                        _progress_html = ""
+                        clientes_pend_line = (
+                            "<br><b>Clientes pendiente:</b>"
+                            "<table style='width:100%;font-size:.75rem;margin-top:4px'>"
+                            "<tr style='color:#aaa'><td>Cliente</td><td>Pend.</td><td>Dep.</td></tr>"
+                            + filas + "</table>"
+                        )
 
-                    card_html = (
-                        '<div class="stock-card ' + clase + '">'
-                        '<div class="stock-title">' + str(item["Producto"]) + b_neg + b_comp + '</div>'
-                        '<span class="stock-value">' + f"{stk:,.1f}" + ' <small class="stock-unit">' + str(item["Unidad"]) + '</small></span>'
-                        + _progress_html +
-                        '<div class="stock-info">'
-                        '<b>ID</b> ' + str(item["Código"]) + '<br>'
-                        '<b>Dep.</b> <span class="label-blue">' + str(item["Deposito"]) + '</span>'
-                        + comp_line + venc_info + clientes_pend_line +
-                        '</div>'
-                        '</div>'
+                # Barra de progreso comprometido/stock
+                if stk > 0 and comp > 0:
+                    _pct_comp = min(100, round(comp / stk * 100))
+                    _bar_color = "#e53e3e" if _pct_comp >= 100 else (_LC_YELLOW if _pct_comp >= 60 else "#38a169")
+                    _progress_html = (
+                        f'<div class="stock-progress-wrap">'
+                        f'<div class="stock-progress-bar" style="width:{_pct_comp}%;background:{_bar_color}"></div>'
+                        f'</div>'
+                        f'<div style="font-size:.68rem;color:#A0AEC0;margin-bottom:4px">'
+                        f'Comprometido {_pct_comp}% del stock</div>'
                     )
-                    st.markdown(card_html, unsafe_allow_html=True)
+                else:
+                    _progress_html = ""
+
+                col_html[i % _NUM_COLS] += (
+                    '<div class="stock-card ' + clase + '">'
+                    '<div class="stock-title">' + str(item["Producto"]) + b_neg + b_comp + '</div>'
+                    '<span class="stock-value">' + f"{stk:,.1f}" + ' <small class="stock-unit">' + str(item["Unidad"]) + '</small></span>'
+                    + _progress_html +
+                    '<div class="stock-info">'
+                    '<b>ID</b> ' + str(item["Código"]) + '<br>'
+                    '<b>Dep.</b> <span class="label-blue">' + str(item["Deposito"]) + '</span>'
+                    + comp_line + venc_info + clientes_pend_line +
+                    '</div></div>'
+                )
+
+            # Render: un solo st.markdown por columna
+            for _ci, _ch in enumerate(col_html):
+                with cols_g[_ci]:
+                    if _ch:
+                        st.markdown(_ch, unsafe_allow_html=True)
 
         st.markdown("---")
 
