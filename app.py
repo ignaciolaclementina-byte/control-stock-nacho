@@ -3043,16 +3043,39 @@ with tab1:
             prod_df_venc = obtener_productos_completo()
 
             items = df_f.to_dict("records")
-            # Un solo st.markdown con CSS grid — evita el error React removeChild
-            # que ocurre con st.columns + multiples st.markdown(unsafe_allow_html)
-            _all_cards = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;align-items:start;">'
+            # st.html() en lugar de st.markdown(unsafe_allow_html=True)
+            # st.html no usa el reconciliador de React → elimina el error removeChild
+            # CSS inline dentro del HTML porque st.html tiene scope propio
+            _card_css = """<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:sans-serif}
+body{background:transparent}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;align-items:start}
+.card{padding:16px;border-radius:12px;border:1px solid #2D3748;box-shadow:0 4px 12px rgba(0,0,0,.4)}
+.card-normal{background:linear-gradient(145deg,#1a2a1a,#1C2333);border-left:5px solid #38a169}
+.card-low   {background:linear-gradient(145deg,#2a2010,#1C2333);border-left:5px solid #F5A800}
+.card-warning{background:linear-gradient(145deg,#2a1010,#1C2333);border-left:5px solid #e53e3e}
+.title{font-size:.9rem;color:#E2E8F0;font-weight:700;margin-bottom:6px;line-height:1.3}
+.val{font-size:1.55rem;color:#fff;font-weight:900;letter-spacing:-.5px}
+.unit{font-size:.75rem;color:#A0AEC0;font-weight:400}
+.info{margin-top:8px;padding-top:6px;border-top:1px solid #2D3748;font-size:.78rem;color:#A0AEC0}
+.pw{background:#2D3748;border-radius:99px;height:6px;margin:6px 0 3px;overflow:hidden}
+.pb{height:6px;border-radius:99px}
+.pct{font-size:.66rem;color:#A0AEC0;margin-bottom:3px}
+.nb{display:inline-block;background:#e53e3e;color:#fff;font-size:.58rem;padding:1px 5px;border-radius:5px;font-weight:bold;margin-left:3px;vertical-align:middle}
+.cb{display:inline-block;background:#F5A800;color:#1a2540;font-size:.58rem;padding:1px 5px;border-radius:5px;font-weight:bold;margin-left:3px;vertical-align:middle}
+.vb{display:inline-block;background:#6b46c1;color:#fff;font-size:.58rem;padding:1px 5px;border-radius:5px;font-weight:bold;margin-left:3px;vertical-align:middle}
+.lb{background:#1a365d;color:#90cdf4;padding:1px 5px;border-radius:3px;font-weight:bold}
+table{border-collapse:collapse;width:100%}
+b{color:#FAFAFA}
+</style>"""
+            _cards_body = '<div class="grid">'
             for item in items:
-                stk   = item["Stock Actual"]
-                comp  = item.get("Comprometido", 0)
-                disp  = item.get("Disponible Neto", stk)
-                clase = "card-warning" if stk <= 0 else ("card-low" if stk < U else "card-normal")
-                b_neg  = '<span class="neg-badge">NEGATIVO</span>'      if stk  < 0 else ""
-                b_comp = '<span class="comp-badge">COMPROMETIDO</span>' if comp > 0 else ""
+                stk  = item["Stock Actual"]
+                comp = item.get("Comprometido", 0)
+                disp = item.get("Disponible Neto", stk)
+                cls  = "card-warning" if stk <= 0 else ("card-low" if stk < U else "card-normal")
+                b_neg  = '<span class="nb">NEGATIVO</span>'      if stk  < 0 else ""
+                b_comp = '<span class="cb">COMPROMETIDO</span>'  if comp > 0 else ""
 
                 venc_info = ""
                 if not prod_df_venc.empty:
@@ -3064,7 +3087,7 @@ with tab1:
                             if dias_v <= 90:
                                 color_v = "red" if dias_v <= 30 else "orange"
                                 venc_info = f'<br><span style="color:{color_v};font-size:.75rem">⏰ Vence en {dias_v}d ({fv})</span>'
-                                b_comp += '<span class="venc-badge">VENCE</span>'
+                                b_comp += '<span class="vb">VENCE</span>'
 
                 comp_line = (f"<br><b>🔒 Comprometido:</b> {comp:,.1f} | "
                              f"<b>Disp.Neto:</b> {disp:,.1f}") if comp > 0 else ""
@@ -3075,8 +3098,7 @@ with tab1:
                         (ent_panel["producto"].str.lower() == item["Producto"].lower()) &
                         (ent_panel["pendiente"] > 0)
                     ][["cliente","pendiente","deposito"]]
-                    .sort_values("pendiente", ascending=False)
-                    .head(5))
+                    .sort_values("pendiente", ascending=False).head(5))
                     if not cli_pend.empty:
                         filas = "".join(
                             "<tr>"
@@ -3088,38 +3110,31 @@ with tab1:
                         )
                         clientes_pend_line = (
                             "<br><b>Clientes pendiente:</b>"
-                            "<table style='width:100%;font-size:.75rem;margin-top:4px'>"
+                            "<table style='margin-top:4px;font-size:.73rem'>"
                             "<tr style='color:#aaa'><td>Cliente</td><td>Pend.</td><td>Dep.</td></tr>"
                             + filas + "</table>"
                         )
 
                 if stk > 0 and comp > 0:
-                    _pct_comp = min(100, round(comp / stk * 100))
-                    _bar_color = "#e53e3e" if _pct_comp >= 100 else (_LC_YELLOW if _pct_comp >= 60 else "#38a169")
-                    _progress_html = (
-                        f'<div class="stock-progress-wrap">'
-                        f'<div class="stock-progress-bar" style="width:{_pct_comp}%;background:{_bar_color}"></div>'
-                        f'</div>'
-                        f'<div style="font-size:.68rem;color:#A0AEC0;margin-bottom:4px">'
-                        f'Comprometido {_pct_comp}% del stock</div>'
-                    )
+                    _pct = min(100, round(comp / stk * 100))
+                    _bc  = "#e53e3e" if _pct >= 100 else ("#F5A800" if _pct >= 60 else "#38a169")
+                    _prog = (f'<div class="pw"><div class="pb" style="width:{_pct}%;background:{_bc}"></div></div>'
+                             f'<div class="pct">Comprometido {_pct}% del stock</div>')
                 else:
-                    _progress_html = ""
+                    _prog = ""
 
-                _all_cards += (
-                    '<div class="stock-card ' + clase + '">'
-                    '<div class="stock-title">' + str(item["Producto"]) + b_neg + b_comp + '</div>'
-                    '<span class="stock-value">' + f"{stk:,.1f}"
-                    + ' <small class="stock-unit">' + str(item["Unidad"]) + '</small></span>'
-                    + _progress_html
-                    + '<div class="stock-info">'
-                    '<b>ID</b> ' + str(item["Código"]) + '<br>'
-                    '<b>Dep.</b> <span class="label-blue">' + str(item["Deposito"]) + '</span>'
+                _cards_body += (
+                    f'<div class="card {cls}">'
+                    f'<div class="title">{item["Producto"]}{b_neg}{b_comp}</div>'
+                    f'<span class="val">{stk:,.1f} <small class="unit">{item["Unidad"]}</small></span>'
+                    + _prog
+                    + f'<div class="info"><b>ID</b> {item["Código"]}<br>'
+                    f'<b>Dep.</b> <span class="lb">{item["Deposito"]}</span>'
                     + comp_line + venc_info + clientes_pend_line
                     + '</div></div>'
                 )
-            _all_cards += '</div>'
-            st.markdown(_all_cards, unsafe_allow_html=True)
+            _cards_body += '</div>'
+            st.html(_card_css + _cards_body)
 
         st.markdown("---")
 
