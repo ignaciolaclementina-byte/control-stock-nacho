@@ -3049,8 +3049,8 @@ with tab1:
             _card_css = """<style>
 *{box-sizing:border-box;margin:0;padding:0;font-family:sans-serif}
 body{background:transparent}
-.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;align-items:start}
-.card{padding:16px;border-radius:12px;border:1px solid #2D3748;box-shadow:0 4px 12px rgba(0,0,0,.4)}
+.grid{columns:4;column-gap:12px}
+.card{padding:16px;border-radius:12px;border:1px solid #2D3748;box-shadow:0 4px 12px rgba(0,0,0,.4);break-inside:avoid;margin-bottom:12px}
 .card-normal{background:linear-gradient(145deg,#1a2a1a,#1C2333);border-left:5px solid #38a169}
 .card-low   {background:linear-gradient(145deg,#2a2010,#1C2333);border-left:5px solid #F5A800}
 .card-warning{background:linear-gradient(145deg,#2a1010,#1C2333);border-left:5px solid #e53e3e}
