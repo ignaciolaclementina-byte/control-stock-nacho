@@ -16,7 +16,13 @@ import pandas as pd
 import sqlite3
 import os
 import re as _re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+# Zona horaria Argentina (UTC-3) — el servidor corre en UTC
+_ART = timezone(timedelta(hours=-3))
+def now_ar() -> datetime:
+    """now_ar() en hora Argentina (UTC-3)."""
+    return datetime.now(_ART).replace(tzinfo=None)
 import plotly.express as px
 import plotly.graph_objects as go
 import numpy as np
@@ -777,7 +783,7 @@ def guardar_nota_cliente(cliente, nota, usuario, destacada=False):
     ph = "%s" if IS_POSTGRES else "?"
     conn.execute(
         f"INSERT INTO notas_cliente (cliente, nota, usuario, fecha, destacada) VALUES ({ph},{ph},{ph},{ph},{ph})",
-        (cliente, nota, usuario, datetime.now().strftime("%d/%m/%Y %H:%M"), 1 if destacada else 0)
+        (cliente, nota, usuario, now_ar().strftime("%d/%m/%Y %H:%M"), 1 if destacada else 0)
     )
     conn.commit(); conn.close()
 
@@ -859,7 +865,7 @@ def obtener_productos_completo():
 @st.cache_data(ttl=600, show_spinner=False)
 def calcular_rotacion_stock(dias=90):
     conn           = conectar_db()
-    fecha_corte_dt = datetime.now() - timedelta(days=dias)
+    fecha_corte_dt = now_ar() - timedelta(days=dias)
     query = """
         SELECT p.nombre "Producto", m.fecha_hora "FechaHora", m.cantidad "Cantidad"
         FROM movimientos m JOIN productos p ON m.id_producto=p.id_producto
@@ -989,12 +995,12 @@ def safe_fecha(val):
 
 def dias_desde(fecha_str):
     try:
-        return (datetime.now() - datetime.strptime(str(fecha_str).strip(), "%d/%m/%Y")).days
+        return (now_ar() - datetime.strptime(str(fecha_str).strip(), "%d/%m/%Y")).days
     except: return 0
 
 def dias_hasta(fecha_str):
     try:
-        return (datetime.strptime(str(fecha_str).strip(), "%d/%m/%Y") - datetime.now()).days
+        return (datetime.strptime(str(fecha_str).strip(), "%d/%m/%Y") - now_ar()).days
     except: return 9999
 
 def _similitud(a, b):
@@ -1061,7 +1067,7 @@ def registrar_remito(numero, cliente, deposito, items, usuario, observaciones=""
     conn = conectar_db()
     conn.execute("""INSERT INTO remitos (numero,fecha_hora,cliente,deposito,usuario,observaciones,items_json,tipo)
                     VALUES (?,?,?,?,?,?,?,?)""",
-                 (numero, datetime.now().strftime("%d/%m/%Y %H:%M"),
+                 (numero, now_ar().strftime("%d/%m/%Y %H:%M"),
                   cliente, deposito, usuario, observaciones,
                   _json.dumps(items, ensure_ascii=False), tipo))
     conn.commit(); conn.close()
@@ -1071,7 +1077,7 @@ def registrar_importacion_log(tipo, archivo, filas, hash_val="", resultado="ok")
     try:
         conn.execute("""INSERT INTO importaciones_log (fecha_hora,tipo,archivo,filas,usuario,hash,resultado)
                         VALUES (?,?,?,?,?,?,?)""",
-                     (datetime.now().strftime("%d/%m/%Y %H:%M"), tipo, archivo,
+                     (now_ar().strftime("%d/%m/%Y %H:%M"), tipo, archivo,
                       filas, usuario_actual(), hash_val, resultado))
         conn.commit()
     except Exception:
@@ -1101,7 +1107,7 @@ def generar_orden_compra_pdf(productos_bajo: pd.DataFrame, proveedor="Bayer Crop
 
     elems.append(Paragraph("<b>La Clementina S.A.</b> — Orden de Compra Sugerida", styles["Title"]))
     elems.append(Paragraph(
-        f"Fecha: <b>{datetime.now().strftime('%d/%m/%Y')}</b> &nbsp;&nbsp; "
+        f"Fecha: <b>{now_ar().strftime('%d/%m/%Y')}</b> &nbsp;&nbsp; "
         f"Proveedor: <b>{proveedor}</b> &nbsp;&nbsp; "
         f"Operador: <b>{usuario_actual()}</b>",
         styles["Normal"]
@@ -1125,7 +1131,7 @@ def generar_orden_compra_pdf(productos_bajo: pd.DataFrame, proveedor="Bayer Crop
     elems.append(_tbl)
     elems.append(Spacer(1, 1*cm))
     elems.append(Paragraph(
-        f"<font size=7 color=grey>Generado automáticamente — La Clementina S.A. · {datetime.now().strftime('%d/%m/%Y %H:%M')}</font>",
+        f"<font size=7 color=grey>Generado automáticamente — La Clementina S.A. · {now_ar().strftime('%d/%m/%Y %H:%M')}</font>",
         styles["Normal"]
     ))
     doc.build(elems)
@@ -1169,7 +1175,7 @@ def generar_remito_pdf(numero: str, cliente: str, deposito: str,
     ))
     elems.append(Spacer(1, .3*cm))
     elems.append(Paragraph(
-        f"Nro: <b>{numero}</b> &nbsp;&nbsp; Fecha: <b>{datetime.now().strftime('%d/%m/%Y %H:%M')}</b>"
+        f"Nro: <b>{numero}</b> &nbsp;&nbsp; Fecha: <b>{now_ar().strftime('%d/%m/%Y %H:%M')}</b>"
         f" &nbsp;&nbsp; Operador: <b>{usuario}</b>",
         styles["Normal"]
     ))
@@ -1206,7 +1212,7 @@ def generar_remito_pdf(numero: str, cliente: str, deposito: str,
     elems.append(_firma)
     elems.append(Spacer(1, .5*cm))
     elems.append(Paragraph(
-        f"<font size=7 color=grey>Generado por Sistema de Gestión — La Clementina S.A. · {datetime.now().strftime('%d/%m/%Y %H:%M')}</font>",
+        f"<font size=7 color=grey>Generado por Sistema de Gestión — La Clementina S.A. · {now_ar().strftime('%d/%m/%Y %H:%M')}</font>",
         styles["Normal"]
     ))
     doc.build(elems)
@@ -1244,7 +1250,7 @@ def generar_orden_reposicion(stock_df, umbral, consumo_df):
     if "proveedor" in prod_df.columns:
         bajo = bajo.merge(prod_df[["nombre","proveedor"]].rename(columns={"nombre":"Producto"}),
                           on="Producto", how="left")
-    bajo["Fecha_Orden"] = datetime.now().strftime("%d/%m/%Y")
+    bajo["Fecha_Orden"] = now_ar().strftime("%d/%m/%Y")
     return to_excel_bytes(bajo, "Orden_Reposicion")
 
 def generar_reporte_excel():
@@ -1267,7 +1273,7 @@ def generar_reporte_excel():
                 len(stock["Producto"].unique()) if not stock.empty else 0,
                 stock["Stock Actual"].sum() if not stock.empty else 0,
                 len(stock[stock["Stock Actual"] < 0]) if not stock.empty else 0,
-                datetime.now().strftime("%d/%m/%Y %H:%M")
+                now_ar().strftime("%d/%m/%Y %H:%M")
             ]
         })
         kpi.to_excel(w, index=False, sheet_name="Resumen")
@@ -1286,7 +1292,7 @@ def generar_reporte_pdf():
 
     # Título
     elems.append(Paragraph("Control de Depósito — La Clementina S.A.", styles["Title"]))
-    elems.append(Paragraph(f"Reporte generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}",
+    elems.append(Paragraph(f"Reporte generado: {now_ar().strftime('%d/%m/%Y %H:%M')}",
                             styles["Normal"]))
     elems.append(Spacer(1, 0.5*cm))
 
@@ -1373,7 +1379,7 @@ def registrar_cambio_precio(producto: str, precio_nuevo: float, moneda: str, usu
         )""")
         conn.execute(
             "INSERT INTO historial_precios (fecha_hora,producto,precio,moneda,usuario) VALUES (?,?,?,?,?)",
-            (datetime.now().strftime("%d/%m/%Y %H:%M"), producto, precio_nuevo, moneda, usuario)
+            (now_ar().strftime("%d/%m/%Y %H:%M"), producto, precio_nuevo, moneda, usuario)
         )
         conn.commit()
     except Exception:
@@ -1420,7 +1426,7 @@ def generar_presupuesto_pdf(cliente: str, items: list, usuario: str, obs: str = 
                           "<font color='#888' size=9>Insumos Agropecuarios · San Jorge, Santa Fe</font>",
                           styles["Normal"]),
                 Paragraph(f"<font color='#888' size=9>PRESUPUESTO<br/>"
-                          f"{datetime.now().strftime('%d/%m/%Y')}</font>", styles["Normal"])
+                          f"{now_ar().strftime('%d/%m/%Y')}</font>", styles["Normal"])
             ]], colWidths=[2.5*cm, 11*cm, 4*cm])
             _ht.setStyle(TableStyle([
                 ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
@@ -1436,7 +1442,7 @@ def generar_presupuesto_pdf(cliente: str, items: list, usuario: str, obs: str = 
 
     # Cliente y fecha
     elems.append(Paragraph(f"<b>Cliente:</b> {cliente}", styles["Normal"]))
-    elems.append(Paragraph(f"<b>Fecha:</b> {datetime.now().strftime('%d/%m/%Y')}  ·  "
+    elems.append(Paragraph(f"<b>Fecha:</b> {now_ar().strftime('%d/%m/%Y')}  ·  "
                            f"<b>Elaborado por:</b> {usuario}", styles["Normal"]))
     if obs:
         elems.append(Paragraph(f"<b>Observaciones:</b> {obs}", styles["Normal"]))
@@ -1487,7 +1493,7 @@ def generar_presupuesto_pdf(cliente: str, items: list, usuario: str, obs: str = 
     elems.append(Spacer(1, 0.3*cm))
     elems.append(Paragraph(
         f"<font size=8 color='#888'>La Clementina S.A. — San Jorge, Santa Fe | "
-        f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}</font>",
+        f"Generado: {now_ar().strftime('%d/%m/%Y %H:%M')}</font>",
         styles["Normal"]
     ))
     doc.build(elems)
@@ -1581,7 +1587,7 @@ def generar_ejecutivo_pdf() -> bytes:
                 Paragraph("<font color='#3D4E6B' size=16><b>La Clementina S.A.</b></font><br/>"
                           "<font color='#555' size=10>Reporte Ejecutivo de Depósito</font>",
                           styles["Normal"]),
-                Paragraph(f"<font color='#888' size=9>{datetime.now().strftime('%d/%m/%Y %H:%M')}</font>",
+                Paragraph(f"<font color='#888' size=9>{now_ar().strftime('%d/%m/%Y %H:%M')}</font>",
                           styles["Normal"])]]
         except Exception:
             _header_data = None
@@ -1597,7 +1603,7 @@ def generar_ejecutivo_pdf() -> bytes:
         elems.append(_ht)
     else:
         elems.append(Paragraph("La Clementina S.A. — Reporte Ejecutivo", styles["Title"]))
-        elems.append(Paragraph(datetime.now().strftime("%d/%m/%Y %H:%M"), styles["Normal"]))
+        elems.append(Paragraph(now_ar().strftime("%d/%m/%Y %H:%M"), styles["Normal"]))
     elems.append(Spacer(1, 0.4*cm))
 
     # ── KPIs Stock ───────────────────────────────────────────────────────────
@@ -1697,7 +1703,7 @@ def generar_ejecutivo_pdf() -> bytes:
     elems.append(Spacer(1, 0.5*cm))
     elems.append(Paragraph(
         f"<font size=8 color='#888'>La Clementina S.A. — San Jorge, Santa Fe | "
-        f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')} | Confidencial</font>",
+        f"Generado: {now_ar().strftime('%d/%m/%Y %H:%M')} | Confidencial</font>",
         styles["Normal"]
     ))
     doc.build(elems)
@@ -1826,7 +1832,7 @@ def enviar_email_alerta(stock_bajo, pendientes_viejos):
         return False, "Configuración SMTP incompleta. Completar en Configuración → Email."
     try:
         msg = MIMEMultipart("alternative")
-        msg["Subject"] = f"⚠️ Alerta Stock — La Clementina S.A. — {datetime.now().strftime('%d/%m/%Y')}"
+        msg["Subject"] = f"⚠️ Alerta Stock — La Clementina S.A. — {now_ar().strftime('%d/%m/%Y')}"
         msg["From"]    = smtp_user
         msg["To"]      = dest
 
@@ -1840,7 +1846,7 @@ def enviar_email_alerta(stock_bajo, pendientes_viejos):
         html = f"""
         <html><body style="font-family:Arial,sans-serif;color:#333">
         <h2>⚠️ Reporte de Alertas — La Clementina S.A.</h2>
-        <p>Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}</p>
+        <p>Generado: {now_ar().strftime('%d/%m/%Y %H:%M')}</p>
         <h3>📦 Stock Bajo / Negativo</h3>
         <table border=1 cellpadding=6 cellspacing=0 style="border-collapse:collapse;width:100%">
         <tr style="background:#007bff;color:white"><th>Producto</th><th>Depósito</th><th>Stock</th></tr>
@@ -2407,7 +2413,7 @@ with tab1:
         _lotes_panel = obtener_lotes_vencimiento()
         if not _lotes_panel.empty:
             def _dias_lote(fv):
-                try: return (datetime.strptime(str(fv)[:10], "%d/%m/%Y") - datetime.now()).days
+                try: return (datetime.strptime(str(fv)[:10], "%d/%m/%Y") - now_ar()).days
                 except: return None
             _lotes_panel["_dias"] = _lotes_panel["fecha_vencimiento"].apply(_dias_lote)
             _lv_venc = _lotes_panel[(_lotes_panel["_dias"].notna()) &
@@ -2448,7 +2454,7 @@ with tab1:
             with _wa_col1:
                 if neg_n > 0 or bajo_n > 0:
                     alertas_wa = stock_df[stock_df["Stock Actual"] < U].head(15)
-                    lineas = [f"⚠️ *Alerta Stock* — {datetime.now().strftime('%d/%m/%Y')}",
+                    lineas = [f"⚠️ *Alerta Stock* — {now_ar().strftime('%d/%m/%Y')}",
                               f"La Clementina S.A."]
                     for _, r in alertas_wa.iterrows():
                         lineas.append(f"• {r['Producto']}: {r['Stock Actual']:,.1f} {r['Unidad']} ({r['Deposito']})")
@@ -2461,7 +2467,7 @@ with tab1:
                 _ent_wa = obtener_entregas()
                 _pend_wa = int(_ent_wa["pendiente"].sum()) if not _ent_wa.empty else 0
                 _kpi_lines = [
-                    f"📊 *Resumen LC — {datetime.now().strftime('%d/%m/%Y %H:%M')}*",
+                    f"📊 *Resumen LC — {now_ar().strftime('%d/%m/%Y %H:%M')}*",
                     f"Productos: {stock_df['Producto'].nunique()} · Vol: {stock_df['Stock Actual'].sum():,.0f}",
                     f"🔴 Negativos: {neg_n} · 🟡 Bajo umbral: {bajo_n}",
                     f"📦 Entregas pendientes: {_pend_wa:,}",
@@ -2528,7 +2534,7 @@ with tab1:
             if not _df_sem_show.empty:
                 st.download_button("📥 Exportar estado de stock",
                                    data=to_excel_bytes(_df_sem_show[["Estado","Producto","Unidad","Stock Actual","Mínimo"]], "Estado_Stock"),
-                                   file_name=f"estado_stock_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                                   file_name=f"estado_stock_{now_ar().strftime('%Y%m%d')}.xlsx",
                                    key="dl_sem")
 
         # Proyección de agotamiento
@@ -2691,7 +2697,7 @@ with tab1:
                     )
                     st.download_button("📥 Exportar clasificación ABC",
                                        data=to_excel_bytes(_abc, "ABC"),
-                                       file_name=f"abc_{datetime.now().strftime('%Y%m%d')}.xlsx")
+                                       file_name=f"abc_{now_ar().strftime('%Y%m%d')}.xlsx")
 
             with _gtabs[5]:
                 # Treemap: producto × depósito, tamaño = stock, color = estado
@@ -2728,7 +2734,7 @@ with tab1:
 
         # ── Novedades del día ─────────────────────────────────────────────────
         with st.expander("📅 Novedades del día", expanded=False):
-            _hoy_str = datetime.now().strftime("%d/%m/%Y")
+            _hoy_str = now_ar().strftime("%d/%m/%Y")
             _hist_hoy = obtener_historial_movimientos()
             if not _hist_hoy.empty:
                 _hoy_df = _hist_hoy[
@@ -3174,7 +3180,7 @@ with tab1:
                                 (fecha_hora,tipo_movimiento,id_producto,cantidad,lote,referencia,
                                  deposito,origen,usuario,observaciones)
                                 VALUES (?,?,?,?,?,?,?,?,?,?)""",
-                                (datetime.now().strftime("%d/%m/%Y %H:%M"), p["tipo"],
+                                (now_ar().strftime("%d/%m/%Y %H:%M"), p["tipo"],
                                  id_p[0], p["cantidad"], p["lote"], p["referencia"],
                                  p["deposito"], "manual", usuario_actual(), p.get("observaciones","")))
                             conn.commit()
@@ -3207,7 +3213,7 @@ with tab1:
                         if _remito_bytes:
                             st.download_button("🖨️ Descargar Remito PDF",
                                                data=_remito_bytes,
-                                               file_name=f"remito_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
+                                               file_name=f"remito_{now_ar().strftime('%Y%m%d_%H%M')}.pdf",
                                                mime="application/pdf")
                         st.rerun(scope="app")
                 with cc2:
@@ -3267,7 +3273,7 @@ with tab1:
                             id_p = conn.execute("SELECT id_producto FROM productos WHERE nombre=?",
                                                 (tp["producto"],)).fetchone()
                             if id_p:
-                                ts  = datetime.now().strftime("%d/%m/%Y %H:%M")
+                                ts  = now_ar().strftime("%d/%m/%Y %H:%M")
                                 ref = tp["referencia"] or f"Transferencia {tp['dep_origen']} → {tp['dep_destino']}"
                                 usu = usuario_actual()
                                 for tipo, dep in [("Salida", tp["dep_origen"]), ("Entrada", tp["dep_destino"])]:
@@ -3341,7 +3347,7 @@ def mostrar_tab_entregas(hoja_nombre, titulo):
                                     f"SELECT id_producto, nombre FROM productos WHERE nombre IN ({ph})",
                                     prod_names).fetchall()
                                 id_map_e = {row[1]: row[0] for row in id_rows}
-                                _ts_e = datetime.now().strftime("%d/%m/%Y %H:%M")
+                                _ts_e = now_ar().strftime("%d/%m/%Y %H:%M")
                                 _usu_e = usuario_actual()
                                 sal_batch = []
                                 for _, r in df_u[df_u["cant_entregada"] > 0].iterrows():
@@ -3361,7 +3367,7 @@ def mostrar_tab_entregas(hoja_nombre, titulo):
                                         VALUES (?,?,?,?,?,?,?,?,?)""", sal_batch)
                         conn.commit(); conn.close()
                         guardar_metadata("ultima_importacion_entregas",
-                                         datetime.now().strftime("%d/%m/%Y %H:%M"))
+                                         now_ar().strftime("%d/%m/%Y %H:%M"))
                         limpiar_cache()
                         msg = f"✅ {ok} registros. {sal} salidas." if descontar else f"✅ {ok} registros."
                         st.success(msg)
@@ -3521,14 +3527,14 @@ def _render_tab5():
                 conn.execute("""INSERT INTO inventario_fisico
                     (fecha_conteo,codigo,producto,deposito,stock_sistema,conteo_fisico,diferencia,observaciones)
                     VALUES (?,?,?,?,?,?,?,?)""",
-                    (datetime.now().strftime("%d/%m/%Y %H:%M"), cod_p, p_inv, d_inv, val_sis, val_fis, dif, obs_inv))
+                    (now_ar().strftime("%d/%m/%Y %H:%M"), cod_p, p_inv, d_inv, val_sis, val_fis, dif, obs_inv))
                 if dif != 0:
                     id_p = conn.execute("SELECT id_producto FROM productos WHERE nombre=?", (p_inv,)).fetchone()
                     if id_p:
                         conn.execute("""INSERT INTO movimientos
                             (fecha_hora,tipo_movimiento,id_producto,cantidad,lote,referencia,deposito,origen,usuario,observaciones)
                             VALUES (?,?,?,?,?,?,?,?,?,?)""",
-                            (datetime.now().strftime("%d/%m/%Y %H:%M"),
+                            (now_ar().strftime("%d/%m/%Y %H:%M"),
                              "Entrada" if dif>0 else "Salida", id_p[0], abs(dif),
                              "S/L", f"Ajuste Inventario", d_inv, "manual", usuario_actual(), obs_inv))
                 conn.commit(); conn.close()
@@ -3581,7 +3587,7 @@ def _render_tab5():
                                 conn.execute("""INSERT INTO inventario_fisico
                                     (fecha_conteo,codigo,producto,deposito,stock_sistema,conteo_fisico,diferencia,observaciones)
                                     VALUES (?,?,?,?,?,?,?,?)""",
-                                    (datetime.now().strftime("%d/%m/%Y %H:%M"), _cod, _pn,
+                                    (now_ar().strftime("%d/%m/%Y %H:%M"), _cod, _pn,
                                      _dp or "General", _vs, _cf, _dif, "Conteo masivo"))
                                 if abs(_dif) > 0.001:
                                     _id_p = conn.execute("SELECT id_producto FROM productos WHERE nombre=?",(_pn,)).fetchone()
@@ -3589,7 +3595,7 @@ def _render_tab5():
                                         conn.execute("""INSERT INTO movimientos
                                             (fecha_hora,tipo_movimiento,id_producto,cantidad,lote,referencia,deposito,origen,usuario)
                                             VALUES (?,?,?,?,?,?,?,?,?)""",
-                                            (datetime.now().strftime("%d/%m/%Y %H:%M"),
+                                            (now_ar().strftime("%d/%m/%Y %H:%M"),
                                              "Entrada" if _dif>0 else "Salida", _id_p[0], abs(_dif),
                                              "S/L", "Ajuste conteo masivo", _dp or "General",
                                              "manual", usuario_actual()))
@@ -3631,7 +3637,7 @@ def _render_tab5():
                             (fecha_hora,tipo_movimiento,id_producto,cantidad,lote,referencia,
                              deposito,origen,usuario,observaciones)
                             VALUES (?,?,?,?,?,?,?,?,?,?)""",
-                            (datetime.now().strftime("%d/%m/%Y %H:%M"), "Entrada",
+                            (now_ar().strftime("%d/%m/%Y %H:%M"), "Entrada",
                              _id_dev[0], _cant_dev, _lote_dev,
                              f"Devolución — {_cli_dev}" + (f" / Rem: {_rem_dev}" if _rem_dev else ""),
                              _dep_dev, "devolucion", usuario_actual(),
@@ -3669,7 +3675,7 @@ def _render_tab5():
             )
             st.download_button("📥 Exportar auditorías (.xlsx)",
                                data=to_excel_bytes(df_inv_h2, "Auditorias"),
-                               file_name=f"auditorias_{datetime.now().strftime('%Y%m%d')}.xlsx")
+                               file_name=f"auditorias_{now_ar().strftime('%Y%m%d')}.xlsx")
 
     with _inv_tabs[4]:
         st.write("### 🔀 Transferencia entre Depósitos")
@@ -3701,7 +3707,7 @@ def _render_tab5():
                     _id_tr = conn.execute("SELECT id_producto FROM productos WHERE nombre=?",
                                          (_prod_tr,)).fetchone()
                     if _id_tr:
-                        _ts_tr = datetime.now().strftime("%d/%m/%Y %H:%M")
+                        _ts_tr = now_ar().strftime("%d/%m/%Y %H:%M")
                         _ref_tr = f"TRANSF: {_dep_orig_tr} → {_dep_dest_tr}" + (f" | {_motivo_tr}" if _motivo_tr else "")
                         conn.cursor().executemany(
                             """INSERT INTO movimientos
@@ -3759,9 +3765,9 @@ def _render_tab6():
             f_usu_h  = st.selectbox("Operador", usu_opts)
         cd1, cd2, cd3 = st.columns(3)
         with cd1:
-            f_desde = st.date_input("Desde", value=datetime.now().date()-timedelta(days=30))
+            f_desde = st.date_input("Desde", value=now_ar().date()-timedelta(days=30))
         with cd2:
-            f_hasta = st.date_input("Hasta", value=datetime.now().date())
+            f_hasta = st.date_input("Hasta", value=now_ar().date())
         with cd3:
             f_anulados = st.toggle("Mostrar anulados", value=False)
 
@@ -3806,7 +3812,7 @@ def _render_tab6():
             with _dh1:
                 st.download_button("📥 Exportar historial completo (.xlsx)",
                                    data=to_excel_bytes(df_hf, "Historial"),
-                                   file_name=f"historial_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                                   file_name=f"historial_{now_ar().strftime('%Y%m%d')}.xlsx",
                                    use_container_width=True)
             with _dh2:
                 # Mini gráfico de actividad por día
@@ -3840,7 +3846,7 @@ def _render_tab6():
                             conn.execute("""INSERT INTO movimientos
                                 (fecha_hora,tipo_movimiento,id_producto,cantidad,lote,referencia,deposito,origen,usuario)
                                 VALUES (?,?,?,?,?,?,?,?,?)""",
-                                (datetime.now().strftime("%d/%m/%Y %H:%M"), tipo_rev,
+                                (now_ar().strftime("%d/%m/%Y %H:%M"), tipo_rev,
                                  row_an[1], row_an[2], row_an[3],
                                  f"ANULACIÓN de ID {id_an}: {row_an[5]}", row_an[4], "manual",
                                  usuario_actual()))
@@ -3900,7 +3906,7 @@ def _render_tab6():
             st.dataframe(df_tr, use_container_width=True, hide_index=True)
             st.download_button("📥 Exportar transferencias (.xlsx)",
                                data=to_excel_bytes(df_tr, "Transferencias"),
-                               file_name=f"transferencias_{datetime.now().strftime('%Y%m%d')}.xlsx")
+                               file_name=f"transferencias_{now_ar().strftime('%Y%m%d')}.xlsx")
 
         if not df_inv_h.empty:
             st.markdown("---")
@@ -3912,7 +3918,7 @@ def _render_tab6():
             st.dataframe(df_inv_show, use_container_width=True, hide_index=True)
             st.download_button("📥 Exportar auditorías (.xlsx)",
                                data=to_excel_bytes(df_inv_show, "Auditorias"),
-                               file_name=f"auditorias_{datetime.now().strftime('%Y%m%d')}.xlsx")
+                               file_name=f"auditorias_{now_ar().strftime('%Y%m%d')}.xlsx")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -3981,7 +3987,7 @@ def _render_tab7():
                         if id_p:
                             conn.execute("""INSERT INTO precios_historicos
                                 (id_producto,fecha,precio,moneda,usuario) VALUES (?,?,?,?,?)""",
-                                (id_p[0], datetime.now().strftime("%d/%m/%Y"), precio, moneda,
+                                (id_p[0], now_ar().strftime("%d/%m/%Y"), precio, moneda,
                                  usuario_actual()))
                 conn.commit(); conn.close()
                 limpiar_cache()
@@ -4286,7 +4292,7 @@ def _render_tab8():
             def _dias_v(fv):
                 if not fv: return None
                 try:
-                    return (datetime.strptime(str(fv)[:10], "%d/%m/%Y") - datetime.now()).days
+                    return (datetime.strptime(str(fv)[:10], "%d/%m/%Y") - now_ar()).days
                 except Exception:
                     return None
 
@@ -4385,7 +4391,7 @@ def _render_tab8():
                 )
                 st.download_button("📥 Exportar resumen (.xlsx)",
                                    data=to_excel_bytes(_grp, "Resumen_Vencimientos"),
-                                   file_name=f"venc_resumen_{datetime.now().strftime('%Y%m%d')}.xlsx")
+                                   file_name=f"venc_resumen_{now_ar().strftime('%Y%m%d')}.xlsx")
 
             else:  # Detalle por lote
                 _show = df_v[["producto","unidad","deposito","lote","stock",
@@ -4404,7 +4410,7 @@ def _render_tab8():
                 )
                 st.download_button("📥 Exportar detalle (.xlsx)",
                                    data=to_excel_bytes(_show, "Detalle_Lotes"),
-                                   file_name=f"venc_detalle_{datetime.now().strftime('%Y%m%d')}.xlsx")
+                                   file_name=f"venc_detalle_{now_ar().strftime('%Y%m%d')}.xlsx")
 
             # ── Exportar lotes vencidos para baja ────────────────────────────
             _lv_para_baja = df_v[df_v["Estado"] == "🔴 Vencido"].copy()
@@ -4414,7 +4420,7 @@ def _render_tab8():
                            f"{_lv_para_baja['stock'].sum():,.1f} unidades.")
                 st.download_button("📋 Exportar lotes vencidos para gestión de baja",
                                    data=generar_venc_excel_baja(_lv_para_baja),
-                                   file_name=f"lotes_vencidos_{datetime.now().strftime('%Y%m%d')}.xlsx")
+                                   file_name=f"lotes_vencidos_{now_ar().strftime('%Y%m%d')}.xlsx")
 
             # ── QR por lote ───────────────────────────────────────────────────
             with st.expander("🏷️ Generar QR de lote", expanded=False):
@@ -4444,7 +4450,7 @@ def _render_tab8():
             st.write("#### 📅 Timeline: Stock que vence por mes")
             _tl = generar_vencimientos_timeline()
             if not _tl.empty:
-                _hoy_mes = datetime.now().strftime("%Y-%m")
+                _hoy_mes = now_ar().strftime("%Y-%m")
                 _tl_fut  = _tl[_tl["Mes"] >= _hoy_mes]
                 _tl_grp  = _tl_fut.groupby("Mes")["Stock"].sum().reset_index()
                 if not _tl_grp.empty:
@@ -4458,7 +4464,7 @@ def _render_tab8():
                     st.plotly_chart(_fig_tl, use_container_width=True)
 
                     # Top productos que más vencen en próximos 90d
-                    _90d = datetime.now()
+                    _90d = now_ar()
                     _tl_90 = _tl_fut[_tl_fut["Mes"] <= (_90d.replace(month=min(_90d.month+3,12)
                                                          ).strftime("%Y-%m"))]
                     if not _tl_90.empty:
@@ -4496,12 +4502,12 @@ def _render_tab8():
                     )
                     st.download_button("📥 Exportar conciliación (.xlsx)",
                                        data=to_excel_bytes(_conc, "Conciliacion"),
-                                       file_name=f"conciliacion_{datetime.now().strftime('%Y%m%d')}.xlsx")
+                                       file_name=f"conciliacion_{now_ar().strftime('%Y%m%d')}.xlsx")
 
     # ── Resumen Ejecutivo ─────────────────────────────────────────────────────
     with r_tab5:
         st.write("### 📊 Resumen Ejecutivo")
-        st.caption(f"Generado el {datetime.now().strftime('%d/%m/%Y %H:%M')} · La Clementina S.A.")
+        st.caption(f"Generado el {now_ar().strftime('%d/%m/%Y %H:%M')} · La Clementina S.A.")
         _re_stock = obtener_stock_con_compromisos()
         _re_ent   = obtener_entregas()
         _re_mg    = obtener_entregas("MACROGEST")
@@ -4567,7 +4573,7 @@ def _render_tab8():
                         "Indicador": ["Fecha","Productos","Depósitos","Stock Negativo","Bajo Umbral",
                                       "Pendientes Entregas","Pendientes MG"],
                         "Valor": [
-                            datetime.now().strftime("%d/%m/%Y %H:%M"),
+                            now_ar().strftime("%d/%m/%Y %H:%M"),
                             _re_stock["Producto"].nunique() if not _re_stock.empty else 0,
                             _re_stock["Deposito"].nunique() if not _re_stock.empty else 0,
                             int((_re_stock["Stock Actual"] < 0).sum()) if not _re_stock.empty else 0,
@@ -4579,7 +4585,7 @@ def _render_tab8():
                     _kpi_ej.to_excel(_w, index=False, sheet_name="KPIs")
                 st.download_button("⬇️ Descargar Excel",
                                    data=_out_ej.getvalue(),
-                                   file_name=f"ejecutivo_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                                   file_name=f"ejecutivo_{now_ar().strftime('%Y%m%d_%H%M')}.xlsx",
                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         with _dej2:
             if PDF_AVAILABLE:
@@ -4588,7 +4594,7 @@ def _render_tab8():
                     if _pdf_ej:
                         st.download_button("⬇️ Descargar PDF",
                                            data=_pdf_ej,
-                                           file_name=f"ejecutivo_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
+                                           file_name=f"ejecutivo_{now_ar().strftime('%Y%m%d_%H%M')}.pdf",
                                            mime="application/pdf")
             else:
                 st.caption("PDF: `pip install reportlab`")
@@ -4601,14 +4607,14 @@ def _render_tab8():
             reporte_excel = generar_reporte_excel()
             st.download_button("📥 Descargar Reporte Excel (.xlsx)",
                                data=reporte_excel,
-                               file_name=f"reporte_{datetime.now().strftime('%Y%m')}.xlsx")
+                               file_name=f"reporte_{now_ar().strftime('%Y%m')}.xlsx")
         with rm2:
             if PDF_AVAILABLE:
                 pdf_bytes = generar_reporte_pdf()
                 if pdf_bytes:
                     st.download_button("📥 Descargar Reporte PDF",
                                        data=pdf_bytes,
-                                       file_name=f"reporte_{datetime.now().strftime('%Y%m')}.pdf",
+                                       file_name=f"reporte_{now_ar().strftime('%Y%m')}.pdf",
                                        mime="application/pdf")
             else:
                 st.warning("PDF no disponible. Instalar: `pip install reportlab`")
@@ -4647,7 +4653,7 @@ def _render_tab8():
                 except: return None
             _hist_sal = _hist_inm[(_hist_inm["Tipo"] == "Salida") & (_hist_inm["Anulado"] == 0)].copy()
             _hist_sal["_dt"] = _hist_sal["Fecha"].apply(_parse_dt_inm)
-            _corte = datetime.now() - timedelta(days=_dias_inm)
+            _corte = now_ar() - timedelta(days=_dias_inm)
             _recientes = set(
                 _hist_sal[_hist_sal["_dt"] >= _corte]["Producto"].unique()
             )
@@ -4693,7 +4699,7 @@ def _render_tab8():
                 )
                 st.download_button("📥 Exportar Inmovilizado (.xlsx)",
                                    data=to_excel_bytes(_stk_inm_f, "Inmovilizado"),
-                                   file_name=f"inmovilizado_{datetime.now().strftime('%Y%m%d')}.xlsx")
+                                   file_name=f"inmovilizado_{now_ar().strftime('%Y%m%d')}.xlsx")
             else:
                 st.success(f"✅ Todos los productos tuvieron movimientos en los últimos {_dias_inm} días.")
 
@@ -4761,7 +4767,7 @@ def _render_tab8():
                     )
                     st.download_button("📥 Exportar eficiencia (.xlsx)",
                                        data=to_excel_bytes(_by_prod_ef, "Eficiencia"),
-                                       file_name=f"eficiencia_{datetime.now().strftime('%Y%m%d')}.xlsx")
+                                       file_name=f"eficiencia_{now_ar().strftime('%Y%m%d')}.xlsx")
 
     # ── Ranking de Clientes ───────────────────────────────────────────────────
     with r_tab8:
@@ -4807,7 +4813,7 @@ def _render_tab8():
             st.dataframe(_rk.head(_n_rk), use_container_width=True)
             st.download_button("📥 Exportar ranking (.xlsx)",
                                data=to_excel_bytes(_rk, "Ranking_Clientes"),
-                               file_name=f"ranking_{datetime.now().strftime('%Y%m%d')}.xlsx")
+                               file_name=f"ranking_{now_ar().strftime('%Y%m%d')}.xlsx")
 
     # ── Proyección de Quiebre de Stock ────────────────────────────────────────
     with r_tab9:
@@ -4818,7 +4824,7 @@ def _render_tab8():
         if _hist_qb.empty or _stk_qb.empty:
             st.info("Sin datos suficientes para calcular proyección.")
         else:
-            _hoy_qb = datetime.now()
+            _hoy_qb = now_ar()
             def _parse_fecha_qb(s):
                 try:
                     return datetime.strptime(str(s).strip()[:16], "%d/%m/%Y %H:%M")
@@ -4866,7 +4872,7 @@ def _render_tab8():
             )
             st.download_button("📥 Exportar proyección (.xlsx)",
                                data=to_excel_bytes(_df_qb, "Proyeccion_Quiebre"),
-                               file_name=f"proyeccion_quiebre_{datetime.now().strftime('%Y%m%d')}.xlsx")
+                               file_name=f"proyeccion_quiebre_{now_ar().strftime('%Y%m%d')}.xlsx")
 
     # ── Clientes Sin Actividad ────────────────────────────────────────────────
     with r_tab10:
@@ -4909,7 +4915,7 @@ def _render_tab8():
                 st.download_button(
                     "📥 Exportar clientes sin actividad (.xlsx)",
                     data=to_excel_bytes(_agg_cs, "Clientes_Sin_Actividad"),
-                    file_name=f"clientes_sin_actividad_{datetime.now().strftime('%Y%m%d')}.xlsx"
+                    file_name=f"clientes_sin_actividad_{now_ar().strftime('%Y%m%d')}.xlsx"
                 )
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -5003,7 +5009,7 @@ def _render_tab8():
                     st.dataframe(_df_pred_tbl, use_container_width=True, hide_index=True)
                     st.download_button("📥 Exportar predicciones",
                                        data=to_excel_bytes(_df_pred_tbl, "Prediccion"),
-                                       file_name=f"prediccion_demanda_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                                       file_name=f"prediccion_demanda_{now_ar().strftime('%Y%m%d')}.xlsx",
                                        key="dl_pred")
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -5075,7 +5081,7 @@ def _render_tab8():
             )
             st.download_button("📥 Exportar ranking",
                                data=to_excel_bytes(_rank_rent, "Ranking_Clientes"),
-                               file_name=f"ranking_clientes_{_camp_sel}_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                               file_name=f"ranking_clientes_{_camp_sel}_{now_ar().strftime('%Y%m%d')}.xlsx",
                                key="dl_rank_rent")
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -5167,7 +5173,7 @@ def _render_tab8():
 
                 st.download_button("📥 Exportar datos por zona",
                                    data=to_excel_bytes(_pivot_top, "Producto_Zona"),
-                                   file_name=f"producto_zona_{_camp_zona}_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                                   file_name=f"producto_zona_{_camp_zona}_{now_ar().strftime('%Y%m%d')}.xlsx",
                                    key="dl_zona")
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -5244,7 +5250,7 @@ def _render_tab9():
                     borrar_solo_importacion()
                     conn = conectar_db()
                     _total = len(df_validas)
-                    _ts = datetime.now().strftime("%d/%m/%Y %H:%M")
+                    _ts = now_ar().strftime("%d/%m/%Y %H:%M")
                     _usu = usuario_actual()
 
                     # ── Paso 1: preparar filas ─────────────────────────────────
@@ -5320,7 +5326,7 @@ def _render_tab9():
                     mo = len(mov_batch)
                     conn.close()
                     _prog.progress(100, "¡Listo!")
-                    guardar_metadata("ultima_importacion", datetime.now().strftime("%d/%m/%Y %H:%M"))
+                    guardar_metadata("ultima_importacion", now_ar().strftime("%d/%m/%Y %H:%M"))
                     guardar_metadata("ultimo_hash_stock", _file_hash)
                     registrar_importacion_log("Stock Completo", arch_s.name, mo, _file_hash)
                     limpiar_cache()
@@ -5455,7 +5461,7 @@ def _render_tab9():
                             f"SELECT id_producto,nombre FROM productos WHERE nombre IN ({ph_inc})",
                             list(set(noms_inc))).fetchall()
                         id_map_inc = {r[1]: r[0] for r in id_rows_inc}
-                        _ts_inc = datetime.now().strftime("%d/%m/%Y %H:%M")
+                        _ts_inc = now_ar().strftime("%d/%m/%Y %H:%M")
                         _usu_inc = usuario_actual()
                         mov_inc_batch = [
                             (_ts_inc, "Entrada" if r["dif"] > 0 else "Salida",
@@ -5470,7 +5476,7 @@ def _render_tab9():
                             VALUES (?,?,?,?,?,?,?,?,?)""", mov_inc_batch)
                     ajustes = len(ajustes_raw)
                     conn.commit(); conn.close()
-                    guardar_metadata("ultima_importacion", datetime.now().strftime("%d/%m/%Y %H:%M"))
+                    guardar_metadata("ultima_importacion", now_ar().strftime("%d/%m/%Y %H:%M"))
                     limpiar_cache()
                     st.success(f"✅ {ajustes} ajustes incrementales aplicados.")
                     st.rerun(scope="app")
@@ -5625,7 +5631,7 @@ def _render_tab9():
             if _bk:
                 st.download_button("💾 Backup DB (.sqlite)",
                                    data=_bk,
-                                   file_name=f"backup_lc_{datetime.now().strftime('%Y%m%d_%H%M')}.sqlite",
+                                   file_name=f"backup_lc_{now_ar().strftime('%Y%m%d_%H%M')}.sqlite",
                                    help="Descarga una copia completa de la base de datos local",
                                    use_container_width=True)
             else:
@@ -5664,7 +5670,7 @@ def _render_tab9():
             st.dataframe(df_rem_log, use_container_width=True, hide_index=True)
             st.download_button("📥 Exportar remitos (.xlsx)",
                                data=to_excel_bytes(df_rem_log, "Remitos"),
-                               file_name=f"remitos_{datetime.now().strftime('%Y%m%d')}.xlsx")
+                               file_name=f"remitos_{now_ar().strftime('%Y%m%d')}.xlsx")
 
     # ── Config JSON ───────────────────────────────────────────────────────────
     with cfg3:
@@ -5691,7 +5697,7 @@ def _render_tab9():
         st.download_button(
             "📥 Exportar configuración (.json)",
             data=_json_bytes,
-            file_name=f"config_lc_{datetime.now().strftime('%Y%m%d')}.json",
+            file_name=f"config_lc_{now_ar().strftime('%Y%m%d')}.json",
             mime="application/json",
             type="primary"
         )
@@ -6346,7 +6352,7 @@ Cada vendedor debe:
         with st.expander("➕ Cargar Reporte Semanal", expanded=True):
             rp1, rp2, rp3 = st.columns(3)
             with rp1:
-                fecha_rep = st.date_input("Semana del", value=datetime.now().date(), key="rep_fecha")
+                fecha_rep = st.date_input("Semana del", value=now_ar().date(), key="rep_fecha")
                 fact_rep  = st.number_input("Facturación de la semana $", min_value=0.0, step=1000.0, key="rep_fact")
             with rp2:
                 nuev_rep   = st.number_input("Nuevos clientes", min_value=0, step=1, key="rep_nuev")
@@ -6504,7 +6510,7 @@ def _render_tab11():
                     ok_mg = len(mg_batch)
                     conn.commit(); conn.close()
                     guardar_metadata("ultima_importacion_mg",
-                                     datetime.now().strftime("%d/%m/%Y %H:%M"))
+                                     now_ar().strftime("%d/%m/%Y %H:%M"))
                     registrar_importacion_log("Sin Entregar MG", arch_mg_se.name, ok_mg)
                     limpiar_cache_entregas()  # sólo limpia caché de entregas, no todo
                     st.success(f"✅ {ok_mg} registros importados.")
@@ -6753,7 +6759,7 @@ def _render_tab11():
                     st.download_button(
                         "⬇️ Descargar Excel (.xlsx)",
                         data=_buf_xl.getvalue(),
-                        file_name=f"sin_entregar_mg_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                        file_name=f"sin_entregar_mg_{now_ar().strftime('%Y%m%d_%H%M')}.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         key="dl_mg_excel"
                     )
@@ -6762,7 +6768,7 @@ def _render_tab11():
                     st.download_button(
                         "⬇️ Descargar CSV",
                         data=_csv_data,
-                        file_name=f"sin_entregar_mg_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                        file_name=f"sin_entregar_mg_{now_ar().strftime('%Y%m%d_%H%M')}.csv",
                         mime="text/csv",
                         key="dl_mg_csv"
                     )
@@ -6965,7 +6971,7 @@ def _render_tab11():
                         # Info cliente y fecha
                         _info_tbl = Table([[
                             Paragraph(f"<b>Cliente:</b> {_cli_pdf}", _sty_r["Normal"]),
-                            Paragraph(f"<b>Fecha:</b> {datetime.now().strftime('%d/%m/%Y %H:%M')}", _sty_r["Normal"]),
+                            Paragraph(f"<b>Fecha:</b> {now_ar().strftime('%d/%m/%Y %H:%M')}", _sty_r["Normal"]),
                             Paragraph(f"<b>Generado por:</b> {_generado_por}", _sty_r["Normal"]),
                         ]], colWidths=[7*cm, 5*cm, 5*cm])
                         _info_tbl.setStyle(TableStyle([
@@ -7115,7 +7121,7 @@ def _render_tab11():
                         _el_r.append(Spacer(1, 0.8*cm))
                         _el_r.append(Paragraph(
                             f"La Clementina S.A. · San Jorge, Santa Fe · "
-                            f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')} · "
+                            f"Generado: {now_ar().strftime('%d/%m/%Y %H:%M')} · "
                             f"Sistema de Control de Depósito",
                             _sty_small
                         ))
@@ -7124,7 +7130,7 @@ def _render_tab11():
                         st.download_button(
                             "⬇️ Descargar PDF Completo",
                             data=_buf_r.getvalue(),
-                            file_name=f"resumen_{_cli_pdf.replace(' ','_')}_{datetime.now().strftime('%Y%m%d')}.pdf",
+                            file_name=f"resumen_{_cli_pdf.replace(' ','_')}_{now_ar().strftime('%Y%m%d')}.pdf",
                             mime="application/pdf",
                             key="dl_rem_cli_pdf"
                         )
@@ -7181,7 +7187,7 @@ def _render_tab11():
                         use_container_width=True)
                     st.download_button("📥 Exportar tabla cruzada",
                                        data=to_excel_bytes(_cross.reset_index(), "Cliente_x_Producto"),
-                                       file_name=f"cruzada_{datetime.now().strftime('%Y%m%d')}.xlsx")
+                                       file_name=f"cruzada_{now_ar().strftime('%Y%m%d')}.xlsx")
 
             st.markdown("---")
             cols_mg = ["dia_recibido","cliente","deposito","producto","cantidad_comprada",
@@ -7202,7 +7208,7 @@ def _render_tab11():
             st.download_button(
                 "📥 Exportar Sin Entregar (.xlsx)",
                 data=out_mg.getvalue(),
-                file_name=f"sin_entregar_mg_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                file_name=f"sin_entregar_mg_{now_ar().strftime('%Y%m%d')}.xlsx",
             )
             st.markdown("---")
             with st.expander("✏️ Registrar entrega o marcar como completado", expanded=False):
@@ -7241,7 +7247,7 @@ def _render_tab11():
                                                 usuario_confirmacion = ?
                                             WHERE hoja='MACROGEST' AND rto=?
                                         """, (nueva_entrega, nueva_entrega,
-                                              datetime.now().strftime("%d/%m/%Y %H:%M"),
+                                              now_ar().strftime("%d/%m/%Y %H:%M"),
                                               usuario_actual(), rto_sel))
                                         # Descontar del stock
                                         _id_prod_mg = conn.execute(
@@ -7253,7 +7259,7 @@ def _render_tab11():
                                                 (fecha_hora,tipo_movimiento,id_producto,cantidad,lote,
                                                  referencia,deposito,origen,usuario,observaciones)
                                                 VALUES (?,?,?,?,?,?,?,?,?,?)""",
-                                                (datetime.now().strftime("%d/%m/%Y %H:%M"), "Salida",
+                                                (now_ar().strftime("%d/%m/%Y %H:%M"), "Salida",
                                                  _id_prod_mg[0], nueva_entrega,
                                                  safe_str(r0.get("lote","S/L")) or "S/L",
                                                  f"Entrega MG pedido {rto_sel}",
@@ -7302,7 +7308,7 @@ def _render_tab11():
                                             cant_entregada=cantidad_comprada,
                                             confirmada=1, fecha_confirmacion=?, usuario_confirmacion=?
                                         WHERE hoja='MACROGEST' AND rto=?
-                                    """, (datetime.now().strftime("%d/%m/%Y %H:%M"), usuario_actual(), rto_sel))
+                                    """, (now_ar().strftime("%d/%m/%Y %H:%M"), usuario_actual(), rto_sel))
                                     # Descontar pendiente restante del stock
                                     if _pend_comp > 0:
                                         _id_pc = conn.execute(
@@ -7314,7 +7320,7 @@ def _render_tab11():
                                                 (fecha_hora,tipo_movimiento,id_producto,cantidad,lote,
                                                  referencia,deposito,origen,usuario,observaciones)
                                                 VALUES (?,?,?,?,?,?,?,?,?,?)""",
-                                                (datetime.now().strftime("%d/%m/%Y %H:%M"), "Salida",
+                                                (now_ar().strftime("%d/%m/%Y %H:%M"), "Salida",
                                                  _id_pc[0], _pend_comp,
                                                  safe_str(r0.get("lote","S/L")) or "S/L",
                                                  f"Completar MG pedido {rto_sel}",
@@ -7363,7 +7369,7 @@ def _render_tab12():
                 st.dataframe(_df_lp.head(15), use_container_width=True, hide_index=True)
                 st.caption("Preview — primeros 15 registros")
                 if st.button("✅ Confirmar importación", type="primary", key="conf_lp"):
-                    _ts_lp = datetime.now().strftime("%d/%m/%Y %H:%M")
+                    _ts_lp = now_ar().strftime("%d/%m/%Y %H:%M")
                     lp_batch = [
                         (safe_str(r.get("rubro","")), safe_str(r.get("producto","")),
                          safe_str(r.get("um","")), safe_float(r.get("precio_contado",0)),
@@ -7450,7 +7456,7 @@ def _render_tab12():
                                                 "precio_contado":"Contado USD","precio_vta":"P.Vta USD",
                                                 "financiacion":"Financiación"}),
                                "Lista_Precios"),
-                           file_name=f"lista_precios_{datetime.now().strftime('%Y%m%d')}.xlsx")
+                           file_name=f"lista_precios_{now_ar().strftime('%Y%m%d')}.xlsx")
 
         # ── Mapeo automático al stock ─────────────────────────────────────────
         st.markdown("---")
@@ -7567,7 +7573,7 @@ def _render_tab12():
                     _pbytes = generar_presupuesto_pdf(_pres_cliente, _items_now, usuario_actual(), _pres_obs)
                     if _pbytes:
                         st.download_button("⬇️ Descargar Presupuesto PDF", data=_pbytes,
-                                           file_name=f"presupuesto_{datetime.now().strftime('%Y%m%d')}.pdf",
+                                           file_name=f"presupuesto_{now_ar().strftime('%Y%m%d')}.pdf",
                                            mime="application/pdf")
             else:
                 st.caption("PDF: `pip install reportlab`")
@@ -7762,7 +7768,7 @@ def _render_tab_traz():
             st.download_button(
                 "📊 Descargar Excel",
                 data=_xlsx_traz,
-                file_name=f"trazabilidad_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                file_name=f"trazabilidad_{now_ar().strftime('%Y%m%d_%H%M')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="dl_traz_xlsx"
             )
@@ -7776,7 +7782,7 @@ def _render_tab_traz():
                 _styles = getSampleStyleSheet()
                 _elems = []
                 _elems.append(Paragraph(
-                    f"Trazabilidad — La Clementina S.A. — {datetime.now().strftime('%d/%m/%Y %H:%M')}",
+                    f"Trazabilidad — La Clementina S.A. — {now_ar().strftime('%d/%m/%Y %H:%M')}",
                     _styles["Heading2"]
                 ))
                 _elems.append(Spacer(1, 0.3*cm))
@@ -7798,7 +7804,7 @@ def _render_tab_traz():
                 st.download_button(
                     "📄 Descargar PDF",
                     data=_buf_pdf,
-                    file_name=f"trazabilidad_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
+                    file_name=f"trazabilidad_{now_ar().strftime('%Y%m%d_%H%M')}.pdf",
                     mime="application/pdf",
                     key="dl_traz_pdf"
                 )
