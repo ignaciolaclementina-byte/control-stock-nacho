@@ -234,6 +234,42 @@ details, [data-testid="stExpander"] > div:first-child {{
     .lc-header-title {{font-size:1.1rem}}
     .stTabs [data-baseweb="tab-list"] {{flex-wrap:wrap}}
 }}
+
+/* ── MAXIMIZAR PANTALLA ── */
+/* Reducir padding lateral del contenedor principal */
+.block-container {{
+    padding-top: 0.8rem !important;
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+    padding-bottom: 0.5rem !important;
+    max-width: 100% !important;
+}}
+/* Ocultar menú hamburguesa, footer y barra de deploy */
+#MainMenu, footer, [data-testid="stToolbar"],
+[data-testid="stDeployButton"], .stDeployButton {{
+    display: none !important;
+}}
+/* Ocultar decoración superior */
+[data-testid="stDecoration"] {{ display: none !important; }}
+/* Header nativo de Streamlit ocupa menos espacio */
+[data-testid="stHeader"] {{
+    height: 0 !important;
+    min-height: 0 !important;
+}}
+/* Tabs: labels más compactos para que entren todos en pantalla */
+.stTabs [data-baseweb="tab"] {{
+    padding-top: 6px !important;
+    padding-bottom: 6px !important;
+    font-size: 0.82rem !important;
+}}
+/* Métricas más compactas */
+[data-testid="metric-container"] {{
+    padding: 8px 10px !important;
+}}
+/* DataFrames: altura máxima por defecto más generosa */
+[data-testid="stDataFrame"] > div {{
+    border-radius: 8px !important;
+}}
 </style>
 """, unsafe_allow_html=True)
 
