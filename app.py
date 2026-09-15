@@ -2095,7 +2095,7 @@ def parsear_macrogest_ventas(archivo, vendedor, campana=CAMPANA_ACTUAL):
         "superficie_ha":         0.0,
         "potencial_facturacion": cart["importe_total"].round(2),
         "field_view":            0,
-        "ultima_compra":         cart["fecha"].apply(lambda x: x[:10] if len(str(x))>=10 else ""),
+        "ultima_compra":         cart["fecha"].apply(lambda x: str(x)[:10] if len(str(x))>=10 else ""),
         "estado":                "activo",
         "observaciones":         cart["localidad"],
         "campana":               campana,
@@ -2245,7 +2245,10 @@ if st.session_state.umbral_alerta is None:
 # ─────────────────────────────────────────────────────────────────────────────
 # 12. AUTH GATE
 # ─────────────────────────────────────────────────────────────────────────────
-auth_enabled = obtener_metadata("auth_enabled") == "1"
+try:
+    auth_enabled = obtener_metadata("auth_enabled") == "1"
+except Exception:
+    auth_enabled = False
 if auth_enabled and not st.session_state.get("authenticated"):
     mostrar_login()
     st.stop()
@@ -4665,7 +4668,8 @@ def _render_tab8():
                 try: return datetime.strptime(str(s)[:10], "%d/%m/%Y")
                 except: return None
             _hist_sal = _hist_inm[(_hist_inm["Tipo"] == "Salida") & (_hist_inm["Anulado"] == 0)].copy()
-            _hist_sal["_dt"] = _hist_sal["Fecha"].apply(_parse_dt_inm)
+            _hist_sal["_dt"] = pd.to_datetime(_hist_sal["Fecha"], dayfirst=True, errors="coerce")
+            _hist_sal = _hist_sal.dropna(subset=["_dt"])
             _corte = now_ar() - timedelta(days=_dias_inm)
             _recientes = set(
                 _hist_sal[_hist_sal["_dt"] >= _corte]["Producto"].unique()
@@ -5384,8 +5388,9 @@ def _render_tab9():
             )
             _df_lv_prev = obtener_lotes_vencimiento()
             if not _df_lv_prev.empty:
-                st.caption(f"Actualmente: {len(_df_lv_prev):,} lotes cargados · "
-                           f"última importación: {_df_lv_prev['fecha_importacion'].iloc[0] if 'fecha_importacion' in _df_lv_prev.columns else '—'}")
+                _lv_fecha = (_df_lv_prev['fecha_importacion'].iloc[0]
+                             if 'fecha_importacion' in _df_lv_prev.columns and not _df_lv_prev.empty else '—')
+                st.caption(f"Actualmente: {len(_df_lv_prev):,} lotes cargados · última importación: {_lv_fecha}")
 
             arch_lv = st.file_uploader("Archivo de lotes (.xlsx / .xls / .csv)",
                                        type=["xlsx","xls","csv"], key="up_lotes_venc")
@@ -5510,7 +5515,7 @@ def _render_tab9():
     with cfg2:
         st.write("### 🚨 Parámetros Operativos")
         new_umbral = st.number_input("Umbral de Stock Bajo (global)", min_value=1,
-                                     value=int(st.session_state.umbral_alerta),
+                                     value=max(1, int(st.session_state.umbral_alerta)),
                                      help="Nivel de stock a partir del cual se dispara la alerta amarilla (global).")
         new_wa     = st.text_input("WhatsApp (5493XXXXXXXXX)", value=st.session_state.wa_numero)
         cod_sup_cfg = st.text_input("Código de supervisor (para transferencias)",
@@ -7411,7 +7416,7 @@ def _render_tab12():
     if df_lp.empty:
         st.info("Sin datos. Importá un archivo arriba.")
     else:
-        _lp_ult = df_lp["fecha_carga"].iloc[0] if "fecha_carga" in df_lp.columns else ""
+        _lp_ult = df_lp["fecha_carga"].iloc[0] if ("fecha_carga" in df_lp.columns and not df_lp.empty) else ""
         if _lp_ult: st.caption(f"🕐 Última carga: **{_lp_ult}**")
 
         # KPIs
