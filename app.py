@@ -7724,28 +7724,27 @@ def _render_tab_traz():
 
     # ── Filtros de búsqueda ────────────────────────────────────────────────────
     st.markdown("### 🔎 Buscar")
-    _tc1, _tc2, _tc3 = st.columns(3)
+    _tc1, _tc2 = st.columns(2)
     with _tc1:
         _t_prod = st.selectbox("Producto", ["Todos"] + sorted(df_traz["producto"].unique().tolist()), key="traz_prod")
     with _tc2:
         _lotes_disp = sorted(df_traz["lote"].unique().tolist())
-        _t_lote = st.selectbox("Lote", ["Todos"] + _lotes_disp, key="traz_lote")
-    with _tc3:
-        # Buscar clientes desde entregas
-        try:
-            _conn_e = conectar_db()
-            _df_cli = _rsql("SELECT DISTINCT cliente FROM entregas WHERE cliente IS NOT NULL ORDER BY cliente", _conn_e)
-            _conn_e.close()
-            _clientes = sorted(_df_cli["cliente"].dropna().tolist()) if not _df_cli.empty else []
-        except Exception:
-            _clientes = []
-        _t_cli = st.selectbox("Cliente", ["Todos"] + _clientes, key="traz_cli")
+        _t_lote = st.selectbox("Lote / Serie", ["Todos"] + _lotes_disp, key="traz_lote")
 
-    _tc4, _tc5 = st.columns(2)
+    # Extraer clientes únicos desde campo referencia (formato: "NROFACTURA | CLIENTE")
+    _refs = df_traz["referencia"].astype(str).str.split("|", n=1, expand=True)
+    if _refs.shape[1] > 1:
+        _clientes_mg = sorted(_refs[1].str.strip().replace("", pd.NA).dropna().unique().tolist())
+    else:
+        _clientes_mg = []
+
+    _tc3, _tc4, _tc5 = st.columns(3)
+    with _tc3:
+        _t_cli = st.selectbox("Cliente (MacroGest)", ["Todos"] + _clientes_mg, key="traz_cli")
     with _tc4:
         _t_dep = st.selectbox("Depósito", ["Todos"] + sorted(df_traz["deposito"].dropna().unique().tolist()), key="traz_dep")
     with _tc5:
-        _t_texto = st.text_input("Buscar texto libre (producto, lote, referencia)", key="traz_texto")
+        _t_texto = st.text_input("Texto libre (producto, lote, cliente...)", key="traz_texto")
 
     # ── Aplicar filtros ────────────────────────────────────────────────────────
     df_f = df_traz[df_traz["anulado"] == 0].copy()
@@ -7755,6 +7754,8 @@ def _render_tab_traz():
         df_f = df_f[df_f["lote"] == _t_lote]
     if _t_dep != "Todos":
         df_f = df_f[df_f["deposito"].astype(str) == str(_t_dep)]
+    if _t_cli != "Todos":
+        df_f = df_f[df_f["referencia"].astype(str).str.contains(_t_cli, case=False, na=False)]
     if _t_texto:
         _mask = (
             df_f["producto"].str.contains(_t_texto, case=False, na=False) |
@@ -7762,19 +7763,6 @@ def _render_tab_traz():
             df_f["referencia"].astype(str).str.contains(_t_texto, case=False, na=False)
         )
         df_f = df_f[_mask]
-
-    # Filtro por cliente: buscar entregas del cliente y filtrar por producto
-    if _t_cli != "Todos":
-        try:
-            _conn_ec = conectar_db()
-            _ph2 = "%s" if IS_POSTGRES else "?"
-            _df_ec = _rsql(f"SELECT DISTINCT producto FROM entregas WHERE cliente={_ph2}", _conn_ec, params=(_t_cli,))
-            _conn_ec.close()
-            if not _df_ec.empty:
-                _prods_cli = _df_ec["producto"].tolist()
-                df_f = df_f[df_f["producto"].isin(_prods_cli)]
-        except Exception:
-            pass
 
     st.markdown(f"**{len(df_f)} movimientos encontrados**")
 
