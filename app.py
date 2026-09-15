@@ -136,16 +136,6 @@ details, [data-testid="stExpander"] > div:first-child {{
     padding:18px;border-radius:14px;margin-bottom:12px;
     border:1px solid #2D3748;position:relative;
     box-shadow:0 6px 20px rgba(0,0,0,.4);
-    animation:fadeInCard .35s ease both;
-    transition:transform .15s ease,box-shadow .15s ease;
-}}
-.stock-card:hover {{
-    transform:translateY(-3px);
-    box-shadow:0 10px 28px rgba(0,0,0,.5);
-}}
-@keyframes fadeInCard {{
-    from{{opacity:0;transform:translateY(10px)}}
-    to  {{opacity:1;transform:translateY(0)}}
 }}
 .card-normal  {{
     background:linear-gradient(145deg,#1a2a1a 0%,#1C2333 60%);
