@@ -252,11 +252,14 @@ details, [data-testid="stExpander"] > div:first-child {{
     height: 0 !important;
     min-height: 0 !important;
 }}
-/* Tabs: labels más compactos para que entren todos en pantalla */
+/* Tabs: labels compactos, dos filas si no entran */
 .stTabs [data-baseweb="tab"] {{
-    padding-top: 6px !important;
-    padding-bottom: 6px !important;
-    font-size: 0.82rem !important;
+    padding-top: 5px !important;
+    padding-bottom: 5px !important;
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+    font-size: 0.75rem !important;
+    white-space: nowrap !important;
 }}
 /* Métricas más compactas */
 [data-testid="metric-container"] {{
