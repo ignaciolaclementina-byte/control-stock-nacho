@@ -7732,10 +7732,13 @@ def _render_tab_traz():
         _t_lote = st.selectbox("Lote / Serie", ["Todos"] + _lotes_disp, key="traz_lote")
 
     # Extraer clientes únicos desde campo referencia (formato: "NROFACTURA | CLIENTE")
-    _refs = df_traz["referencia"].astype(str).str.split("|", n=1, expand=True)
-    if _refs.shape[1] > 1:
-        _clientes_mg = sorted(_refs[1].str.strip().replace("", pd.NA).dropna().unique().tolist())
-    else:
+    try:
+        _refs = df_traz["referencia"].astype(str).str.split("|", n=1, expand=True)
+        if _refs.shape[1] > 1:
+            _clientes_mg = sorted({x.strip() for x in _refs[1].dropna() if x.strip() and x.strip() != "nan"})
+        else:
+            _clientes_mg = []
+    except Exception:
         _clientes_mg = []
 
     _tc3, _tc4, _tc5 = st.columns(3)
