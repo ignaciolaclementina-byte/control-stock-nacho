@@ -2636,10 +2636,7 @@ with tab1:
                         st.info("Sin movimientos para este producto.")
                     else:
                         df_evo = df_evo[df_evo["Anulado"] == 0].copy()
-                        def _parse_dt(s):
-                            try: return datetime.strptime(str(s)[:16], "%d/%m/%Y %H:%M")
-                            except: return None
-                        df_evo["_dt"] = df_evo["Fecha"].apply(_parse_dt)
+                        df_evo["_dt"] = pd.to_datetime(df_evo["Fecha"], dayfirst=True, errors="coerce")
                         df_evo = df_evo.dropna(subset=["_dt"]).sort_values("_dt")
                         df_evo["Delta"] = df_evo.apply(
                             lambda r: r["Cantidad"] if r["Tipo"]=="Entrada" else -r["Cantidad"], axis=1)
