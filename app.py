@@ -945,7 +945,7 @@ def mostrar_login():
                 st.session_state.user_rol       = result[0]
                 st.session_state.user_nombre    = result[1]
                 st.session_state.username       = user
-                st.rerun()
+                st.rerun(scope="app")
             else:
                 st.error("Usuario o contraseña incorrectos.")
         st.caption("Usuario inicial: **admin** / Contraseña: **admin123**")
@@ -2285,7 +2285,7 @@ with _head_cols[2]:
         if st.button("Salir", key="logout_btn"):
             for k in ("authenticated","user_rol","user_nombre","username"):
                 st.session_state[k] = "" if k != "authenticated" else False
-            st.rerun()
+            st.rerun(scope="app")
 if auth_enabled and st.session_state.get("authenticated"):
     pass  # ya manejado arriba
 
@@ -2949,14 +2949,14 @@ with tab1:
                         ].copy()
                         if len(m) == 1:
                             st.session_state.qr_detectado = m.iloc[0]["Producto"]
-                            st.rerun()
+                            st.rerun(scope="app")
                         elif len(m) > 1:
                             opciones_qr = m["Producto"].unique().tolist()
                             st.info(f"Se encontraron {len(opciones_qr)} productos con ese código. Seleccioná uno:")
                             elegido_qr = st.selectbox("Producto del QR", opciones_qr, key="qr_multi_sel")
                             if st.button("✅ Usar este producto", key="qr_multi_btn"):
                                 st.session_state.qr_detectado = elegido_qr
-                                st.rerun()
+                                st.rerun(scope="app")
                         else:
                             st.info("QR leído pero sin coincidencia en el stock actual.")
                 else:
@@ -3157,7 +3157,7 @@ with tab1:
                         observaciones=obs_m,
                         cliente=st.session_state.get("mov_cliente","") if tipo_m=="Salida" else ""
                     )
-                    st.rerun()
+                    st.rerun(scope="app")
             else:
                 p = st.session_state.mov_pendiente
                 st.warning(f"**¿Confirmar?** {p['tipo']} | {p['producto']} | "
@@ -3209,11 +3209,11 @@ with tab1:
                                                data=_remito_bytes,
                                                file_name=f"remito_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
                                                mime="application/pdf")
-                        st.rerun()
+                        st.rerun(scope="app")
                 with cc2:
                     if st.button("❌ Cancelar"):
                         st.session_state.mov_pendiente = None
-                        st.rerun()
+                        st.rerun(scope="app")
 
         # Transferencias entre depósitos
         st.markdown("---")
@@ -3253,7 +3253,7 @@ with tab1:
                             producto=prod_t, dep_origen=dep_origen, dep_destino=dep_destino,
                             cantidad=cant_t, lote=lote_t, referencia=ref_t
                         )
-                        st.rerun()
+                        st.rerun(scope="app")
                 else:
                     tp = st.session_state.trans_pendiente
                     st.warning(
@@ -3285,11 +3285,11 @@ with tab1:
                             limpiar_cache()
                             st.success(f"✅ Transferencia ejecutada.")
                             st.session_state.trans_pendiente = None
-                            st.rerun()
+                            st.rerun(scope="app")
                     with tc2:
                         if st.button("❌ Cancelar transferencia"):
                             st.session_state.trans_pendiente = None
-                            st.rerun()
+                            st.rerun(scope="app")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -3366,7 +3366,7 @@ def mostrar_tab_entregas(hoja_nombre, titulo):
                         msg = f"✅ {ok} registros. {sal} salidas." if descontar else f"✅ {ok} registros."
                         st.success(msg)
                         if no_match: st.warning(f"Sin coincidencia: {', '.join(no_match)}")
-                        st.rerun()
+                        st.rerun(scope="app")
                 except Exception as ex:
                     st.error(f"Error: {ex}")
 
@@ -3383,7 +3383,7 @@ def mostrar_tab_entregas(hoja_nombre, titulo):
         if st.button("🔄", key=f"ent_refresh_{hoja_nombre}", help="Actualizar datos"):
             st.session_state[_ent_cache_key] = obtener_entregas(hoja_nombre)
             df_h = st.session_state[_ent_cache_key]
-            st.rerun()
+            st.rerun(scope="app")
 
     if df_h is None or df_h.empty:
         st.info("Sin datos. Importá en 'LC / LCAGRO'.")
@@ -3482,7 +3482,8 @@ with tab4: mostrar_tab_entregas("BAYER DIRECTA",     "🚚 Facturación Directa 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 5 — STOCK FÍSICO
 # ═══════════════════════════════════════════════════════════════════════════════
-with tab5:
+@st.fragment
+def _render_tab5():
     st.subheader("📋 Toma de Stock Físico")
     st_df = obtener_stock_full()
 
@@ -3534,7 +3535,7 @@ with tab5:
                 registrar_importacion_log("Ajuste Inventario", f"{p_inv}/{d_inv}", 1)
                 limpiar_cache()
                 st.success("✅ Auditoría guardada.")
-                st.rerun()
+                st.rerun(scope="app")
         else:
             st.info("Sin datos de stock.")
 
@@ -3597,7 +3598,7 @@ with tab5:
                             registrar_importacion_log("Conteo Masivo", arch_conteo.name, _ok_c)
                             limpiar_cache()
                             st.success(f"✅ {_ok_c} productos procesados.")
-                            st.rerun()
+                            st.rerun(scope="app")
                 except Exception as _ex:
                     st.error(f"Error: {_ex}")
 
@@ -3639,7 +3640,7 @@ with tab5:
                         conn.close()
                         limpiar_cache()
                         st.success(f"✅ Devolución de {_cant_dev:,.1f} unidades de {_prod_dev} registrada.")
-                        st.rerun()
+                        st.rerun(scope="app")
                     else:
                         conn.close()
                         st.error("Producto no encontrado.")
@@ -3715,7 +3716,7 @@ with tab5:
                         conn.commit(); conn.close()
                         limpiar_cache()
                         st.success(f"✅ Transferidos {_cant_tr:,.1f} de {_prod_tr}: {_dep_orig_tr} → {_dep_dest_tr}")
-                        st.rerun()
+                        st.rerun(scope="app")
                     else:
                         conn.close()
                         st.error("Producto no encontrado.")
@@ -3726,7 +3727,11 @@ with tab5:
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 6 — HISTORIAL
 # ═══════════════════════════════════════════════════════════════════════════════
-with tab6:
+
+with tab5: _render_tab5()
+
+@st.fragment
+def _render_tab6():
     st.subheader("📜 Historial de Movimientos")
     _ult_h = obtener_metadata("ultima_importacion")
     if _ult_h: st.caption(f"🕐 Última importación de stock: **{_ult_h}**")
@@ -3846,7 +3851,7 @@ with tab6:
                     else:
                         st.error(f"ID {id_an} no encontrado.")
                     conn.close()
-                    st.rerun()
+                    st.rerun(scope="app")
 
         # Trazabilidad por lote
         st.markdown("---")
@@ -3913,7 +3918,11 @@ with tab6:
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 7 — VALORIZACIÓN Y PRECIOS
 # ═══════════════════════════════════════════════════════════════════════════════
-with tab7:
+
+with tab6: _render_tab6()
+
+@st.fragment
+def _render_tab7():
     st.subheader("💲 Valorización de Inventario")
     st.caption("Aquí podés asignar precios a cada producto para calcular el valor total del inventario en USD y ARS.")
     stk_full = obtener_stock_full()
@@ -3977,7 +3986,7 @@ with tab7:
                 conn.commit(); conn.close()
                 limpiar_cache()
                 st.success("✅ Precios actualizados.")
-                st.rerun()
+                st.rerun(scope="app")
 
         st.markdown("---")
         st.write("### 📊 Inventario Valorizado")
@@ -4156,7 +4165,11 @@ with tab7:
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 8 — REPORTES
 # ═══════════════════════════════════════════════════════════════════════════════
-with tab8:
+
+with tab7: _render_tab7()
+
+@st.fragment
+def _render_tab8():
     st.subheader("📈 Reportes y Análisis")
     r_tab1, r_tab2, r_tab3, r_tab4, r_tab5, r_tab6, r_tab7, r_tab8, r_tab9, r_tab10, r_tab11, r_tab12, r_tab13 = st.tabs([
         "👥 Dashboard Vendedores",
@@ -5160,7 +5173,11 @@ with tab8:
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 9 — CONFIGURACIÓN
 # ═══════════════════════════════════════════════════════════════════════════════
-with tab9:
+
+with tab8: _render_tab8()
+
+@st.fragment
+def _render_tab9():
     st.subheader("⚙️ Configuración")
     cfg1, cfg2, cfg3, cfg4 = st.tabs([
         "📥 Importación / Exportación", "🔧 Parámetros & Sistema",
@@ -5311,7 +5328,7 @@ with tab9:
                         f"✅ Stock importado: {pa} productos nuevos, {mo} líneas "
                         f"(de {_total} filas válidas)."
                     )
-                    st.rerun()
+                    st.rerun(scope="app")
                 except Exception as ex:
                     _prog.empty()
                     st.error(f"❌ Error durante la importación: {ex}")
@@ -5375,7 +5392,7 @@ with tab9:
                             registrar_importacion_log("Lotes/Vencimientos", arch_lv.name, _tot)
                             limpiar_cache()
                             st.success(f"✅ {_tot:,} lotes importados · {_cv:,} con fecha de vencimiento.")
-                            st.rerun()
+                            st.rerun(scope="app")
                         except Exception as _ex_lv:
                             _prog_lv.empty()
                             st.error(f"Error: {_ex_lv}")
@@ -5456,7 +5473,7 @@ with tab9:
                     guardar_metadata("ultima_importacion", datetime.now().strftime("%d/%m/%Y %H:%M"))
                     limpiar_cache()
                     st.success(f"✅ {ajustes} ajustes incrementales aplicados.")
-                    st.rerun()
+                    st.rerun(scope="app")
                 except Exception as ex:
                     st.error(f"Error: {ex}")
 
@@ -5521,7 +5538,7 @@ with tab9:
                 _conn_sm.commit(); _conn_sm.close()
                 limpiar_cache()
                 st.success("✅ Stocks mínimos guardados.")
-                st.rerun()
+                st.rerun(scope="app")
 
         st.markdown("---")
         st.write("### 📧 Configuración de Email")
@@ -5574,7 +5591,7 @@ with tab9:
                             (n_usr, hash_pwd(n_pwd), n_nom, n_rol, n_sede))
                         conn.commit(); conn.close()
                         st.success(f"Usuario '{n_usr}' guardado.")
-                        st.rerun()
+                        st.rerun(scope="app")
                     else:
                         st.error("Username y contraseña son obligatorios.")
 
@@ -5594,7 +5611,7 @@ with tab9:
             if st.button("🗑️ Borrar solo datos importados"):
                 borrar_solo_importacion()
                 st.success("Datos de importación eliminados.")
-                st.rerun()
+                st.rerun(scope="app")
         with col_b2:
             conf_borrado = st.text_input("Escribí **CONFIRMAR** para habilitar borrado total",
                                          placeholder="CONFIRMAR", key="conf_borrado")
@@ -5602,7 +5619,7 @@ with tab9:
                          disabled=(conf_borrado.strip() != "CONFIRMAR")):
                 borrar_datos_totales()
                 st.success("Base vaciada.")
-                st.rerun()
+                st.rerun(scope="app")
         with col_b3:
             _bk = backup_db_bytes()
             if _bk:
@@ -5697,7 +5714,7 @@ with tab9:
                     if "wa_numero" in _cfg_imp:
                         st.session_state.wa_numero = _cfg_imp["wa_numero"]
                     st.success("✅ Configuración importada correctamente.")
-                    st.rerun()
+                    st.rerun(scope="app")
             except Exception as _ex:
                 st.error(f"Error leyendo JSON: {_ex}")
 
@@ -5731,7 +5748,11 @@ with tab9:
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 10 — PLAN COMERCIAL 2026-2027
 # ═══════════════════════════════════════════════════════════════════════════════
-with tab10:
+
+with tab9: _render_tab9()
+
+@st.fragment
+def _render_tab10():
     st.markdown("""
     <div style="background:linear-gradient(135deg,#1a5276,#2e86c1);
                 color:white;padding:24px 28px;border-radius:12px;margin-bottom:20px">
@@ -5859,7 +5880,7 @@ Cada vendedor debe:
                 conn.commit(); conn.close()
                 limpiar_cache()
                 st.success("✅ Metas actualizadas.")
-                st.rerun()
+                st.rerun(scope="app")
 
         st.markdown("---")
         st.write("### 👤 Metas Individuales por Vendedor")
@@ -5914,7 +5935,7 @@ Cada vendedor debe:
                 conn.commit(); conn.close()
                 limpiar_cache()
                 st.success(f"✅ Metas de {vend_sel_m} guardadas.")
-                st.rerun()
+                st.rerun(scope="app")
 
     # ── SUBTAB 3: KPI DASHBOARD ───────────────────────────────────────────────
     with pc3:
@@ -6190,7 +6211,7 @@ Cada vendedor debe:
                 conn.commit(); conn.close()
                 limpiar_cache()
                 st.success(f"✅ Cliente '{cli_nom}' guardado.")
-                st.rerun()
+                st.rerun(scope="app")
             else:
                 st.error("El nombre del cliente es obligatorio.")
 
@@ -6274,7 +6295,7 @@ Cada vendedor debe:
                         conn.commit(); conn.close()
                         limpiar_cache()
                         st.success(f"✅ {len(cart_batch)} clientes y {len(ven_batch)} líneas de venta importadas para {vend_mg}.")
-                        st.rerun()
+                        st.rerun(scope="app")
 
         # ── Importar cartera genérica ───────────────────────────────────────
         st.markdown("---")
@@ -6303,7 +6324,7 @@ Cada vendedor debe:
                     conn.commit(); conn.close()
                     limpiar_cache()
                     st.success(f"✅ {len(ci_batch)} clientes importados.")
-                    st.rerun()
+                    st.rerun(scope="app")
                 except Exception as ex:
                     st.error(f"Error: {ex}")
 
@@ -6350,7 +6371,7 @@ Cada vendedor debe:
                     conn.commit(); conn.close()
                     limpiar_cache()
                     st.session_state["rep_ok"] = f"✅ Reporte de {vend_r} ({fecha_rep.strftime('%d/%m/%Y')}) guardado correctamente."
-                    st.rerun()
+                    st.rerun(scope="app")
                 except Exception as e:
                     st.error(f"❌ Error al guardar: {e}")
 
@@ -6487,7 +6508,7 @@ def _render_tab11():
                     registrar_importacion_log("Sin Entregar MG", arch_mg_se.name, ok_mg)
                     limpiar_cache_entregas()  # sólo limpia caché de entregas, no todo
                     st.success(f"✅ {ok_mg} registros importados.")
-                    st.rerun()
+                    st.rerun(scope="app")
 
     st.markdown("---")
     ultima_mg = obtener_metadata("ultima_importacion_mg")
@@ -6504,7 +6525,7 @@ def _render_tab11():
         if st.button("🔄", key="mg_refresh", help="Actualizar datos desde la base"):
             st.session_state["df_mg_cache"] = obtener_entregas("MACROGEST")
             df_mg_stored = st.session_state["df_mg_cache"]
-            st.rerun()
+            st.rerun(scope="app")
 
     if df_mg_stored is None or df_mg_stored.empty:
         st.info("Sin datos. Importá un archivo arriba.")
@@ -6845,7 +6866,7 @@ def _render_tab11():
                         with _ncols[2]:
                             if st.button("🗑️", key=f"del_nota_{_nid}", help="Eliminar nota"):
                                 eliminar_nota_cliente(_nid)
-                                st.rerun()
+                                st.rerun(scope="app")
                 else:
                     st.caption("Sin notas para este cliente.")
 
@@ -6857,7 +6878,7 @@ def _render_tab11():
                             guardar_nota_cliente(_nom_cli, _nota_txt.strip(),
                                                   usuario_actual() or "Admin", _nota_dest)
                             st.success("Nota guardada.")
-                            st.rerun()
+                            st.rerun(scope="app")
                         else:
                             st.warning("Escribí algo antes de guardar.")
 
@@ -7266,7 +7287,7 @@ def _render_tab11():
                                                                file_name=f"remito_mg_{rto_sel}.pdf",
                                                                mime="application/pdf",
                                                                key="dl_rem_mg")
-                                        st.rerun()
+                                        st.rerun(scope="app")
                                     else:
                                         st.warning("Ingresá una cantidad mayor a cero.")
                             with ua2:
@@ -7303,7 +7324,7 @@ def _render_tab11():
                                     conn.commit(); conn.close()
                                     limpiar_cache()
                                     st.toast(f"✅ Pedido {rto_sel} marcado como completado y stock descontado.")
-                                    st.rerun()
+                                    st.rerun(scope="app")
                     else:
                         st.info("Los registros filtrados no tienen N° de pedido asignado. "
                                 "Podés usar 'cliente+producto' para identificarlos.")
@@ -7361,7 +7382,7 @@ def _render_tab12():
                             registrar_cambio_precio(_item_lp[1], _item_lp[3], "USD", usuario_actual())
                     limpiar_cache()
                     st.success(f"✅ {len(lp_batch)} precios importados.")
-                    st.rerun()
+                    st.rerun(scope="app")
             except Exception as _ex_lp:
                 st.error(f"Error: {_ex_lp}")
 
@@ -7468,7 +7489,7 @@ def _render_tab12():
                         st.warning(f"⚠️ {sin_match} productos sin coincidencia en stock.")
                         with st.expander("Ver productos sin match"):
                             st.write(no_match_list)
-                    st.rerun()
+                    st.rerun(scope="app")
 
         # ── Historial de Precios ──────────────────────────────────────────────
         st.markdown("---")
@@ -7527,11 +7548,11 @@ def _render_tab12():
                 st.session_state["pres_items"].append(
                     {"producto": _p_sel, "cantidad": _p_cant, "precio": _p_precio, "moneda": "USD"}
                 )
-                st.rerun()
+                st.rerun(scope="app")
         with _bc2:
             if st.button("🗑️ Limpiar", key="btn_pres_clear"):
                 st.session_state["pres_items"] = []
-                st.rerun()
+                st.rerun(scope="app")
 
         _items_now = st.session_state.get("pres_items", [])
         if _items_now:
@@ -7553,15 +7574,14 @@ def _render_tab12():
         else:
             st.caption("Agregá productos para armar el presupuesto.")
 
+with tab10: _render_tab10()
+
 with tab11: _render_tab11()
-
-
-
 
 with tab12: _render_tab12()
 
 # ── Función global cacheada para trazabilidad ─────────────────────────────────
-@st.cache_data(ttl=180, show_spinner=False)
+@st.cache_data(ttl=600, show_spinner=False)
 def obtener_trazabilidad_completa():
     conn = conectar_db()
     df = _rsql("""
@@ -7588,7 +7608,9 @@ def obtener_trazabilidad_completa():
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB TRAZABILIDAD
 # ═══════════════════════════════════════════════════════════════════════════════
-with tab_traz:
+
+@st.fragment
+def _render_tab_traz():
     st.subheader("🔍 Trazabilidad de Lotes y Movimientos")
 
     # ── Cargar datos base (cacheado globalmente) ───────────────────────────────
@@ -7784,3 +7806,6 @@ with tab_traz:
                 st.caption(f"PDF no disponible: {_ep}")
         elif not PDF_AVAILABLE:
             st.caption("PDF no disponible (reportlab no instalado)")
+
+with tab_traz: _render_tab_traz()
+
