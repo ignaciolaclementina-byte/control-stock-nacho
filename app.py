@@ -7632,6 +7632,85 @@ def obtener_trazabilidad_completa():
 def _render_tab_traz():
     st.subheader("🔍 Trazabilidad de Lotes y Movimientos")
 
+    # ── Importar ventas MacroGest para trazabilidad ───────────────────────────
+    with st.expander("📂 Importar ventas MacroGest (trazabilidad por lote/serie)", expanded=False):
+        st.caption("Subí el reporte de ventas de MacroGest. La columna **serie** se usa como número de lote.")
+        _arch_traza = st.file_uploader("Archivo MacroGest (.xlsx/.csv)", type=["xlsx","xls","csv"], key="up_traza_mg")
+        if _arch_traza:
+            try:
+                _arch_traza.seek(0)
+                _df_traza_raw = pd.read_excel(_arch_traza) if _arch_traza.name.endswith(("xlsx","xls")) else pd.read_csv(_arch_traza)
+                _df_traza_raw.columns = [str(c).strip().lower().replace(" ","_") for c in _df_traza_raw.columns]
+
+                def _n(s): return pd.to_numeric(s, errors="coerce").fillna(0.0)
+
+                _df_mg_traza = pd.DataFrame({
+                    "fecha_hora":       pd.to_datetime(_df_traza_raw.get("fecha", pd.Series(dtype=str)), errors="coerce").dt.strftime("%Y-%m-%d").fillna(""),
+                    "tipo_movimiento":  "Salida",
+                    "producto":         _df_traza_raw.get("descripcion", pd.Series(dtype=str)).astype(str).str.strip(),
+                    "cantidad":         _n(_df_traza_raw.get("cantidad", pd.Series(dtype=float))),
+                    "lote":             _df_traza_raw.get("serie", pd.Series(dtype=str)).astype(str).str.strip().replace({"nan":"S/L","":"S/L"}),
+                    "deposito":         _df_traza_raw.get("deposito", pd.Series(dtype=str)).astype(str).str.strip(),
+                    "referencia":       _df_traza_raw.get("numero", pd.Series(dtype=str)).astype(str).str.strip()
+                                        + " | " + _df_traza_raw.get("denominacion", pd.Series(dtype=str)).astype(str).str.strip(),
+                    "origen":           "MacroGest",
+                    "usuario":          _df_traza_raw.get("viajante", pd.Series(dtype=str)).astype(str).str.strip(),
+                })
+                _df_mg_traza = _df_mg_traza[_df_mg_traza["producto"].str.len() > 0].reset_index(drop=True)
+
+                st.markdown(f"**{len(_df_mg_traza)} registros** · {_df_mg_traza['producto'].nunique()} productos · {_df_mg_traza['lote'].nunique()} lotes")
+                st.dataframe(_df_mg_traza[["fecha_hora","tipo_movimiento","producto","lote","cantidad","deposito","referencia"]].head(20),
+                             use_container_width=True, hide_index=True)
+                st.caption("Preview — primeros 20 registros")
+
+                if st.button("✅ Importar como movimientos de Salida", type="primary", key="btn_imp_traza"):
+                    _conn_t = conectar_db()
+                    # Buscar id_producto para cada producto
+                    _prods_uniq = _df_mg_traza["producto"].unique().tolist()
+                    _ph_list = ",".join(["%s" if IS_POSTGRES else "?"] * len(_prods_uniq))
+                    _id_map_df = _rsql(f"SELECT id_producto, nombre FROM productos WHERE nombre IN ({_ph_list})",
+                                       _conn_t, params=_prods_uniq)
+                    _id_map = dict(zip(_id_map_df["nombre"], _id_map_df["id_producto"])) if not _id_map_df.empty else {}
+
+                    _mov_batch = []
+                    for _, _r in _df_mg_traza.iterrows():
+                        _pid = _id_map.get(_r["producto"])
+                        if _pid is None:
+                            continue
+                        _mov_batch.append((
+                            _r["fecha_hora"], _r["tipo_movimiento"], _pid,
+                            _r["cantidad"], _r["lote"], _r["referencia"],
+                            str(_r["deposito"]), _r["origen"], _r["usuario"]
+                        ))
+
+                    if _mov_batch:
+                        if IS_POSTGRES:
+                            from psycopg2.extras import execute_values as _ev
+                            _ev(_conn_t._raw.cursor(),
+                                """INSERT INTO movimientos
+                                   (fecha_hora,tipo_movimiento,id_producto,cantidad,lote,
+                                    referencia,deposito,origen,usuario)
+                                   VALUES %s""", _mov_batch)
+                        else:
+                            _conn_t.cursor().executemany(
+                                """INSERT INTO movimientos
+                                   (fecha_hora,tipo_movimiento,id_producto,cantidad,lote,
+                                    referencia,deposito,origen,usuario)
+                                   VALUES (?,?,?,?,?,?,?,?,?)""", _mov_batch)
+                        _conn_t.commit()
+                        _conn_t.close()
+                        _sin_prod = len(_df_mg_traza) - len(_mov_batch)
+                        obtener_trazabilidad_completa.clear()
+                        st.success(f"✅ {len(_mov_batch)} movimientos importados." +
+                                   (f" ({_sin_prod} omitidos por producto no encontrado en stock)" if _sin_prod else ""))
+                        st.rerun(scope="app")
+                    else:
+                        st.warning("Ningún producto del archivo coincide con los registrados en stock.")
+            except Exception as _ex:
+                st.error(f"Error leyendo archivo: {_ex}")
+
+    st.markdown("---")
+
     # ── Cargar datos base (cacheado globalmente) ───────────────────────────────
     df_traz = obtener_trazabilidad_completa()
 
