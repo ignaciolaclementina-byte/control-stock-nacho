@@ -3043,12 +3043,10 @@ with tab1:
             prod_df_venc = obtener_productos_completo()
 
             items = df_f.to_dict("records")
-            # Acumular HTML por columna y hacer UN solo st.markdown por columna
-            # (evita el error React "removeChild" que ocurre con multiples markdown consecutivos)
-            _NUM_COLS = 4
-            cols_g = st.columns(_NUM_COLS)
-            col_html = [""] * _NUM_COLS
-            for i, item in enumerate(items):
+            # Un solo st.markdown con CSS grid — evita el error React removeChild
+            # que ocurre con st.columns + multiples st.markdown(unsafe_allow_html)
+            _all_cards = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;align-items:start;">'
+            for item in items:
                 stk   = item["Stock Actual"]
                 comp  = item.get("Comprometido", 0)
                 disp  = item.get("Disponible Neto", stk)
@@ -3056,7 +3054,6 @@ with tab1:
                 b_neg  = '<span class="neg-badge">NEGATIVO</span>'      if stk  < 0 else ""
                 b_comp = '<span class="comp-badge">COMPROMETIDO</span>' if comp > 0 else ""
 
-                # Vencimiento
                 venc_info = ""
                 if not prod_df_venc.empty:
                     row_v = prod_df_venc[prod_df_venc["nombre"] == item["Producto"]]
@@ -3072,7 +3069,6 @@ with tab1:
                 comp_line = (f"<br><b>🔒 Comprometido:</b> {comp:,.1f} | "
                              f"<b>Disp.Neto:</b> {disp:,.1f}") if comp > 0 else ""
 
-                # Clientes con entrega pendiente para este producto
                 clientes_pend_line = ""
                 if not ent_panel.empty and comp > 0:
                     cli_pend = (ent_panel[
@@ -3097,7 +3093,6 @@ with tab1:
                             + filas + "</table>"
                         )
 
-                # Barra de progreso comprometido/stock
                 if stk > 0 and comp > 0:
                     _pct_comp = min(100, round(comp / stk * 100))
                     _bar_color = "#e53e3e" if _pct_comp >= 100 else (_LC_YELLOW if _pct_comp >= 60 else "#38a169")
@@ -3111,23 +3106,20 @@ with tab1:
                 else:
                     _progress_html = ""
 
-                col_html[i % _NUM_COLS] += (
+                _all_cards += (
                     '<div class="stock-card ' + clase + '">'
                     '<div class="stock-title">' + str(item["Producto"]) + b_neg + b_comp + '</div>'
-                    '<span class="stock-value">' + f"{stk:,.1f}" + ' <small class="stock-unit">' + str(item["Unidad"]) + '</small></span>'
-                    + _progress_html +
-                    '<div class="stock-info">'
+                    '<span class="stock-value">' + f"{stk:,.1f}"
+                    + ' <small class="stock-unit">' + str(item["Unidad"]) + '</small></span>'
+                    + _progress_html
+                    + '<div class="stock-info">'
                     '<b>ID</b> ' + str(item["Código"]) + '<br>'
                     '<b>Dep.</b> <span class="label-blue">' + str(item["Deposito"]) + '</span>'
-                    + comp_line + venc_info + clientes_pend_line +
-                    '</div></div>'
+                    + comp_line + venc_info + clientes_pend_line
+                    + '</div></div>'
                 )
-
-            # Render: un solo st.markdown por columna
-            for _ci, _ch in enumerate(col_html):
-                with cols_g[_ci]:
-                    if _ch:
-                        st.markdown(_ch, unsafe_allow_html=True)
+            _all_cards += '</div>'
+            st.markdown(_all_cards, unsafe_allow_html=True)
 
         st.markdown("---")
 
