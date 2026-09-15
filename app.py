@@ -3526,7 +3526,7 @@ def _render_tab5():
                 st.metric("Stock en Sistema", f"{val_sis:,.1f}")
             ci4, ci5 = st.columns(2)
             with ci4:
-                val_fis = st.number_input("Conteo Físico Real", min_value=0.0, step=1.0, value=float(val_sis))
+                val_fis = st.number_input("Conteo Físico Real", min_value=0.0, step=1.0, value=max(0.0, float(val_sis)))
             with ci5:
                 obs_inv = st.text_input("Observaciones / Auditor")
             dif = val_fis - val_sis
