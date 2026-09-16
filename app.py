@@ -2979,7 +2979,7 @@ with tab1:
             f_prod = st.selectbox("Producto", lista_p, index=idx_p)
             st.session_state.qr_detectado = f_prod
         with cf2:
-            lista_d = sorted(d for d in stock_df["Deposito"].dropna().unique() if str(d).strip() not in ("", "0", "nan"))
+            lista_d = sorted(d for d in stock_df["Deposito"].dropna().unique() if str(d).strip() not in ("", "nan"))
             f_dep   = st.selectbox("Depósito principal", ["Todos"] + lista_d, key="dep_principal")
         with cf3:
             hide_neg       = st.toggle("Solo stock positivo",       value=True)
