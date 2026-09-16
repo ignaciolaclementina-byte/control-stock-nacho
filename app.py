@@ -808,6 +808,7 @@ def obtener_stock_con_lote():
                m.tipo_movimiento, m.cantidad
         FROM movimientos m JOIN productos p ON m.id_producto=p.id_producto
         WHERE COALESCE(m.anulado,0)=0
+          AND COALESCE(m.origen,'') <> 'MacroGest'
     """
     df = _rsql(query, conn)
     conn.close()
@@ -834,6 +835,7 @@ def obtener_historial_movimientos():
                m.referencia "Referencia", COALESCE(m.origen,'excel') "Origen",
                COALESCE(m.anulado,0) "Anulado", COALESCE(m.usuario,'') "Usuario"
         FROM movimientos m JOIN productos p ON m.id_producto=p.id_producto
+        WHERE COALESCE(m.origen,'') <> 'MacroGest'
         ORDER BY m.id_movimiento DESC
         LIMIT 2000
     """
