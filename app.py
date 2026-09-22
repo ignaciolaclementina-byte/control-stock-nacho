@@ -7805,19 +7805,14 @@ def _render_tab_traz():
                              "Depósito", "Cantidad", "Referencia", "Usuario"]
         _df_show = _df_show.sort_values("Fecha", ascending=False)
 
-        # Color por tipo
-        def _color_tipo(row):
-            if row["Tipo"] == "Entrada":
-                return ["background-color: #1a3a1a"] * len(row)
-            elif row["Tipo"] == "Salida":
-                return ["background-color: #3a1a1a"] * len(row)
-            return [""] * len(row)
-
         st.dataframe(
-            _df_show.style.apply(_color_tipo, axis=1),
+            _df_show,
             use_container_width=True,
             hide_index=True,
-            height=400
+            height=400,
+            column_config={
+                "Tipo": st.column_config.TextColumn("Tipo"),
+            }
         )
 
     # ── Entregas por cliente (si hay filtro de producto o lote) ───────────────
