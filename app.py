@@ -745,6 +745,7 @@ def guardar_metadata(clave, valor):
     conn.execute("INSERT OR REPLACE INTO metadata (clave,valor) VALUES (?,?)", (clave, valor))
     conn.commit(); conn.close()
 
+@st.cache_data(ttl=300, show_spinner=False)
 def obtener_metadata(clave):
     conn = conectar_db()
     row  = conn.execute("SELECT valor FROM metadata WHERE clave=?", (clave,)).fetchone()
@@ -799,7 +800,7 @@ def eliminar_nota_cliente(id_nota):
 # ─────────────────────────────────────────────────────────────────────────────
 # 4. QUERIES CON CACHÉ
 # ─────────────────────────────────────────────────────────────────────────────
-@st.cache_data(ttl=600, show_spinner=False)
+@st.cache_data(ttl=1800, show_spinner=False)
 def obtener_stock_con_lote():
     conn  = conectar_db()
     query = """
@@ -819,13 +820,13 @@ def obtener_stock_con_lote():
     return (df.groupby(["Producto","Código","Unidad","Lote","Deposito"])["neta"]
               .sum().reset_index().rename(columns={"neta":"Stock Actual"}))
 
-@st.cache_data(ttl=600, show_spinner=False)
+@st.cache_data(ttl=1800, show_spinner=False)
 def obtener_stock_full():
     df = obtener_stock_con_lote()
     if df.empty: return df
     return df.groupby(["Producto","Código","Unidad","Deposito"])["Stock Actual"].sum().reset_index()
 
-@st.cache_data(ttl=600, show_spinner=False)
+@st.cache_data(ttl=1800, show_spinner=False)
 def obtener_historial_movimientos():
     conn  = conectar_db()
     query = """
@@ -843,14 +844,14 @@ def obtener_historial_movimientos():
     conn.close()
     return df
 
-@st.cache_data(ttl=600, show_spinner=False)
+@st.cache_data(ttl=1800, show_spinner=False)
 def obtener_lista_precios():
     conn = conectar_db()
     df = _rsql("SELECT * FROM lista_precios ORDER BY rubro, producto", conn)
     conn.close()
     return df
 
-@st.cache_data(ttl=600, show_spinner=False)
+@st.cache_data(ttl=1800, show_spinner=False)
 def obtener_entregas(hoja=None):
     conn = conectar_db()
     if hoja and hoja != "Todas":
@@ -860,14 +861,14 @@ def obtener_entregas(hoja=None):
     conn.close()
     return df
 
-@st.cache_data(ttl=600, show_spinner=False)
+@st.cache_data(ttl=1800, show_spinner=False)
 def obtener_productos_completo():
     conn = conectar_db()
     df = _rsql("SELECT * FROM productos ORDER BY nombre", conn)
     conn.close()
     return df
 
-@st.cache_data(ttl=600, show_spinner=False)
+@st.cache_data(ttl=1800, show_spinner=False)
 def calcular_rotacion_stock(dias=90):
     conn           = conectar_db()
     fecha_corte_dt = now_ar() - timedelta(days=dias)
@@ -1392,7 +1393,7 @@ def registrar_cambio_precio(producto: str, precio_nuevo: float, moneda: str, usu
     conn.close()
 
 
-@st.cache_data(ttl=600, show_spinner=False)
+@st.cache_data(ttl=1800, show_spinner=False)
 def obtener_historial_precios(producto: str = "") -> pd.DataFrame:
     conn = conectar_db()
     try:
@@ -1715,7 +1716,7 @@ def generar_ejecutivo_pdf() -> bytes:
     return buf.getvalue()
 
 
-@st.cache_data(ttl=600, show_spinner=False)
+@st.cache_data(ttl=1800, show_spinner=False)
 def obtener_lotes_vencimiento() -> pd.DataFrame:
     conn = conectar_db()
     df = _rsql("""SELECT codigo, producto, unidad, deposito, lote,
@@ -1955,14 +1956,14 @@ DISTRIBUCION_OBJETIVO = {
     "Otros / Servicios":   10,
 }
 
-@st.cache_data(ttl=600, show_spinner=False)
+@st.cache_data(ttl=1800, show_spinner=False)
 def obtener_metas_campana(campana=CAMPANA_ACTUAL):
     conn = conectar_db()
     df = _rsql("SELECT * FROM metas_campana WHERE campana=?", conn, params=(campana,))
     conn.close()
     return df
 
-@st.cache_data(ttl=600, show_spinner=False)
+@st.cache_data(ttl=1800, show_spinner=False)
 def obtener_cartera(vendedor=None, campana=CAMPANA_ACTUAL):
     conn = conectar_db()
     if vendedor:
@@ -1974,7 +1975,7 @@ def obtener_cartera(vendedor=None, campana=CAMPANA_ACTUAL):
     conn.close()
     return df
 
-@st.cache_data(ttl=600, show_spinner=False)
+@st.cache_data(ttl=1800, show_spinner=False)
 def obtener_reportes(vendedor=None, campana=CAMPANA_ACTUAL):
     conn = conectar_db()
     if vendedor:
@@ -1986,7 +1987,7 @@ def obtener_reportes(vendedor=None, campana=CAMPANA_ACTUAL):
     conn.close()
     return df
 
-@st.cache_data(ttl=600, show_spinner=False)
+@st.cache_data(ttl=1800, show_spinner=False)
 def obtener_productos_foco(campana=CAMPANA_ACTUAL):
     conn = conectar_db()
     df = _rsql("SELECT * FROM productos_foco WHERE campana=? ORDER BY prioridad", conn, params=(campana,))
@@ -2004,7 +2005,7 @@ def obtener_productos_foco(campana=CAMPANA_ACTUAL):
         conn3.close()
     return df
 
-@st.cache_data(ttl=600, show_spinner=False)
+@st.cache_data(ttl=1800, show_spinner=False)
 def obtener_ventas_detalle(vendedor=None, campana=CAMPANA_ACTUAL):
     conn = conectar_db()
     if vendedor:
@@ -2359,7 +2360,9 @@ tab1, tab11, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab12, tab_t
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 1 — PANEL DE CONTROL
 # ═══════════════════════════════════════════════════════════════════════════════
-with tab1:
+@st.fragment
+def _render_tab1():
+
     stock_df = obtener_stock_con_compromisos()
     # Aplicar filtro global de depósito
     _dep_global = st.session_state.get("deposito_global", "Todos")
@@ -2384,7 +2387,7 @@ with tab1:
         bajo_n = len(stock_df[(stock_df["Stock Actual"] >= 0) & (stock_df["Stock Actual"] < U)])
         comp_n = len(stock_df[stock_df["Disponible Neto"] < 0])
 
-        ent_panel = obtener_entregas()
+        ent_panel = obtener_entregas()  # una sola vez, reutilizada abajo
         venc30 = 0
         if not ent_panel.empty:
             ent_panel["dias_p"] = ent_panel["dia_recibido"].apply(dias_desde)
@@ -2472,8 +2475,7 @@ with tab1:
                 else:
                     st.caption("✅ Sin alertas críticas de stock")
             with _wa_col2:
-                _ent_wa = obtener_entregas()
-                _pend_wa = int(_ent_wa["pendiente"].sum()) if not _ent_wa.empty else 0
+                _pend_wa = int(ent_panel["pendiente"].sum()) if not ent_panel.empty else 0
                 _kpi_lines = [
                     f"📊 *Resumen LC — {now_ar().strftime('%d/%m/%Y %H:%M')}*",
                     f"Productos: {stock_df['Producto'].nunique()} · Vol: {stock_df['Stock Actual'].sum():,.0f}",
@@ -3496,6 +3498,8 @@ def mostrar_tab_entregas(hoja_nombre, titulo):
         st.download_button("📥 Exportar Excel", data=to_excel_bytes(df_t, "Entregas"),
                            file_name=f"entregas_{hoja_nombre.replace(' ','_')}.xlsx")
 
+
+with tab1: _render_tab1()
 
 with tab2: mostrar_tab_entregas("LA CLEMENTINA S.A", "📋 Entregas — La Clementina / LCAgro")
 with tab3: mostrar_tab_entregas("BAYER DEP55",       "🌿 Consignado Bayer — Depósito 55")
@@ -7606,7 +7610,7 @@ with tab11: _render_tab11()
 with tab12: _render_tab12()
 
 # ── Función global cacheada para trazabilidad ─────────────────────────────────
-@st.cache_data(ttl=600, show_spinner=False)
+@st.cache_data(ttl=1800, show_spinner=False)
 def obtener_trazabilidad_completa():
     conn = conectar_db()
     df = _rsql("""
