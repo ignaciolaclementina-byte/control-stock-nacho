@@ -221,14 +221,43 @@ details, [data-testid="stExpander"] > div:first-child {{
 .presupuesto-item {{background:#1C2333;border-left:4px solid {_LC_YELLOW};
                     padding:8px 12px;margin:4px 0;border-radius:4px;font-size:.9rem;color:#FAFAFA}}
 
-/* Mobile */
+/* ── MOBILE ── */
 @media (max-width:768px) {{
-    .stock-card {{padding:12px;margin-bottom:8px}}
-    .stock-title {{font-size:.85rem;min-height:auto}}
-    .stock-value {{font-size:1.3rem}}
-    .lc-header   {{padding:10px 14px}}
-    .lc-header-title {{font-size:1.1rem}}
-    .stTabs [data-baseweb="tab-list"] {{flex-wrap:wrap}}
+    /* Contenedor sin márgenes en mobile */
+    .block-container {{
+        padding-left: 0.4rem !important;
+        padding-right: 0.4rem !important;
+        padding-top: 0.4rem !important;
+    }}
+    /* Header compacto */
+    .lc-header {{ padding:8px 12px; gap:10px; }}
+    .lc-header-title {{ font-size:1rem; }}
+    .lc-header-sub {{ font-size:.72rem; }}
+    /* Cards texto */
+    .stock-card {{ padding:10px; margin-bottom:8px; }}
+    .stock-title {{ font-size:.82rem; min-height:auto; }}
+    .stock-value {{ font-size:1.25rem; }}
+    /* KPI bar en mobile: items más pequeños */
+    .kpi-topbar {{ gap:6px; padding:8px 10px; }}
+    .kpi-topbar-item {{ padding:0 8px; }}
+    .kpi-topbar-val {{ font-size:1.1rem; }}
+    .kpi-topbar-lbl {{ font-size:.58rem; }}
+    /* Tabs: scroll horizontal en mobile */
+    .stTabs [data-baseweb="tab-list"] {{
+        overflow-x: auto !important;
+        flex-wrap: nowrap !important;
+        -webkit-overflow-scrolling: touch;
+    }}
+    .stTabs [data-baseweb="tab"] {{
+        font-size: 0.7rem !important;
+        padding-left: 6px !important;
+        padding-right: 6px !important;
+        white-space: nowrap !important;
+    }}
+    /* Métricas apiladas */
+    [data-testid="metric-container"] {{ padding: 6px 8px !important; }}
+    /* Botones full width */
+    .stButton>button {{ height:2.6em; font-size:.85rem; }}
 }}
 
 /* ── MAXIMIZAR PANTALLA ── */
@@ -3073,6 +3102,13 @@ body{background:transparent}
 .lb{background:#1a365d;color:#90cdf4;padding:1px 5px;border-radius:3px;font-weight:bold}
 table{border-collapse:collapse;width:100%}
 b{color:#FAFAFA}
+@media(max-width:900px){.grid{columns:2}}
+@media(max-width:500px){
+  .grid{columns:1}
+  .card{padding:12px}
+  .title{font-size:.82rem}
+  .val{font-size:1.3rem}
+}
 </style>"""
             _cards_body = '<div class="grid">'
             for item in items:
