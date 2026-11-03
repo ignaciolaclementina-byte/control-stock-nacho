@@ -2532,10 +2532,6 @@ def _render_tab1():
     _dep_global = st.session_state.get("deposito_global", "Todos")
     if _dep_global != "Todos" and not stock_df.empty:
         stock_df = stock_df[stock_df["Deposito"] == _dep_global]
-    # Agregar columna Categoria (copy para no mutar el cache)
-    if not stock_df.empty:
-        stock_df = stock_df.copy()
-        stock_df["Categoria"] = stock_df["Producto"].map(CATEGORIAS_PRODUCTOS).fillna("Otros")
 
     if stock_df.empty:
         st.warning("⚠️ Sin datos. Subí el archivo en Configuración.")
@@ -3159,8 +3155,7 @@ def _render_tab1():
             show_neg_f     = st.toggle("⚠️ Mostrar negativos",       value=True)
             show_comp_f    = st.toggle("🔒 Solo comprometidos",      value=False)
         with cf4:
-            _cats_disp = ["Todos"] + sorted(stock_df["Categoria"].unique().tolist())
-            f_cat = st.selectbox("Categoría", _cats_disp, key="filtro_categoria")
+            f_cat = st.selectbox("Categoría", _CATS_ORDEN, key="filtro_categoria")
 
         # ── Selector múltiple de depósitos ────────────────────────────────────
         with st.expander("🏭 Filtrar por depósitos", expanded=True):
@@ -3177,13 +3172,14 @@ def _render_tab1():
                 st.caption("Mostrando todos los depósitos")
 
         df_f = stock_df.copy()
+        if f_cat != "Todos":
+            df_f["Categoria"] = df_f["Producto"].map(CATEGORIAS_PRODUCTOS).fillna("Otros")
+            df_f = df_f[df_f["Categoria"] == f_cat]
         if search_q:
             df_f = df_f[df_f["Producto"].str.contains(search_q, case=False, na=False) |
                         df_f["Código"].astype(str).str.contains(search_q, case=False, na=False)]
         if f_prod != "Todos" and not search_q:
             df_f = df_f[df_f["Producto"] == f_prod]
-        if f_cat != "Todos":
-            df_f = df_f[df_f["Categoria"] == f_cat]
         agrupar_prod = False
         # Aplicar filtro de depósito: checkboxes tienen prioridad; si ninguno marcado, usar selector principal
         _deps_filtro = set(_deps_extra)
