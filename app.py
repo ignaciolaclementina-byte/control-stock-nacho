@@ -8291,7 +8291,7 @@ def _render_tab_fichas():
     todas = obtener_todas_fichas()
     # Lista de todos los productos del stock + los ya en fichas
     try:
-        stk_prods = sorted(obtener_stock_full()["nombre"].dropna().unique().tolist())
+        stk_prods = sorted(obtener_stock_full()["Producto"].dropna().unique().tolist())
     except Exception:
         stk_prods = []
     prods_fichas = sorted(todas["nombre"].tolist()) if not todas.empty else []
@@ -8400,4 +8400,9 @@ def _render_tab_fichas():
             st.success("✅ Ficha guardada.")
             st.rerun(scope="fragment")
 
-with tab_fichas: _render_tab_fichas()
+with tab_fichas:
+    try:
+        _render_tab_fichas()
+    except Exception as _e_fichas:
+        st.error(f"Error en Fichas: {_e_fichas}")
+        import traceback; st.code(traceback.format_exc())
