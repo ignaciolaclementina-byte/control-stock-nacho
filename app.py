@@ -2532,8 +2532,9 @@ def _render_tab1():
     _dep_global = st.session_state.get("deposito_global", "Todos")
     if _dep_global != "Todos" and not stock_df.empty:
         stock_df = stock_df[stock_df["Deposito"] == _dep_global]
-    # Agregar columna Categoria
+    # Agregar columna Categoria (copy para no mutar el cache)
     if not stock_df.empty:
+        stock_df = stock_df.copy()
         stock_df["Categoria"] = stock_df["Producto"].map(CATEGORIAS_PRODUCTOS).fillna("Otros")
 
     if stock_df.empty:
