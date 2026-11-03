@@ -302,6 +302,141 @@ details, [data-testid="stExpander"] > div:first-child {{
 """, unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 1b. MAPA DE CATEGORÍAS DE PRODUCTOS
+# ─────────────────────────────────────────────────────────────────────────────
+CATEGORIAS_PRODUCTOS = {
+    # HERBICIDAS
+    "2 4  D ETHIL EXIL X 20 LTS (LV89 - TORNADO)":         "Herbicida",
+    "2 4 D MICRO EMULSION 30% (PAMPA/BANDA AZUL)":          "Herbicida",
+    "2 4 D POWERSPRAY LV X 20 LTS":                         "Herbicida",
+    "2 4-D ENLIST CORTEVA X 20 LTS":                        "Herbicida",
+    "2 4-D NO VOLATIL (DEDALO ELITE - RAMEX)":              "Herbicida",
+    "ADENGO X 5":                                           "Herbicida",
+    "ATRANEX 90 WG X 15":                                   "Herbicida",
+    "ATRAZINA GRANULADA  90 x 10":                          "Herbicida",
+    "BENAZOLIN 50 % X 10 (DASEN SC)":                       "Herbicida",
+    "BRODAL x 5":                                           "Herbicida",
+    "CAPAZ (SULFENTRAZONE)":                                "Herbicida",
+    "CHUCARO X 5 LT":                                       "Herbicida",
+    "CLETODIM 24% (ARROW )":                                "Herbicida",
+    "CLETODIM 36% x 10 (LATIUM SUPER)":                    "Herbicida",
+    "CLETODIM GENERICO  24% X 20 LTS":                     "Herbicida",
+    "DASEN PLUS X 20 (BENAZOLIN + FOMESAFEN)":             "Herbicida",
+    "DICAMBA":                                              "Herbicida",
+    "DICAMBA (ELITE)":                                      "Herbicida",
+    "DICLOSULAM GENERICO X 500 grs (MORRIGAN)":            "Herbicida",
+    "DICLOSULAM x 500 grs (BIGUA)":                        "Herbicida",
+    "DIQUAT 20% SL":                                        "Herbicida",
+    "DIQUAT SC x 20":                                       "Herbicida",
+    "FIERCE X 5 LTS":                                       "Herbicida",
+    "FINESSE":                                              "Herbicida",
+    "FLUMIOXAZIN GENERICO 48% x 5":                        "Herbicida",
+    "FLUROXYPIR  (TOMAHAWK X 1)":                          "Herbicida",
+    "FOMESAFEN X 20":                                       "Herbicida",
+    "GALIL X 5 LTS":                                        "Herbicida",
+    "GLUFOSINATO AMONIO 20% X 20 LTS":                     "Herbicida",
+    "HALOXIFOP 81% X 5":                                    "Herbicida",
+    "HALOXIFOP R 54 %":                                     "Herbicida",
+    "HEAT X 350 GRS":                                       "Herbicida",
+    "IMAZETHAPYR X 20 LTS":                                 "Herbicida",
+    "LAUDIS x 5":                                           "Herbicida",
+    "LONTREL X 5":                                          "Herbicida",
+    "MAYORAL":                                              "Herbicida",
+    "METRIBUZIN 48% (X 5 - 10 LTS)":                       "Herbicida",
+    "METSULFURON 60% x 100 grs":                           "Herbicida",
+    "NICOSULFURON 24% X 5":                                 "Herbicida",
+    "PARAQUAT":                                             "Herbicida",
+    "PERCUTOR WG X 1.800 KGS":                             "Herbicida",
+    "PICLORAM  24% X 5 (PASO 24 - GRUMMAN)":               "Herbicida",
+    "PICLORAM 27,8% X 5 (TORAM)":                          "Herbicida",
+    "PIRAFLUFEN (STAGGER X 1LT)":                          "Herbicida",
+    "PRODIGIO X 5 LTS":                                     "Herbicida",
+    "PUCARA":                                               "Herbicida",
+    "PYROXASULFONE WG X 5 KGS":                            "Herbicida",
+    "RIALFA LIQ":                                           "Herbicida",
+    "ROUND UP CONTROL MAX":                                 "Herbicida",
+    "ROUND UP TOP x 20":                                    "Herbicida",
+    "S METOLACLOR":                                         "Herbicida",
+    "SENCOREX 48 X 10 LT (METRIBUZIN 48%)":               "Herbicida",
+    "TERBUTILAZINA 50 SC X 20 LTS":                        "Herbicida",
+    "TOPGROUND":                                            "Herbicida",
+    "YAMATO TOP X 5":                                       "Herbicida",
+    "ZETHAMAX X 5 LTS (FLUMIOXAZIM + IMAZETAPIR)":         "Herbicida",
+    # FUNGICIDAS
+    "AMISTAR X TRA (GENERICO)":                            "Fungicida",
+    "CRIPTON SC X 5":                                       "Fungicida",
+    "CRIPTON XPRO SC X 10":                                 "Fungicida",
+    "EMINENT X 1 LT":                                       "Fungicida",
+    "EUROFIT x 5 LTS":                                      "Fungicida",
+    "FULLTECMAX X 1 LT":                                    "Fungicida",
+    "GEMMIT TOP X 1 LT (SUMISOYA TOP)":                    "Fungicida",
+    "LIGATE X 1 KG":                                        "Fungicida",
+    "SIGNUM 305":                                           "Fungicida",
+    "TAISEI x 2 lts":                                       "Fungicida",
+    "FOSFITO DE POTASIO x 5":                              "Fungicida",
+    # INSECTICIDAS
+    "ABAMECTINA 3.6% X 5":                                 "Insecticida",
+    "ACTELLIC PLUS PACK 2x1":                              "Insecticida",
+    "AMPLIGO-ZARIVA  X 1":                                 "Insecticida",
+    "BELT 480 SC X 1LT":                                    "Insecticida",
+    "BIFENTRIN 25% X 5":                                    "Insecticida",
+    "CLORANTRANILIPROLE X 1 (AMICOR-SHENZI)":             "Insecticida",
+    "CLORANTRANILIPROLE X 1 LT -CARTADO - CLORAN PRO":    "Insecticida",
+    "CORAGEN X 1":                                          "Insecticida",
+    "IDATEN (Fluxametamida 10,3% EC) X 5 LTS":            "Insecticida",
+    "IMIDACLOPRID 60% X 5 LTS":                            "Insecticida",
+    "IMIDACLOPRID 60% x 1 Lts":                            "Insecticida",
+    "LAMBDA MICROEMULSION 25 % X 1 LT":                   "Insecticida",
+    "LAMBDA MICROENCAPSULADA 25% x 1":                    "Insecticida",
+    "SOLOMON X 5":                                          "Insecticida",
+    "STARKLE X 1,700 KGS":                                 "Insecticida",
+    # CURASEMILLAS / INOCULANTES
+    "ACCELERON CEREALES":                                   "Curasemilla/Inoculante",
+    "ECO RIZO SPRAY x 1":                                   "Curasemilla/Inoculante",
+    "FERTIACTYIL LEGUMINOSA":                              "Curasemilla/Inoculante",
+    "PACK RIZODERMA 206":                                   "Curasemilla/Inoculante",
+    "RIZO PACK 205":                                        "Curasemilla/Inoculante",
+    "RIZO SPRAY ANTIESPUMA X 1caja de 10 lts":            "Curasemilla/Inoculante",
+    "RIZO SPRAY CORRECTOR x 1":                            "Curasemilla/Inoculante",
+    "RIZO SPRAY EXTREMO":                                   "Curasemilla/Inoculante",
+    "RIZO SPRAY INTEGRUM X 10":                            "Curasemilla/Inoculante",
+    "RIZO SPRAY SULFO DRY x 5 KGS":                       "Curasemilla/Inoculante",
+    "RIZODERMA 206 TMX":                                    "Curasemilla/Inoculante",
+    "RIZOPOWER Z X 5":                                      "Curasemilla/Inoculante",
+    "RIZOSIL":                                              "Curasemilla/Inoculante",
+    "RIZOSPRAY ZEN X 5 LTS":                               "Curasemilla/Inoculante",
+    "SUMISOYA  FLOW (NYAMBI-NOZOMY)":                      "Curasemilla/Inoculante",
+    "YaraAmplix NRHIZO":                                    "Curasemilla/Inoculante",
+    # FERTILIZANTES / FOLIARES
+    "BIOZYME X 10 LTS":                                     "Fertilizante/Foliar",
+    "FERTIACTYL GRAMINEAS":                                 "Fertilizante/Foliar",
+    "FERTIACTYL GZ X 10":                                   "Fertilizante/Foliar",
+    "FERTILEADER POS X 10":                                 "Fertilizante/Foliar",
+    "NUTRITION GROW X 5 LTS":                              "Fertilizante/Foliar",
+    "OPTIMIZER X 10":                                       "Fertilizante/Foliar",
+    "TOP ZINC MAX":                                         "Fertilizante/Foliar",
+    "TROPBIO PRO (PROTEINA) X 0,500 KGS":                 "Fertilizante/Foliar",
+    "VITAGROW TS x 1 lt":                                   "Fertilizante/Foliar",
+    "VITAGROW X 1 KG":                                      "Fertilizante/Foliar",
+    "YaraVita CROPLIFT BIO X 10 LT":                       "Fertilizante/Foliar",
+    # COADYUVANTES
+    "ALQUIMIA X 10 LTS (COMPATIBILIZADOR)":               "Coadyuvante",
+    "ANTIDERIVA X 1 LT":                                    "Coadyuvante",
+    "BREAK THRU MSO - MAX X 10":                           "Coadyuvante",
+    "BREAK THRU X 1":                                       "Coadyuvante",
+    "COMPATIBILIZADOR  MEZCLA OPTIMIIX":                   "Coadyuvante",
+    "LIMIPIADOR DE TANQUE OMEGA":                          "Coadyuvante",
+    "TROP CS  Corrector PH x 1 lt":                        "Coadyuvante",
+    "TROP L PLUS LIMPIADOR DE TANQUES x 1LT":             "Coadyuvante",
+    "TROPGREEN X 1 LT (ANTIDERIVA)":                       "Coadyuvante",
+    # FUMIGANTES
+    "FOSFURO DE ALUMINIO (frasco)":                        "Fumigante",
+    "FOSFURO DE ALUMINIO (tubos)":                         "Fumigante",
+}
+_CATS_ORDEN = ["Todos", "Herbicida", "Fungicida", "Insecticida",
+               "Curasemilla/Inoculante", "Fertilizante/Foliar", "Coadyuvante", "Fumigante"]
+
+# ─────────────────────────────────────────────────────────────────────────────
 # 2. CAPA DE DATOS — SQLite (local/dev) o PostgreSQL/Supabase (producción)
 #    Configurar: st.secrets["DATABASE_URL"] = "postgresql://user:pass@host/db"
 #    o variable de entorno DATABASE_URL en Streamlit Cloud Settings → Secrets
@@ -2397,6 +2532,9 @@ def _render_tab1():
     _dep_global = st.session_state.get("deposito_global", "Todos")
     if _dep_global != "Todos" and not stock_df.empty:
         stock_df = stock_df[stock_df["Deposito"] == _dep_global]
+    # Agregar columna Categoria
+    if not stock_df.empty:
+        stock_df["Categoria"] = stock_df["Producto"].map(CATEGORIAS_PRODUCTOS).fillna("Otros")
 
     if stock_df.empty:
         st.warning("⚠️ Sin datos. Subí el archivo en Configuración.")
@@ -3020,7 +3158,8 @@ def _render_tab1():
             show_neg_f     = st.toggle("⚠️ Mostrar negativos",       value=True)
             show_comp_f    = st.toggle("🔒 Solo comprometidos",      value=False)
         with cf4:
-            pass
+            _cats_disp = ["Todos"] + sorted(stock_df["Categoria"].unique().tolist())
+            f_cat = st.selectbox("Categoría", _cats_disp, key="filtro_categoria")
 
         # ── Selector múltiple de depósitos ────────────────────────────────────
         with st.expander("🏭 Filtrar por depósitos", expanded=True):
@@ -3042,6 +3181,8 @@ def _render_tab1():
                         df_f["Código"].astype(str).str.contains(search_q, case=False, na=False)]
         if f_prod != "Todos" and not search_q:
             df_f = df_f[df_f["Producto"] == f_prod]
+        if f_cat != "Todos":
+            df_f = df_f[df_f["Categoria"] == f_cat]
         agrupar_prod = False
         # Aplicar filtro de depósito: checkboxes tienen prioridad; si ninguno marcado, usar selector principal
         _deps_filtro = set(_deps_extra)
