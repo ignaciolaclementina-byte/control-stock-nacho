@@ -8221,37 +8221,30 @@ _FICHAS_INICIALES = {
 @st.cache_data(ttl=1800, show_spinner=False)
 def obtener_todas_fichas():
     conn = conectar_db()
-    df = _rsql("SELECT * FROM fichas_productos ORDER BY nombre", conn=conn)
+    df = _rsql("SELECT * FROM fichas_productos ORDER BY nombre", conn)
     conn.close()
     return df
 
 def obtener_ficha(nombre: str) -> dict:
     conn = conectar_db()
-    df = _rsql("SELECT * FROM fichas_productos WHERE nombre = %s" if IS_POSTGRES else
-               "SELECT * FROM fichas_productos WHERE nombre = ?",
-               (nombre,), conn=conn)
+    ph  = "%s" if IS_POSTGRES else "?"
+    df  = _rsql(f"SELECT * FROM fichas_productos WHERE nombre = {ph}", conn, (nombre,))
     conn.close()
     return df.iloc[0].to_dict() if not df.empty else {}
 
 def guardar_ficha(nombre: str, data: dict):
-    conn = conectar_db()
+    conn   = conectar_db()
     campos = ["principio_activo","categoria","para_que_sirve","cultivos","dosis","proveedor","observaciones","actualizado_en"]
-    vals   = [data.get(c,"") for c in campos] + [nombre]
-    ph = "%s" if IS_POSTGRES else "?"
-    # upsert
+    ph     = "%s" if IS_POSTGRES else "?"
     if IS_POSTGRES:
-        sql = f"""
-            INSERT INTO fichas_productos (nombre,{','.join(campos)})
-            VALUES ({ph},{','.join([ph]*len(campos))})
-            ON CONFLICT (nombre) DO UPDATE SET
-            {', '.join(f'{c}=EXCLUDED.{c}' for c in campos)}
-        """
-        conn.execute(sql, [nombre] + [data.get(c,"") for c in campos])
+        sql = (f"INSERT INTO fichas_productos (nombre,{','.join(campos)}) "
+               f"VALUES ({','.join([ph]*(len(campos)+1))}) "
+               f"ON CONFLICT (nombre) DO UPDATE SET "
+               + ", ".join(f"{c}=EXCLUDED.{c}" for c in campos))
     else:
-        conn.execute(f"""
-            INSERT OR REPLACE INTO fichas_productos (nombre,{','.join(campos)})
-            VALUES ({','.join([ph]*(len(campos)+1))})
-        """, [nombre] + [data.get(c,"") for c in campos])
+        sql = (f"INSERT OR REPLACE INTO fichas_productos (nombre,{','.join(campos)}) "
+               f"VALUES ({','.join([ph]*(len(campos)+1))})")
+    conn.execute(sql, [nombre] + [data.get(c, "") for c in campos])
     conn.close()
     obtener_todas_fichas.clear()
 
