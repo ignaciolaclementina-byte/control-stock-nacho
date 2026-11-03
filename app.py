@@ -8306,14 +8306,24 @@ def _render_tab_fichas():
 
     if not prod_sel:
         # Vista de lista por categoría
-        st.caption(f"**{len(todos_prods)} productos** en el catálogo. Seleccioná uno para ver su ficha.")
+        st.caption(f"**{len(todos_prods)} productos** en el catálogo. Seleccioná uno arriba para editar su ficha.")
         if not todas.empty:
             for cat_name in [c for c in _CATS_ORDEN if c != "Todos"]:
+                if cat_f != "Todos" and cat_f != cat_name:
+                    continue
                 prods_cat = todas[todas["categoria"] == cat_name]
                 if not prods_cat.empty:
-                    with st.expander(f"**{cat_name}** ({len(prods_cat)} productos)"):
-                        for _, row in prods_cat.iterrows():
-                            st.markdown(f"**{row['nombre']}** — _{row.get('principio_activo','')}_")
+                    with st.expander(f"**{cat_name}** ({len(prods_cat)} productos)", expanded=(cat_f != "Todos")):
+                        _tbl = prods_cat[["nombre","principio_activo","para_que_sirve","cultivos","dosis"]].copy()
+                        _tbl.columns = ["Producto","Principio Activo","Para qué sirve","Cultivos","Dosis"]
+                        st.dataframe(_tbl, use_container_width=True, hide_index=True,
+                                     column_config={
+                                         "Producto":         st.column_config.TextColumn("Producto", width="medium"),
+                                         "Principio Activo": st.column_config.TextColumn("Principio Activo", width="medium"),
+                                         "Para qué sirve":   st.column_config.TextColumn("Para qué sirve", width="large"),
+                                         "Cultivos":         st.column_config.TextColumn("Cultivos", width="small"),
+                                         "Dosis":            st.column_config.TextColumn("Dosis", width="small"),
+                                     })
         else:
             st.info("Hacé click en **🔄 Cargar fichas iniciales** para poblar el catálogo.")
         return
