@@ -8291,18 +8291,15 @@ def _render_tab_fichas():
     todos_prods = sorted(set(stk_prods + prods_fichas + list(_FICHAS_INICIALES.keys())))
 
     col_busq, col_cat_f = st.columns([3, 1])
-    with col_busq:
-        prod_sel = st.selectbox("Buscar producto", [""] + todos_prods, key="ficha_prod_sel",
-                                 placeholder="Escribí para buscar...")
     with col_cat_f:
-        cat_f = st.selectbox("Filtrar por categoría", _CATS_ORDEN, key="ficha_cat_fil")
-
+        cat_f = st.selectbox("Categoría", _CATS_ORDEN, key="ficha_cat_fil")
+    # Filtrar lista según categoría
     if cat_f != "Todos":
-        todos_prods_fil = [p for p in todos_prods if CATEGORIAS_PRODUCTOS.get(p,"") == cat_f]
-        if not prod_sel or CATEGORIAS_PRODUCTOS.get(prod_sel,"") != cat_f:
-            prod_sel = ""
-        with col_busq:
-            prod_sel = st.selectbox("Producto (filtrado)", [""] + todos_prods_fil, key="ficha_prod_fil")
+        todos_prods_lista = [p for p in todos_prods if CATEGORIAS_PRODUCTOS.get(p, "") == cat_f]
+    else:
+        todos_prods_lista = todos_prods
+    with col_busq:
+        prod_sel = st.selectbox("Buscar producto", [""] + todos_prods_lista, key="ficha_prod_sel")
 
     if not prod_sel:
         # Vista de lista por categoría
