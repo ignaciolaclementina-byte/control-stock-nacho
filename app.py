@@ -8290,20 +8290,50 @@ def _render_tab_fichas():
     prods_fichas = sorted(todas["nombre"].tolist()) if not todas.empty else []
     todos_prods = sorted(set(stk_prods + prods_fichas + list(_FICHAS_INICIALES.keys())))
 
-    col_busq, col_cat_f = st.columns([3, 1])
+    # ── Buscador de texto libre ───────────────────────────────────────────────
+    col_srch, col_cat_f = st.columns([3, 1])
+    with col_srch:
+        texto_busq = st.text_input("🔍 Buscar por uso, plaga, cultivo o principio activo",
+                                    placeholder="Ej: orugas, hoja ancha, soja, glifosato...",
+                                    key="ficha_texto_busq")
     with col_cat_f:
         cat_f = st.selectbox("Categoría", _CATS_ORDEN, key="ficha_cat_fil")
-    # Filtrar lista según categoría
+
+    # Resultado de búsqueda de texto libre
+    if texto_busq and not todas.empty:
+        _q = texto_busq.lower()
+        _campos_busq = ["nombre","principio_activo","para_que_sirve","cultivos","dosis","observaciones"]
+        _mask = todas[_campos_busq].apply(
+            lambda col: col.astype(str).str.lower().str.contains(_q, na=False)
+        ).any(axis=1)
+        _res = todas[_mask].copy()
+        if not _res.empty:
+            st.success(f"**{len(_res)} producto(s)** encontrados para «{texto_busq}»")
+            _tbl_r = _res[["nombre","categoria","principio_activo","para_que_sirve","cultivos","dosis"]].copy()
+            _tbl_r.columns = ["Producto","Categoría","Principio Activo","Para qué sirve","Cultivos","Dosis"]
+            st.dataframe(_tbl_r, use_container_width=True, hide_index=True,
+                         column_config={
+                             "Producto":         st.column_config.TextColumn("Producto", width="medium"),
+                             "Categoría":        st.column_config.TextColumn("Cat.", width="small"),
+                             "Principio Activo": st.column_config.TextColumn("Principio Activo", width="medium"),
+                             "Para qué sirve":   st.column_config.TextColumn("Para qué sirve", width="large"),
+                             "Cultivos":         st.column_config.TextColumn("Cultivos", width="small"),
+                             "Dosis":            st.column_config.TextColumn("Dosis", width="small"),
+                         })
+        else:
+            st.warning(f"Sin resultados para «{texto_busq}»")
+        st.markdown("---")
+
+    # ── Selector por nombre ───────────────────────────────────────────────────
     if cat_f != "Todos":
         todos_prods_lista = [p for p in todos_prods if CATEGORIAS_PRODUCTOS.get(p, "") == cat_f]
     else:
         todos_prods_lista = todos_prods
-    with col_busq:
-        prod_sel = st.selectbox("Buscar producto", [""] + todos_prods_lista, key="ficha_prod_sel")
+    prod_sel = st.selectbox("Ver / editar ficha de un producto", [""] + todos_prods_lista, key="ficha_prod_sel")
 
     if not prod_sel:
         # Vista de lista por categoría
-        st.caption(f"**{len(todos_prods)} productos** en el catálogo. Seleccioná uno arriba para editar su ficha.")
+        st.caption(f"**{len(todos_prods)} productos** en el catálogo.")
         if not todas.empty:
             for cat_name in [c for c in _CATS_ORDEN if c != "Todos"]:
                 if cat_f != "Todos" and cat_f != cat_name:
