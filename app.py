@@ -8266,21 +8266,69 @@ def inicializar_fichas_default(sobreescribir=False):
                 "actualizado_en":   ts,
             })
 
+_CAT_COLOR = {
+    "Herbicida":             "#2e7d32",
+    "Fungicida":             "#6a1b9a",
+    "Insecticida":           "#b71c1c",
+    "Curasemilla/Inoculante":"#1565c0",
+    "Fertilizante/Foliar":   "#f57f17",
+    "Coadyuvante":           "#37474f",
+    "Fumigante":             "#4e342e",
+}
+
+def _html_ficha_imprimible(nombre, pa, pqs, cul, dos, prov, obs, cat, color):
+    color_safe = color.replace('"', '')
+    return f"""<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Ficha - {nombre}</title>
+<style>
+  body {{ font-family: Arial, sans-serif; max-width: 750px; margin: 40px auto; color: #222; }}
+  .header {{ background: {color_safe}18; border-left: 5px solid {color_safe}; border-radius: 6px; padding: 18px 22px; margin-bottom: 24px; }}
+  .prod-name {{ font-size: 1.5rem; font-weight: 700; color: {color_safe}; }}
+  .badge {{ background: {color_safe}; color: #fff; border-radius: 4px; padding: 3px 10px; font-size: 0.78rem; display: inline-block; margin-top: 6px; }}
+  .pa {{ font-style: italic; color: #555; margin-top: 4px; font-size: 0.95rem; }}
+  table {{ width: 100%; border-collapse: collapse; margin-top: 10px; }}
+  td {{ padding: 10px 14px; border-bottom: 1px solid #eee; vertical-align: top; }}
+  td:first-child {{ font-weight: 700; width: 160px; color: #444; white-space: nowrap; }}
+  .footer {{ margin-top: 32px; font-size: 0.75rem; color: #aaa; border-top: 1px solid #eee; padding-top: 10px; }}
+  @media print {{ body {{ margin: 20px; }} button {{ display: none; }} }}
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="prod-name">{nombre}</div>
+  <span class="badge">{cat}</span>
+  <div class="pa">{pa}</div>
+</div>
+<table>
+  <tr><td>🧪 Principio activo</td><td>{pa or '—'}</td></tr>
+  <tr><td>🎯 Para qué sirve</td><td>{pqs or '—'}</td></tr>
+  <tr><td>🌱 Cultivos</td><td>{cul or '—'}</td></tr>
+  <tr><td>💧 Dosis</td><td>{dos or '—'}</td></tr>
+  <tr><td>🏭 Proveedor</td><td>{prov or '—'}</td></tr>
+  {'<tr><td>📝 Observaciones</td><td>' + obs + '</td></tr>' if obs else ''}
+</table>
+<div class="footer">La Clementina S.A. — Ficha técnica de producto</div>
+<script>window.onload = function(){{ window.print(); }}</script>
+</body>
+</html>"""
+
 @st.fragment
 def _render_tab_fichas():
     st.subheader("📖 Fichas de Productos")
 
-    # Inicializar fichas si no existen
     col_ini, col_upd, _ = st.columns([1, 1, 3])
     with col_ini:
-        if st.button("🔄 Cargar fichas iniciales", help="Carga los datos base. Solo inserta las que no existen."):
+        if st.button("🔄 Cargar fichas iniciales", help="Inserta las fichas que aún no existen en la base."):
             with st.spinner("Cargando fichas..."):
                 inicializar_fichas_default()
             st.success("✅ Fichas cargadas.")
             st.rerun(scope="fragment")
     with col_upd:
-        if st.button("⚠️ Actualizar TODAS las fichas", help="Sobreescribe TODOS los datos de fichas con los datos corregidos del sistema."):
-            with st.spinner("Actualizando todas las fichas..."):
+        if st.button("⚠️ Actualizar TODAS las fichas", help="Sobreescribe todos los datos con los valores corregidos del sistema."):
+            with st.spinner("Actualizando..."):
                 inicializar_fichas_default(sobreescribir=True)
             st.success("✅ Todas las fichas actualizadas.")
             st.rerun(scope="fragment")
@@ -8288,153 +8336,278 @@ def _render_tab_fichas():
     st.markdown("---")
 
     todas = obtener_todas_fichas()
-    # Lista de todos los productos del stock + los ya en fichas
     try:
-        stk_prods = sorted(obtener_stock_full()["Producto"].dropna().unique().tolist())
+        stock_df_f = obtener_stock_full()[["Producto","stock_actual"]].copy()
+        stock_df_f.columns = ["nombre","stock_actual"]
+        stk_prods = sorted(stock_df_f["nombre"].dropna().unique().tolist())
     except Exception:
-        stk_prods = []
+        stock_df_f = None
+        stk_prods  = []
     prods_fichas = sorted(todas["nombre"].tolist()) if not todas.empty else []
-    todos_prods = sorted(set(stk_prods + prods_fichas + list(_FICHAS_INICIALES.keys())))
+    todos_prods  = sorted(set(stk_prods + prods_fichas + list(_FICHAS_INICIALES.keys())))
 
-    # ── Buscador de texto libre ───────────────────────────────────────────────
-    col_srch, col_cat_f = st.columns([3, 1])
-    with col_srch:
-        texto_busq = st.text_input("🔍 Buscar por uso, plaga, cultivo o principio activo",
-                                    placeholder="Ej: orugas, hoja ancha, soja, glifosato...",
-                                    key="ficha_texto_busq")
-    with col_cat_f:
-        cat_f = st.selectbox("Categoría", _CATS_ORDEN, key="ficha_cat_fil")
-
-    # Resultado de búsqueda de texto libre
-    if texto_busq and not todas.empty:
-        _q = texto_busq.lower()
-        _campos_busq = ["nombre","principio_activo","para_que_sirve","cultivos","dosis","observaciones"]
-        _mask = todas[_campos_busq].apply(
-            lambda col: col.astype(str).str.lower().str.contains(_q, na=False)
-        ).any(axis=1)
-        _res = todas[_mask].copy()
-        if not _res.empty:
-            st.success(f"**{len(_res)} producto(s)** encontrados para «{texto_busq}»")
-            _tbl_r = _res[["nombre","categoria","principio_activo","para_que_sirve","cultivos","dosis"]].copy()
-            _tbl_r.columns = ["Producto","Categoría","Principio Activo","Para qué sirve","Cultivos","Dosis"]
-            st.dataframe(_tbl_r, use_container_width=True, hide_index=True,
-                         column_config={
-                             "Producto":         st.column_config.TextColumn("Producto", width="medium"),
-                             "Categoría":        st.column_config.TextColumn("Cat.", width="small"),
-                             "Principio Activo": st.column_config.TextColumn("Principio Activo", width="medium"),
-                             "Para qué sirve":   st.column_config.TextColumn("Para qué sirve", width="large"),
-                             "Cultivos":         st.column_config.TextColumn("Cultivos", width="small"),
-                             "Dosis":            st.column_config.TextColumn("Dosis", width="small"),
-                         })
-        else:
-            st.warning(f"Sin resultados para «{texto_busq}»")
-        st.markdown("---")
-
-    # ── Selector por nombre ───────────────────────────────────────────────────
-    if cat_f != "Todos":
-        todos_prods_lista = [p for p in todos_prods if CATEGORIAS_PRODUCTOS.get(p, "") == cat_f]
-    else:
-        todos_prods_lista = todos_prods
-    prod_sel = st.selectbox("Ver / editar ficha de un producto", [""] + todos_prods_lista, key="ficha_prod_sel")
-
-    if not prod_sel:
-        # Vista de lista por categoría
-        st.caption(f"**{len(todos_prods)} productos** en el catálogo.")
-        if not todas.empty:
-            for cat_name in [c for c in _CATS_ORDEN if c != "Todos"]:
-                if cat_f != "Todos" and cat_f != cat_name:
-                    continue
-                prods_cat = todas[todas["categoria"] == cat_name]
-                if not prods_cat.empty:
-                    with st.expander(f"**{cat_name}** ({len(prods_cat)} productos)", expanded=(cat_f != "Todos")):
-                        _tbl = prods_cat[["nombre","principio_activo","para_que_sirve","cultivos","dosis"]].copy()
-                        _tbl.columns = ["Producto","Principio Activo","Para qué sirve","Cultivos","Dosis"]
-                        st.dataframe(_tbl, use_container_width=True, hide_index=True,
-                                     column_config={
-                                         "Producto":         st.column_config.TextColumn("Producto", width="medium"),
-                                         "Principio Activo": st.column_config.TextColumn("Principio Activo", width="medium"),
-                                         "Para qué sirve":   st.column_config.TextColumn("Para qué sirve", width="large"),
-                                         "Cultivos":         st.column_config.TextColumn("Cultivos", width="small"),
-                                         "Dosis":            st.column_config.TextColumn("Dosis", width="small"),
-                                     })
-        else:
-            st.info("Hacé click en **🔄 Cargar fichas iniciales** para poblar el catálogo.")
-        return
-
-    # ── Ficha del producto seleccionado ──────────────────────────────────────
-    ficha = obtener_ficha(prod_sel)
-    ini   = _FICHAS_INICIALES.get(prod_sel, ("","","",""))
-    cat_prod = CATEGORIAS_PRODUCTOS.get(prod_sel, "")
-
-    # Colores por categoría
-    _cat_color = {
-        "Herbicida":             "#2e7d32",
-        "Fungicida":             "#6a1b9a",
-        "Insecticida":           "#b71c1c",
-        "Curasemilla/Inoculante":"#1565c0",
-        "Fertilizante/Foliar":   "#f57f17",
-        "Coadyuvante":           "#37474f",
-        "Fumigante":             "#4e342e",
-    }
-    color = _cat_color.get(cat_prod, "#555")
-
-    st.html(f"""
-    <div style="background:{color}18;border-left:4px solid {color};border-radius:8px;padding:16px 20px;margin-bottom:16px">
-      <div style="font-size:1.4rem;font-weight:700;color:{color}">{prod_sel}</div>
-      <div style="font-size:0.9rem;color:#666;margin-top:4px">
-        <span style="background:{color};color:#fff;border-radius:4px;padding:2px 8px;font-size:0.75rem">{cat_prod}</span>
-        &nbsp; <i>{ficha.get('principio_activo', ini[0]) if ficha else ini[0]}</i>
-      </div>
-    </div>
-    """)
-
-    _pa  = ficha.get("principio_activo", ini[0]) if ficha else ini[0]
-    _pqs = ficha.get("para_que_sirve",   ini[1]) if ficha else ini[1]
-    _cul = ficha.get("cultivos",         ini[2]) if ficha else ini[2]
-    _dos = ficha.get("dosis",            ini[3]) if ficha else ini[3]
-    _prov= ficha.get("proveedor",        "")     if ficha else ""
-    _obs = ficha.get("observaciones",    "")     if ficha else ""
-
-    c1, c2 = st.columns(2)
-    with c1:
-        st.markdown(f"**🧪 Principio activo:** {_pa or '—'}")
-        st.markdown(f"**🎯 Para qué sirve:**")
-        st.write(_pqs or "—")
-        st.markdown(f"**🌱 Cultivos:** {_cul or '—'}")
-    with c2:
-        st.markdown(f"**💧 Dosis:** {_dos or '—'}")
-        st.markdown(f"**🏭 Proveedor:** {_prov or '—'}")
-        if _obs:
-            st.markdown(f"**📝 Observaciones:** {_obs}")
-        if ficha.get("actualizado_en"):
-            st.caption(f"Última edición: {ficha['actualizado_en']}")
-
+    modo = st.radio("", ["🔍 Buscar & Ver", "✏️ Editar en tabla", "⚖️ Comparar productos"],
+                    horizontal=True, key="fichas_modo", label_visibility="collapsed")
     st.markdown("---")
 
-    # ── Editor de ficha ───────────────────────────────────────────────────────
-    with st.expander("✏️ Editar ficha", expanded=not bool(ficha)):
-        from datetime import datetime
-        e_pa   = st.text_input("Principio activo",  value=_pa,   key="fe_pa")
-        e_pqs  = st.text_area("Para qué sirve",     value=_pqs,  key="fe_pqs", height=80)
-        e_cul  = st.text_input("Cultivos",           value=_cul,  key="fe_cul",
-                                help="Ej: Soja, Maíz, Trigo")
-        e_dos  = st.text_input("Dosis",              value=_dos,  key="fe_dos",
-                                help="Ej: 1,5-2,0 L/ha")
-        e_prov = st.text_input("Proveedor",          value=_prov, key="fe_prov")
-        e_obs  = st.text_area("Observaciones internas", value=_obs, key="fe_obs", height=60)
-        if st.button("💾 Guardar ficha", key="fe_save"):
-            guardar_ficha(prod_sel, {
-                "principio_activo": e_pa,
-                "categoria":        cat_prod,
-                "para_que_sirve":   e_pqs,
-                "cultivos":         e_cul,
-                "dosis":            e_dos,
-                "proveedor":        e_prov,
-                "observaciones":    e_obs,
-                "actualizado_en":   datetime.now().strftime("%Y-%m-%d %H:%M"),
-            })
-            st.success("✅ Ficha guardada.")
+    # ══════════════════════════════════════════════════════════════════════════
+    # MODO: BUSCAR & VER
+    # ══════════════════════════════════════════════════════════════════════════
+    if modo == "🔍 Buscar & Ver":
+        col_srch, col_cat_f = st.columns([3, 1])
+        with col_srch:
+            texto_busq = st.text_input("🔍 Buscar en fichas Y stock",
+                                        placeholder="Ej: orugas, hoja ancha, soja, glifosato, roya...",
+                                        key="ficha_texto_busq")
+        with col_cat_f:
+            cat_f = st.selectbox("Categoría", _CATS_ORDEN, key="ficha_cat_fil")
+
+        if texto_busq and not todas.empty:
+            _q = texto_busq.lower()
+            # Búsqueda en fichas
+            _campos = ["nombre","principio_activo","para_que_sirve","cultivos","dosis","observaciones"]
+            _mask = todas[_campos].apply(lambda c: c.astype(str).str.lower().str.contains(_q, na=False)).any(axis=1)
+            _res  = todas[_mask].copy()
+            # Merge con stock
+            if stock_df_f is not None and not _res.empty:
+                _res = _res.merge(stock_df_f, on="nombre", how="left")
+                _res["stock_actual"] = _res["stock_actual"].fillna(0)
+            if not _res.empty:
+                st.success(f"**{len(_res)} producto(s)** encontrados para «{texto_busq}»")
+                _cols = ["nombre","categoria","principio_activo","para_que_sirve","cultivos","dosis"]
+                if "stock_actual" in _res.columns:
+                    _cols.append("stock_actual")
+                _tbl_r = _res[_cols].copy()
+                _tbl_r.columns = (["Producto","Categoría","Principio Activo","Para qué sirve","Cultivos","Dosis","Stock"] if "stock_actual" in _res.columns
+                                   else ["Producto","Categoría","Principio Activo","Para qué sirve","Cultivos","Dosis"])
+                col_cfg = {
+                    "Producto":         st.column_config.TextColumn("Producto", width="medium"),
+                    "Categoría":        st.column_config.TextColumn("Cat.", width="small"),
+                    "Principio Activo": st.column_config.TextColumn("Principio Activo", width="medium"),
+                    "Para qué sirve":   st.column_config.TextColumn("Para qué sirve", width="large"),
+                    "Cultivos":         st.column_config.TextColumn("Cultivos", width="small"),
+                    "Dosis":            st.column_config.TextColumn("Dosis", width="small"),
+                }
+                if "Stock" in _tbl_r.columns:
+                    col_cfg["Stock"] = st.column_config.NumberColumn("Stock", format="%.1f")
+                st.dataframe(_tbl_r, use_container_width=True, hide_index=True, column_config=col_cfg)
+            else:
+                st.warning(f"Sin resultados para «{texto_busq}»")
+            st.markdown("---")
+
+        if cat_f != "Todos":
+            todos_prods_lista = [p for p in todos_prods if CATEGORIAS_PRODUCTOS.get(p, "") == cat_f]
+        else:
+            todos_prods_lista = todos_prods
+        prod_sel = st.selectbox("Ver / editar ficha de un producto", [""] + todos_prods_lista, key="ficha_prod_sel")
+
+        if not prod_sel:
+            st.caption(f"**{len(todos_prods)} productos** en el catálogo.")
+            if not todas.empty:
+                for cat_name in [c for c in _CATS_ORDEN if c != "Todos"]:
+                    if cat_f != "Todos" and cat_f != cat_name:
+                        continue
+                    prods_cat = todas[todas["categoria"] == cat_name]
+                    if not prods_cat.empty:
+                        with st.expander(f"**{cat_name}** ({len(prods_cat)} productos)", expanded=(cat_f != "Todos")):
+                            _tbl = prods_cat[["nombre","principio_activo","para_que_sirve","cultivos","dosis"]].copy()
+                            _tbl.columns = ["Producto","Principio Activo","Para qué sirve","Cultivos","Dosis"]
+                            st.dataframe(_tbl, use_container_width=True, hide_index=True,
+                                         column_config={
+                                             "Producto":         st.column_config.TextColumn("Producto", width="medium"),
+                                             "Principio Activo": st.column_config.TextColumn("Principio Activo", width="medium"),
+                                             "Para qué sirve":   st.column_config.TextColumn("Para qué sirve", width="large"),
+                                             "Cultivos":         st.column_config.TextColumn("Cultivos", width="small"),
+                                             "Dosis":            st.column_config.TextColumn("Dosis", width="small"),
+                                         })
+            else:
+                st.info("Hacé click en **🔄 Cargar fichas iniciales** para poblar el catálogo.")
+            return
+
+        # ── Ficha individual ─────────────────────────────────────────────────
+        ficha    = obtener_ficha(prod_sel)
+        ini      = _FICHAS_INICIALES.get(prod_sel, ("","","",""))
+        cat_prod = CATEGORIAS_PRODUCTOS.get(prod_sel, "")
+        color    = _CAT_COLOR.get(cat_prod, "#555")
+
+        _pa  = ficha.get("principio_activo", ini[0]) if ficha else ini[0]
+        _pqs = ficha.get("para_que_sirve",   ini[1]) if ficha else ini[1]
+        _cul = ficha.get("cultivos",         ini[2]) if ficha else ini[2]
+        _dos = ficha.get("dosis",            ini[3]) if ficha else ini[3]
+        _prov= ficha.get("proveedor",        "")     if ficha else ""
+        _obs = ficha.get("observaciones",    "")     if ficha else ""
+
+        st.html(f"""
+        <div style="background:{color}18;border-left:4px solid {color};border-radius:8px;padding:16px 20px;margin-bottom:4px">
+          <div style="font-size:1.4rem;font-weight:700;color:{color}">{prod_sel}</div>
+          <div style="margin-top:6px">
+            <span style="background:{color};color:#fff;border-radius:4px;padding:2px 10px;font-size:0.75rem">{cat_prod}</span>
+            &nbsp;<span style="color:#666;font-style:italic;font-size:0.9rem">{_pa}</span>
+          </div>
+        </div>
+        """)
+
+        # Botón imprimir / exportar
+        _html_print = _html_ficha_imprimible(prod_sel, _pa, _pqs, _cul, _dos, _prov, _obs, cat_prod, color)
+        _fname = prod_sel.replace(" ","_").replace("/","_")[:40] + ".html"
+        col_p1, col_p2 = st.columns([1, 5])
+        with col_p1:
+            st.download_button("🖨️ Imprimir / PDF", data=_html_print.encode("utf-8"),
+                               file_name=_fname, mime="text/html",
+                               help="Descarga y abrí el archivo en el navegador → Ctrl+P → Guardar como PDF",
+                               key="ficha_print_btn")
+
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown(f"**🧪 Principio activo:** {_pa or '—'}")
+            st.markdown("**🎯 Para qué sirve:**")
+            st.write(_pqs or "—")
+            st.markdown(f"**🌱 Cultivos:** {_cul or '—'}")
+        with c2:
+            st.markdown(f"**💧 Dosis:** {_dos or '—'}")
+            st.markdown(f"**🏭 Proveedor:** {_prov or '—'}")
+            if _obs:
+                st.markdown(f"**📝 Observaciones:** {_obs}")
+            if ficha and ficha.get("actualizado_en"):
+                st.caption(f"Última edición: {ficha['actualizado_en']}")
+            # Stock actual
+            if stock_df_f is not None:
+                _stk_row = stock_df_f[stock_df_f["nombre"] == prod_sel]
+                if not _stk_row.empty:
+                    _stk_val = _stk_row["stock_actual"].sum()
+                    st.metric("📦 Stock actual", f"{_stk_val:,.1f}")
+
+        st.markdown("---")
+        with st.expander("✏️ Editar ficha", expanded=not bool(ficha)):
+            from datetime import datetime
+            e_pa   = st.text_input("Principio activo",     value=_pa,   key="fe_pa")
+            e_pqs  = st.text_area("Para qué sirve",        value=_pqs,  key="fe_pqs", height=80)
+            e_cul  = st.text_input("Cultivos",             value=_cul,  key="fe_cul", help="Ej: Soja, Maíz, Trigo")
+            e_dos  = st.text_input("Dosis",                value=_dos,  key="fe_dos", help="Ej: 1,5-2,0 L/ha")
+            e_prov = st.text_input("Proveedor",            value=_prov, key="fe_prov")
+            e_obs  = st.text_area("Observaciones internas",value=_obs,  key="fe_obs", height=60)
+            if st.button("💾 Guardar ficha", key="fe_save"):
+                guardar_ficha(prod_sel, {
+                    "principio_activo": e_pa, "categoria": cat_prod,
+                    "para_que_sirve": e_pqs, "cultivos": e_cul, "dosis": e_dos,
+                    "proveedor": e_prov, "observaciones": e_obs,
+                    "actualizado_en": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                })
+                st.success("✅ Ficha guardada.")
+                st.rerun(scope="fragment")
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # MODO: EDITAR EN TABLA
+    # ══════════════════════════════════════════════════════════════════════════
+    elif modo == "✏️ Editar en tabla":
+        if todas.empty:
+            st.info("Primero cargá las fichas con **🔄 Cargar fichas iniciales**.")
+            return
+        st.caption("Editá directamente las celdas y guardá al terminar. Los cambios se aplican en Supabase.")
+        _cols_edit = ["nombre","categoria","principio_activo","para_que_sirve","cultivos","dosis","proveedor","observaciones"]
+        _df_edit   = todas[_cols_edit].copy()
+        edited = st.data_editor(
+            _df_edit,
+            use_container_width=True,
+            hide_index=True,
+            num_rows="fixed",
+            column_config={
+                "nombre":           st.column_config.TextColumn("Producto", disabled=True, width="medium"),
+                "categoria":        st.column_config.SelectboxColumn("Categoría", options=[c for c in _CATS_ORDEN if c != "Todos"], width="small"),
+                "principio_activo": st.column_config.TextColumn("Principio Activo", width="medium"),
+                "para_que_sirve":   st.column_config.TextColumn("Para qué sirve", width="large"),
+                "cultivos":         st.column_config.TextColumn("Cultivos", width="small"),
+                "dosis":            st.column_config.TextColumn("Dosis", width="small"),
+                "proveedor":        st.column_config.TextColumn("Proveedor", width="small"),
+                "observaciones":    st.column_config.TextColumn("Observaciones", width="medium"),
+            },
+            key="fichas_data_editor",
+        )
+        if st.button("💾 Guardar todos los cambios", key="fichas_save_all", type="primary"):
+            from datetime import datetime
+            _ts  = datetime.now().strftime("%Y-%m-%d %H:%M")
+            _cnt = 0
+            for _, row in edited.iterrows():
+                guardar_ficha(row["nombre"], {
+                    "principio_activo": row.get("principio_activo", ""),
+                    "categoria":        row.get("categoria", ""),
+                    "para_que_sirve":   row.get("para_que_sirve", ""),
+                    "cultivos":         row.get("cultivos", ""),
+                    "dosis":            row.get("dosis", ""),
+                    "proveedor":        row.get("proveedor", ""),
+                    "observaciones":    row.get("observaciones", ""),
+                    "actualizado_en":   _ts,
+                })
+                _cnt += 1
+            st.success(f"✅ {_cnt} fichas guardadas.")
             st.rerun(scope="fragment")
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # MODO: COMPARAR PRODUCTOS
+    # ══════════════════════════════════════════════════════════════════════════
+    elif modo == "⚖️ Comparar productos":
+        st.caption("Seleccioná hasta 3 productos para comparar sus fichas lado a lado.")
+        _opciones = [""] + todos_prods
+        c1, c2, c3 = st.columns(3)
+        with c1: p1 = st.selectbox("Producto 1", _opciones, key="cmp_p1")
+        with c2: p2 = st.selectbox("Producto 2", _opciones, key="cmp_p2")
+        with c3: p3 = st.selectbox("Producto 3", _opciones, key="cmp_p3")
+
+        seleccionados = [p for p in [p1, p2, p3] if p]
+        if not seleccionados:
+            st.info("Seleccioná al menos un producto para ver su ficha.")
+            return
+
+        def _get_datos(nombre):
+            f   = obtener_ficha(nombre)
+            ini = _FICHAS_INICIALES.get(nombre, ("","","",""))
+            cat = CATEGORIAS_PRODUCTOS.get(nombre, "")
+            return {
+                "Categoría":        cat,
+                "Principio activo": f.get("principio_activo", ini[0]) if f else ini[0],
+                "Para qué sirve":   f.get("para_que_sirve",   ini[1]) if f else ini[1],
+                "Cultivos":         f.get("cultivos",         ini[2]) if f else ini[2],
+                "Dosis":            f.get("dosis",            ini[3]) if f else ini[3],
+                "Proveedor":        f.get("proveedor",        "")     if f else "",
+            }
+
+        datos = {p: _get_datos(p) for p in seleccionados}
+
+        # Encabezados con color por categoría
+        _hdr_cols = st.columns(len(seleccionados))
+        for i, prod in enumerate(seleccionados):
+            cat  = datos[prod]["Categoría"]
+            col  = _CAT_COLOR.get(cat, "#555")
+            _hdr_cols[i].html(f"""
+            <div style="background:{col}18;border-left:3px solid {col};border-radius:6px;padding:10px 14px">
+              <div style="font-weight:700;color:{col};font-size:0.95rem">{prod}</div>
+              <span style="background:{col};color:#fff;border-radius:3px;padding:1px 7px;font-size:0.7rem">{cat}</span>
+            </div>""")
+
+        st.markdown("")
+        _campos_cmp = ["Principio activo","Para qué sirve","Cultivos","Dosis","Proveedor"]
+        for campo in _campos_cmp:
+            vals = [datos[p].get(campo, "—") or "—" for p in seleccionados]
+            # Resaltar si todos difieren
+            _row_cols = st.columns([1] + [2]*len(seleccionados))
+            _row_cols[0].markdown(f"**{campo}**")
+            for i, v in enumerate(vals):
+                _row_cols[i+1].write(v)
+            st.divider()
+
+        # Botones de exportar ficha para cada producto seleccionado
+        st.markdown("**Exportar fichas:**")
+        _exp_cols = st.columns(len(seleccionados))
+        for i, prod in enumerate(seleccionados):
+            d = datos[prod]
+            cat  = d["Categoría"]
+            col  = _CAT_COLOR.get(cat, "#555")
+            _html = _html_ficha_imprimible(prod, d["Principio activo"], d["Para qué sirve"],
+                                           d["Cultivos"], d["Dosis"], d["Proveedor"], "", cat, col)
+            _fname = prod.replace(" ","_").replace("/","_")[:40] + ".html"
+            _exp_cols[i].download_button("🖨️ " + prod[:20] + "…" if len(prod)>20 else "🖨️ " + prod,
+                                         data=_html.encode("utf-8"), file_name=_fname,
+                                         mime="text/html", key=f"cmp_print_{i}")
 
 with tab_fichas:
     try:
