@@ -369,7 +369,7 @@ CATEGORIAS_PRODUCTOS = {
     "EMINENT X 1 LT":                                       "Fungicida",
     "EUROFIT x 5 LTS":                                      "Fungicida",
     "FULLTECMAX X 1 LT":                                    "Fungicida",
-    "GEMMIT TOP X 1 LT (SUMISOYA TOP)":                    "Fungicida",
+    "GEMMIT TOP X 1 LT (SUMISOYA TOP)":                    "Curasemilla/Inoculante",
     "LIGATE X 1 KG":                                        "Fungicida",
     "SIGNUM 305":                                           "Fungicida",
     "TAISEI x 2 lts":                                       "Fungicida",
@@ -8153,7 +8153,7 @@ _FICHAS_INICIALES = {
     "FOSFURO DE ALUMINIO (tubos)":                      ("Fosfuro de aluminio",           "Fumigante para silos, depósitos y almacenamiento de granos",             "Almacenamiento",              "Según espacio - uso restringido"),
     "FULLTECMAX X 1 LT":                                ("Trifloxistrobina + Protioconazol","Fungicida curasemilla + foliar para soja y maíz",                    "Soja, Maíz",                  "0,4-0,5 L/ha"),
     "GALIL X 5 LTS":                                    ("Imazapir + Imazamox",           "Herbicida postemergente para soja Clearfield, amplio espectro",          "Soja Clearfield",             "1,0-1,5 L/ha"),
-    "GEMMIT TOP X 1 LT (SUMISOYA TOP)":                 ("Azoxistrobina + Ciproconazol + Flutriafol","Fungicida triple acción para roya asiática y enfermedades foliares","Soja",            "0,4-0,5 L/ha"),
+    "GEMMIT TOP X 1 LT (SUMISOYA TOP)":                 ("Bradyrhizobium japonicum",          "Inoculante líquido para soja, fijación biológica de nitrógeno",          "Soja",                        "Según sembradora"),
     "GLUFOSINATO AMONIO 20% X 20 LTS":                  ("Glufosinato de amonio 20%",    "Herbicida de contacto para barbecho y cultivos LL (Liberty Link)",       "Soja LL, Barbecho",           "2,0-3,0 L/ha"),
     "HALOXIFOP 81% X 5":                                ("Haloxifop-R metil 81%",         "Herbicida postemergente para gramíneas anuales y perennes en soja",      "Soja, Girasol",               "60-80 cc/ha"),
     "HALOXIFOP R 54 %":                                 ("Haloxifop-R metil 54%",         "Herbicida postemergente para gramíneas en soja y girasol",               "Soja, Girasol",               "80-120 cc/ha"),
@@ -8165,13 +8165,13 @@ _FICHAS_INICIALES = {
     "LAMBDA MICROEMULSION 25 % X 1 LT":                 ("Lambda-cihalotrina 25% ME",     "Insecticida piretroide microemulsión para chinches y orugas",            "Soja, Maíz, Trigo",           "50-100 cc/ha"),
     "LAMBDA MICROENCAPSULADA 25% x 1":                  ("Lambda-cihalotrina 25% CS",     "Insecticida microencapsulado de liberación lenta para plagas varias",    "Soja, Maíz, Trigo",           "50-100 cc/ha"),
     "LAUDIS x 5":                                       ("Tembotriona",                   "Herbicida postemergente selectivo para maíz, amplio espectro",           "Maíz",                        "200-230 cc/ha"),
-    "LIGATE X 1 KG":                                    ("Isofetamid",                    "Fungicida para control de Botrytis y enfermedades en almacenamiento",    "Almacenamiento, Horticultura","Según etiqueta"),
+    "LIGATE X 1 KG":                                    ("Isofetamid",                    "Fungicida SDHI para control de Sclerotinia y otras enfermedades de suelo en soja", "Soja, Girasol, Colza", "Según etiqueta"),
     "LIMIPIADOR DE TANQUE OMEGA":                       ("Detergente agrícola",           "Limpiador de tanque para eliminar residuos entre aplicaciones",          "Uso general",                 "500 cc/100L"),
     "LONTREL X 5":                                      ("Clopirálido",                   "Herbicida postemergente para cardo, rama negra y crucíferas",            "Maíz, Girasol, Trigo",        "0,3-0,5 L/ha"),
-    "MAYORAL":                                          ("Flurocloridona",                 "Herbicida preemergente para gramíneas y algunas latifoliadas",           "Girasol, Soja",               "1,5-2,5 L/ha"),
+    "MAYORAL":                                          ("Flurocloridona",                 "Herbicida preemergente para gramíneas y jopo (Orobanche) en girasol",   "Girasol",                     "1,5-2,5 L/ha"),
     "METRIBUZIN 48% (X 5 - 10 LTS)":                    ("Metribuzin 48%",                "Herbicida pre y postemergente para soja y papa, amplio espectro",        "Soja, Papa",                  "0,8-1,2 L/ha"),
     "METSULFURON 60% x 100 grs":                        ("Metsulfuron metil 60%",         "Herbicida inhibidor de ALS para latifoliadas y algunas gramíneas en trigo","Trigo",                   "4-6 g/ha"),
-    "NICOSULFURON 24% X 5":                             ("Nicosulfuron 24%",              "Herbicida postemergente para gramíneas y algunas latifoliadas en maíz",  "Maíz",                        "0,5-0,8 L/ha"),
+    "NICOSULFURON 24% X 5":                             ("Nicosulfuron 24%",              "Herbicida postemergente selectivo para gramíneas en maíz (sorgo de Alepo, cola de zorro, pata de gallina)", "Maíz",  "0,5-0,8 L/ha"),
     "NUTRITION GROW X 5 LTS":                           ("NPK + micronutrientes complejos","Fertilizante foliar completo para etapas vegetativas y reproductivas",   "Soja, Maíz, Trigo",           "1-2 L/ha"),
     "OPTIMIZER X 10":                                   ("Aminoácidos + humatos",          "Estimulante radicular y foliar para situaciones de estrés",              "Todos los cultivos",          "1-2 L/ha"),
     "PACK RIZODERMA 206":                               ("Bradyrhizobium + Trichoderma",  "Inoculante biológico doble acción: fijación N + control de patógenos",   "Soja",                        "Según sembradora"),
@@ -8183,7 +8183,7 @@ _FICHAS_INICIALES = {
     "PRODIGIO X 5 LTS":                                 ("Glifosato + 2,4-D colina",      "Herbicida sistémico de amplio espectro para barbecho y cultivos tolerantes","Barbecho, Soja Xtend",    "3-4 L/ha"),
     "PUCARA":                                           ("Flumioxazin + Diclosulam",       "Herbicida preemergente de amplio espectro para soja",                    "Soja",                        "Según etiqueta"),
     "PYROXASULFONE WG X 5 KGS":                         ("Piroxasulfona 85% WG",          "Herbicida preemergente residual para gramíneas en soja y maíz",          "Soja, Maíz",                  "100-130 g/ha"),
-    "RIALFA LIQ":                                       ("Clorsulfuron líquido",           "Herbicida inhibidor de ALS para gramíneas y latifoliadas en trigo",      "Trigo",                       "10-15 cc/ha"),
+    "RIALFA LIQ":                                       ("Clorsulfuron líquido",           "Herbicida inhibidor de ALS para control de latifoliadas (cardo, mostacilla, nabillo) en trigo", "Trigo", "10-15 cc/ha"),
     "RIZO PACK 205":                                    ("Bradyrhizobium japonicum líquido","Inoculante líquido para soja, fijación biológica de nitrógeno",         "Soja",                        "Según sembradora"),
     "RIZO SPRAY ANTIESPUMA X 1caja de 10 lts":          ("Silicona antiespumante",        "Antiespumante para mochila y tanque inoculador",                         "Soja",                        "Gotas según equipo"),
     "RIZO SPRAY CORRECTOR x 1":                         ("Corrector de pH",               "Corrector de pH para agua de inoculación de soja",                      "Soja",                        "Según pH del agua"),
@@ -8195,14 +8195,14 @@ _FICHAS_INICIALES = {
     "RIZOSIL":                                          ("Bradyrhizobium + Silicio",       "Inoculante con silicio para mejorar resistencia al estrés hídrico",      "Soja",                        "Según sembradora"),
     "RIZOSPRAY ZEN X 5 LTS":                            ("Bradyrhizobium + Zn + extracto de algas","Inoculante premium con micronutrientes para soja",              "Soja",                        "Según sembradora"),
     "ROUND UP CONTROL MAX":                             ("Glifosato 66,2% + AMPA",        "Herbicida sistémico de alta concentración para barbecho y soja RR",      "Barbecho, Soja RR, Maíz RR",  "1,5-3,0 L/ha"),
-    "ROUND UP TOP x 20":                                ("Glifosato + Haloxifop",          "Herbicida sistémico para barbecho con acción complementaria en gramíneas","Barbecho, Soja RR",           "2,0-3,0 L/ha"),
+    "ROUND UP TOP x 20":                                ("Glifosato (sal potásica concentrada)","Herbicida sistémico de alta concentración para barbecho y soja RR",   "Barbecho, Soja RR, Maíz RR",  "1,5-2,5 L/ha"),
     "S METOLACLOR":                                     ("S-Metolaclor",                   "Herbicida preemergente para gramíneas anuales en soja y maíz",           "Soja, Maíz",                  "1,0-1,5 L/ha"),
     "SENCOREX 48 X 10 LT (METRIBUZIN 48%)":             ("Metribuzin 48%",                "Herbicida pre y postemergente para soja, amplio espectro",               "Soja",                        "0,8-1,2 L/ha"),
     "SIGNUM 305":                                       ("Boscalida + Piraclostrobina",    "Fungicida para enfermedades de fin de ciclo y almacenamiento",           "Soja, Maíz",                  "0,5-0,75 L/ha"),
     "SOLOMON X 5":                                      ("Lambda-cihalotrina + Tiametoxam","Insecticida piretroide + neonicotinoide para chinches y pulgones",      "Soja, Maíz, Trigo",           "200-300 cc/ha"),
     "STARKLE X 1,700 KGS":                              ("Dinotefuran",                    "Insecticida neonicotinoide de tercera generación para pulgones y moscas","Soja, Horticultura",          "Según etiqueta"),
     "SUMISOYA  FLOW (NYAMBI-NOZOMY)":                   ("Bradyrhizobium japonicum flow",  "Inoculante líquido de alta concentración para soja",                     "Soja",                        "Según sembradora"),
-    "TAISEI x 2 lts":                                   ("Tebuconazol + Trifloxistrobina", "Fungicida curasemilla + foliar para enfermedades en soja y maíz",        "Soja, Maíz",                  "0,4-0,5 L/ha"),
+    "TAISEI x 2 lts":                                   ("Tebuconazol + Trifloxistrobina", "Fungicida foliar para roya asiática, mancha marrón y enfermedades foliares en soja", "Soja, Maíz", "0,4-0,5 L/ha"),
     "TERBUTILAZINA 50 SC X 20 LTS":                     ("Terbutilazina 50% SC",           "Herbicida preemergente y postemergente para maíz",                       "Maíz",                        "1,5-2,5 L/ha"),
     "TOP ZINC MAX":                                     ("Zinc EDTA quelado",              "Corrector de deficiencia de zinc en etapas vegetativas",                 "Maíz, Soja",                  "500 cc - 1 L/ha"),
     "TOPGROUND":                                        ("Glifosato + Dicamba",             "Herbicida sistémico para barbecho con acción sobre latifoliadas duras",  "Barbecho, Soja Xtend",        "2,5-3,5 L/ha"),
@@ -8248,13 +8248,13 @@ def guardar_ficha(nombre: str, data: dict):
     conn.close()
     obtener_todas_fichas.clear()
 
-def inicializar_fichas_default():
+def inicializar_fichas_default(sobreescribir=False):
     from datetime import datetime
     ts = datetime.now().strftime("%Y-%m-%d %H:%M")
     for nombre, (pa, pqs, cult, dosis) in _FICHAS_INICIALES.items():
         cat = CATEGORIAS_PRODUCTOS.get(nombre, "")
         ficha_existente = obtener_ficha(nombre)
-        if not ficha_existente:
+        if not ficha_existente or sobreescribir:
             guardar_ficha(nombre, {
                 "principio_activo": pa,
                 "categoria":        cat,
@@ -8271,12 +8271,18 @@ def _render_tab_fichas():
     st.subheader("📖 Fichas de Productos")
 
     # Inicializar fichas si no existen
-    col_ini, _ = st.columns([1, 4])
+    col_ini, col_upd, _ = st.columns([1, 1, 3])
     with col_ini:
-        if st.button("🔄 Cargar fichas iniciales", help="Carga los datos base de todos los productos. Solo necesario la primera vez."):
+        if st.button("🔄 Cargar fichas iniciales", help="Carga los datos base. Solo inserta las que no existen."):
             with st.spinner("Cargando fichas..."):
                 inicializar_fichas_default()
-            st.success("✅ Fichas cargadas correctamente.")
+            st.success("✅ Fichas cargadas.")
+            st.rerun(scope="fragment")
+    with col_upd:
+        if st.button("⚠️ Actualizar TODAS las fichas", help="Sobreescribe TODOS los datos de fichas con los datos corregidos del sistema."):
+            with st.spinner("Actualizando todas las fichas..."):
+                inicializar_fichas_default(sobreescribir=True)
+            st.success("✅ Todas las fichas actualizadas.")
             st.rerun(scope="fragment")
 
     st.markdown("---")
